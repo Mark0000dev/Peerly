@@ -1,0 +1,34 @@
+# Deny by default, including .env*, secrets, auth caches, git, venv and artifacts.
+**
+!pyproject.toml
+!uv.lock
+!.python-version
+!alembic.ini
+!src/
+!src/studymate/
+!src/studymate/**/*.py
+!migrations/
+!migrations/**/*.py
+# Defense in depth if the allowlist is expanded later.
+**/.git
+**/.env
+**/.env.*
+**/secrets
+**/auth.json
+**/.codex
+**/.aws
+**/.ssh
+**/*.pem
+**/*.key
+**/__pycache__
+**/*.pyc
+**/.venv
+**/node_modules
+**/coverage*
+**/.env*
+**/.gitkeep
+**/*.mako
+**/.netrc
+**/*.token
+**/tokens.json
+**/credentials.json

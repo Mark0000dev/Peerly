@@ -1,0 +1,123 @@
+[project]
+name = "studymate-backend"
+version = "0.1.0"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "aiobotocore==3.10.0",
+    "aiosmtplib==5.1.3",
+    "alembic==1.20.1",
+    "asyncpg==0.32.0",
+    "authlib==1.9.5",
+    "cryptography==50.0.2",
+    "fastapi==0.162.0",
+    "httpx2==2.16.0",
+    "joserfc==1.8.0",
+    "opentelemetry-api==1.45.2",
+    "opentelemetry-exporter-otlp-proto-http==1.45.2",
+    "opentelemetry-sdk==1.45.2",
+    "pillow==13.0.0",
+    "pydantic-settings==2.16.2",
+    "sqlalchemy[asyncio]==2.1.8",
+    "uvicorn==0.54.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/studymate"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "SIM", "C4", "PIE", "RUF", "ANN", "T20", "PT", "RET", "N", "A", "ISC", "TID", "TC", "ARG", "PERF", "PLR"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"] # pytest assertions are test behavior, never production validation.
+"migrations/versions/*.py" = ["TID251"] # Alembic schema DDL requires Core Column, not ORM mapped_column.
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+disallow_any_unimported = true
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+files = ["src", "tests", "migrations"]
+
+[tool.pytest.ini_options]
+# Load tests retain record_property metrics; xunit2 rejects that supported fixture.
+junit_family = "legacy"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--strict-config --strict-markers -ra"
+testpaths = ["tests"]
+filterwarnings = ["error"]
+markers = ["integration: real PostgreSQL and ASGI adapter tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["studymate"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_empty = true
+
+[tool.importlinter]
+root_package = "studymate"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Application has no framework or adapter dependencies"
+type = "forbidden"
+source_modules = ["studymate.application"]
+forbidden_modules = ["studymate.infrastructure", "studymate.presentation", "studymate.bootstrap", "studymate.config", "fastapi", "sqlalchemy", "asyncpg", "pydantic"]
+
+[[tool.importlinter.contracts]]
+name = "Persistence cannot depend on HTTP or bootstrap"
+type = "forbidden"
+source_modules = ["studymate.infrastructure"]
+forbidden_modules = ["studymate.presentation", "studymate.bootstrap", "fastapi"]
+
+[[tool.importlinter.contracts]]
+name = "HTTP cannot depend on persistence implementations"
+type = "forbidden"
+source_modules = ["studymate.presentation"]
+forbidden_modules = ["studymate.infrastructure", "studymate.bootstrap", "sqlalchemy", "asyncpg"]
+
+[dependency-groups]
+dev = [
+    "asgi-lifespan==2.1.0",
+    "httpx==0.28.1",
+    "import-linter==2.16",
+    "mypy==2.4.1",
+    "pytest==9.2.0",
+    "pytest-asyncio==1.4.1.post1",
+    "pytest-cov==7.1.0",
+    "ruff==0.17.4",
+    "types-aiobotocore[s3]==3.10.0",
+    "types-authlib==1.8.0.20261106",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain is independent of application and external adapters"
+type = "forbidden"
+source_modules = ["studymate.domain"]
+forbidden_modules = ["studymate.application", "studymate.infrastructure", "studymate.presentation", "studymate.bootstrap", "studymate.config", "fastapi", "sqlalchemy", "asyncpg", "pydantic"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"requests".msg = "Use an asynchronous HTTP client at the infrastructure boundary."
+"sqlite3".msg = "Use PostgreSQL through asyncpg, including integration tests."
+"psycopg2".msg = "Use asyncpg."
+"psycopg".msg = "Use asyncpg."
+"sqlalchemy.create_engine".msg = "Use create_async_engine."
+"sqlalchemy.orm.Session".msg = "Use AsyncSession."
+"sqlalchemy.orm.sessionmaker".msg = "Use async_sessionmaker."
+"sqlalchemy.Column".msg = "Use typed Mapped fields and mapped_column."
+"sqlalchemy.orm.declarative_base".msg = "Use DeclarativeBase."
+"sqlalchemy.orm.Query".msg = "Use SQLAlchemy select expressions."
