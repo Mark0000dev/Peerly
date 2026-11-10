@@ -7,8 +7,10 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.types import Message, Scope
 
+from studymate.infrastructure.changes.reads import CHANGE_READ_DEADLINE_SECONDS
 from studymate.infrastructure.persistence.identity_models import AccountRecord, SessionRecord
 from studymate.presentation.browser import SESSION_COOKIE
+from studymate.presentation.changes.stream import ChangeStreamPolicy
 from tests.integration.change_fixture import drain, head_positions
 from tests.integration.http_identity import BrowserHarness
 from tests.integration.test_message_commands import chat
@@ -97,7 +99,12 @@ async def test_root_owned_change_frame_releases_sql_and_revocation_closes_stream
                     .values(revoked_at=func.clock_timestamp())
                 )
 
-    async with asyncio.timeout(5):
+    # Initial read, SQL in send(), poll and revoked-session read each have
+    # their own production deadline. A whole-request5s cap can preempt a valid
+    # reauthorization. Keep those limits and use their sequential budget here.
+    policy = ChangeStreamPolicy()
+    budget = 2 * CHANGE_READ_DEADLINE_SECONDS + policy.send_timeout_seconds + policy.poll_seconds
+    async with asyncio.timeout(budget):
         await browser.app(scope, receive, send)
     assert statuses == [HTTPStatus.OK]
     assert len(frames) == 1

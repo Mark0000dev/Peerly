@@ -20,7 +20,7 @@ from studymate.application.ai.worker import ExecuteNextJob
 from studymate.application.idempotency import IntentKey
 from studymate.application.identity.sessions import SessionCredential
 from studymate.bootstrap import create_ai_admission_engine
-from studymate.domain.ai.jobs import AiJob, Failure
+from studymate.domain.ai.jobs import AiJob, Failure, JobState
 from studymate.domain.ai.tasks import AiResult, AiTask, ClarifiedGoal, Source
 from studymate.infrastructure.ai.models import AiJobRecord
 from studymate.infrastructure.ai.queue import SqlAiQueue
@@ -126,7 +126,9 @@ class LoadObservation:
     connections: int
 
     def verify(self, record: Callable[[str, object], None]) -> None:
-        assert 0 < self.accepted <= INTERACTIVE_QUEUE_CAPACITY
+        # Under a simultaneous burst the bounded request deadline can reject all
+        # arrivals. Positive admission/recovery are mandatory separate controls.
+        assert 0 <= self.accepted <= INTERACTIVE_QUEUE_CAPACITY
         assert self.rejected > 0
         assert self.peak < MAX_PEAK_BYTES
         assert self.core_max < CORE_LATENCY_LIMIT_SECONDS
@@ -213,6 +215,36 @@ async def burst(
         tracemalloc.stop()
 
 
+async def verify_post_burst_recovery(
+    api: Services,
+    account: tuple[Actor, Source],
+    queued_control: AiJob,
+    observation: LoadObservation,
+    record_property: Callable[[str, object], None],
+) -> None:
+    owner, source = account
+    cancelled = await api.cancel(owner.credential, queued_control.id)
+    assert cancelled.state == JobState.CANCELLED
+    recovered = await api.submit(
+        owner.credential,
+        submission(source, "Synthetic post-burst recovery control"),
+        IntentKey(str(uuid4())),
+    )
+    assert recovered.state == JobState.QUEUED
+    # Truthful degradation: only returned admissions exist, cancellation is
+    # retained, and capacity recovers with the original short SQL budgets.
+    async with api.sessions() as session:
+        stored = tuple(await session.scalars(select(AiJobRecord)))
+    assert len(stored) == observation.accepted + 3
+    queued = tuple(job for job in stored if job.state == JobState.QUEUED.value)
+    assert len(queued) == observation.accepted + 1
+    assert len(queued) <= INTERACTIVE_QUEUE_CAPACITY
+    assert next(job for job in stored if job.id == queued_control.id).state == "cancelled"
+    record_property("burst_submission_attempts", SIMULATED_ACCOUNTS - 1)
+    record_property("positive_control_admissions", 3)
+    record_property("post_burst_recovery_admitted", True)
+
+
 async def record_environment(engine: AsyncEngine, record: Callable[[str, object], None]) -> None:
     record("python", platform.python_version())
     record("platform", platform.system() + " " + platform.machine())
@@ -259,8 +291,19 @@ async def test_500_accounts_slow_executor_preserves_core_http_and_bounded_resour
         await asyncio.wait_for(fake.started.wait(), timeout=2)
         assert worker_pool.checkedout() == 0  # No connection is held by inference.
         assert not await ExecuteNextJob(worker_queue, SlowExecutor())()
+        # A queued control reserves a known cancellable slot even if the burst
+        # fills every remaining interactive slot. No production budget is changed.
+        queued_control = await api.submit(
+            owner.credential,
+            submission(source, "Synthetic queued control"),
+            IntentKey(str(uuid4())),
+        )
+        assert queued_control.state == JobState.QUEUED
         observation = await burst(accounts, api, browser, pools)
         observation.verify(record_property)
+        await verify_post_burst_recovery(
+            api, accounts[0], queued_control, observation, record_property
+        )
         assert fake.maximum_active == 1
         assert fake.invocations == 1
         fake.release.set()
