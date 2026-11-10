@@ -1,0 +1,7 @@
+# Merge with deployment/backend/ai-worker.compose.yml, NOT a standalone service.
+# That service's ONLY network ai-egress MUST reference the gateway's ai_private.
+services:
+  ai-worker:
+    # Docker embedded DNS still resolves same-network aliases; unknown names
+    # have no usable upstream. Do not allow arbitrary external DNS forwarding.
+    dns: [127.0.0.1]

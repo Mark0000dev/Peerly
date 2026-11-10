@@ -1,0 +1,31 @@
+# Standalone gateway; parent attaches the worker ONLY to ai_private, never public.
+# Port443 is bound without capabilities using a per-container network sysctl.
+services:
+  ai-egress:
+    image: ${PEERLY_AI_EGRESS_IMAGE:?published immutable gateway image digest required}
+    user: haproxy
+    command: [haproxy, -W, -db, -f, /usr/local/etc/haproxy/haproxy.cfg]
+    environment:
+      AI_DATABASE_FORWARD_IP: ${AI_DATABASE_FORWARD_IP:?fixed Peerly PostgreSQL IPv4 required}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: '0'
+    pids_limit: 32
+    mem_limit: 64m
+    cpus: 0.25
+    restart: 'no'
+    logging:
+      driver: local
+      options: {max-size: 1m, max-file: '2'}
+    networks:
+      ai_private:
+        aliases: [auth.openai.com, chatgpt.com, s3.cloud.ru, peerly-ai-db]
+      ai_public: {}
+    # No host ports, Docker socket, credentials or public-facing listener.
+networks:
+  ai_private:
+    name: ${PEERLY_AI_EGRESS_NETWORK:?private internal worker network required}
+    internal: true
+  ai_public: {}
