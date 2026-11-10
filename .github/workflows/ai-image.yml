@@ -77,17 +77,23 @@ jobs:
             --username "$GITHUB_ACTOR" --password-stdin
           docker pull "$BACKEND_IMAGE"
 
-      - name: Build the current native Dockerfile with a Dockerfile-only context
+      - name: Build the native Dockerfile with its exact single-file runtime overlay
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RECEIPT_DIRECTORY"
           cp backend/Dockerfile.ai-worker "$BUILD_CONTEXT/Dockerfile"
+          mkdir -p "$BUILD_CONTEXT/src/studymate/infrastructure/ai"
+          cp backend/src/studymate/infrastructure/ai/process.py \
+            "$BUILD_CONTEXT/src/studymate/infrastructure/ai/process.py"
+          runtime_patch_sha256=$(sha256sum "$BUILD_CONTEXT/src/studymate/infrastructure/ai/process.py" | cut -d ' ' -f 1)
+          printf '%s\n' "RUNTIME_PATCH_SHA256=$runtime_patch_sha256" >> "$GITHUB_ENV"
           docker build --file "$BUILD_CONTEXT/Dockerfile" \
             --build-arg "BACKEND_IMAGE=$BACKEND_IMAGE" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.base.name=$BACKEND_IMAGE" \
+            --label "dev.peerly.ai.runtime-patch.sha256=$runtime_patch_sha256" \
             --tag "$IMAGE_REPOSITORY:staging-$GITHUB_SHA" "$BUILD_CONTEXT"
 
       - name: Native version smoke without network, credentials or a writable root
@@ -108,6 +114,33 @@ jobs:
               raise RuntimeError("Worker image must default to its actual nonroot identity")
           if image_config["Config"]["Cmd"] != ["python", "-m", "studymate.ai_worker"]:
               raise RuntimeError("Worker image lost its application entry command")
+          patch_hash = os.environ["RUNTIME_PATCH_SHA256"]
+          if (image_config["Config"].get("Labels") or {}).get("dev.peerly.ai.runtime-patch.sha256") != patch_hash:
+              raise RuntimeError("Built image lost its checked-out runtime overlay hash label")
+          patch_check = "\n".join([
+              "import hashlib, importlib, json",
+              "from pathlib import Path",
+              "path = Path('/app/src/studymate/infrastructure/ai/process.py')",
+              "payload = path.read_bytes()",
+              "compile(payload, str(path), 'exec')",
+              "module = importlib.import_module('studymate.infrastructure.ai.process')",
+              "if Path(module.__file__).resolve() != path: raise RuntimeError('Wrong runtime overlay import path')",
+              "print(json.dumps({'runtime_patch_sha256': hashlib.sha256(payload).hexdigest(), 'compiled': True, 'imported': True}))",
+          ])
+          overlay = subprocess.run([
+              "docker", "run", "--rm", "--name", container + "-patch", "--network", "none",
+              "--user", "10002:10002", "--read-only",
+              "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+              "--pids-limit", "64", "--memory", "256m", "--cpus", "1",
+              "--env", "PYTHONDONTWRITEBYTECODE=1", "--entrypoint", "python",
+              image, "-c", patch_check,
+          ], capture_output=True, text=True, timeout=45)
+          print(overlay.stdout, end="")
+          print(overlay.stderr, end="", file=sys.stderr)
+          overlay.check_returncode()
+          patch_receipt = json.loads(overlay.stdout)
+          if patch_receipt["runtime_patch_sha256"] != patch_hash:
+              raise RuntimeError("Actual image runtime overlay differs from the checked-out source hash")
           subprocess.run([
               "docker", "create", "--name", container, "--network", "none",
               "--user", "10002:10002", "--read-only",
@@ -143,7 +176,11 @@ jobs:
                      "base_image_id": base["Id"],
                      "base_source_sha": (base["Config"].get("Labels") or {}).get("org.opencontainers.image.revision"),
                      "native_version": expected, "user": "10002:10002", "read_only": True,
-                     "network": "none", "inference_executed": False}
+                     "network": "none", "inference_executed": False,
+                     "runtime_patch_sha256": patch_receipt["runtime_patch_sha256"],
+                     "runtime_patch_source_sha": os.environ["GITHUB_SHA"],
+                     "runtime_patch_compiled": patch_receipt["compiled"],
+                     "runtime_patch_imported": patch_receipt["imported"]}
           Path(os.environ["RECEIPT_DIRECTORY"], "smoke.json").write_text(
               json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
           PYSMOKE
@@ -199,7 +236,11 @@ jobs:
           receipt = {"source_sha": sha, "tag": image, "digest": digest, "image": reference,
                      "smoked_image_id": smoke["image_id"],
                      "base_image": smoke["base_image"], "base_image_id": smoke["base_image_id"],
-                     "base_source_sha": smoke["base_source_sha"], "native_version": smoke["native_version"]}
+                     "base_source_sha": smoke["base_source_sha"], "native_version": smoke["native_version"],
+                     "runtime_patch_sha256": smoke["runtime_patch_sha256"],
+                     "runtime_patch_source_sha": smoke["runtime_patch_source_sha"],
+                     "runtime_patch_compiled": smoke["runtime_patch_compiled"],
+                     "runtime_patch_imported": smoke["runtime_patch_imported"]}
           (directory / "published.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("digest=" + digest + "\nimage=" + reference + "\n")
@@ -224,8 +265,10 @@ jobs:
         run: |
           set -euo pipefail
           trap 'if [ -n "${DOCKER_CONFIG:-}" ]; then rm -rf -- "$DOCKER_CONFIG"; fi; if [ -n "${BUILD_CONTEXT:-}" ]; then rm -rf -- "$BUILD_CONTEXT"; fi' EXIT
-          container_id=$(docker ps --all --quiet --filter "name=^/$SMOKE_CONTAINER$")
-          if [ -n "$container_id" ]; then
-            docker logs "$container_id"
-            docker rm --force "$container_id"
-          fi
+          for smoke_name in "$SMOKE_CONTAINER" "$SMOKE_CONTAINER-patch"; do
+            container_id=$(docker ps --all --quiet --filter "name=^/$smoke_name$")
+            if [ -n "$container_id" ]; then
+              docker logs "$container_id"
+              docker rm --force "$container_id"
+            fi
+          done

@@ -29,3 +29,27 @@ If startup fails, preserve bounded exit code/stderr and identify the precise fai
 If the actual operation requires a different security profile, derive and document a minimal **per-service** seccomp/AppArmor profile from the observed failure and supported bubblewrap requirements, review its added authority and rerun the same positive/negative proof under that exact profile. Parent owns installation/deployment. Do not use privileged mode, blanket unconfined profiles, capability restoration, globally relaxed user-namespace sysctls or changes to shared host services as a shortcut. If a safe supported profile cannot be demonstrated, keep AI unavailable and resolve containment architecture; the template must not be described as working merely because it parses or an image builds.
 
 No new probe was executed for this documentation update. The previously frozen head52 code snapshot remains immutable; this is a documentation-only prerequisite added afterward, not new runtime acceptance.
+
+## Temporary AI-only lifecycle overlay
+
+The AI build now copies exactly
+`backend/src/studymate/infrastructure/ai/process.py` from its checked-out AI
+working-branch checkpoint into `/app/src/studymate/infrastructure/ai/process.py`
+above the immutable backend base. This is the narrowly approved physical
+process-termination correction, not a claim that the running core API image
+contains that patch. Nash owns the module/regression; parent selects and publishes
+the exact non-main checkpoint. No other backend source is overlaid.
+
+The workflow must record the exact checked-out source SHA and module SHA256 as
+`runtime_patch_source_sha` and `runtime_patch_sha256`, label the image with
+`dev.peerly.ai.runtime-patch.sha256`, and compare the actual packaged module bytes
+with that SHA before publication. Module compile/import smoke is separate from
+the owned lifecycle regression evidence. The branch commit and hash come from
+the actual publication receipt, never a moving branch name or an invented hash.
+The unchanged base digest retains its original API revision/provenance.
+
+Remove this temporary COPY and its one-file context/receipt machinery when a
+newly accepted immutable backend base already includes the same lifecycle fix;
+verify the resulting image module hash before dropping the separate provenance.
+This does not change namespace, AppArmor, UID10002, NPROC32/cgroup32, credential
+recovery, provider acceptance or readiness requirements.
