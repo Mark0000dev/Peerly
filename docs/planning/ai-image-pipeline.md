@@ -18,9 +18,9 @@ The current Dockerfile derives the application from that backend image, installs
 
 ## Offline native smoke
 
-The workflow checks that the built image defaults to UID/GID 10001:10001 and the actual command `python -m studymate.ai_worker`. It then overrides only the entrypoint to the packaged native executable and invokes `--version`.
+The workflow checks that the built image defaults to UID/GID 10002:10002 and the actual command `python -m studymate.ai_worker`. It then overrides only the entrypoint to the packaged native executable and invokes `--version`.
 
-The smoke container uses network `none`, explicit UID/GID 10001:10001, a read-only root filesystem, a private 64 MiB `/tmp` tmpfs, all capabilities dropped, no-new-privileges, 64 PIDs, 256 MiB RAM and one CPU. Its empty temporary `HOME` and `CODEX_HOME` are confined to tmpfs. It has no mounted host directories, credentials, app environment, database, provider connection or published ports.
+The smoke container uses network `none`, explicit UID/GID 10002:10002, a read-only root filesystem, a private 64 MiB `/tmp` tmpfs, all capabilities dropped, no-new-privileges, 64 PIDs, 256 MiB RAM and one CPU. Its empty temporary `HOME` and `CODEX_HOME` are confined to tmpfs. It has no mounted host directories, credentials, app environment, database, provider connection or published ports.
 
 The native process has a 45-second host deadline and must exit zero, avoid OOM and report exactly `codex-cli 0.167.0` after whitespace stripping. Both stdout and stderr remain visible; diagnostics are not filtered. Docker inspection verifies the actual user, network mode, read-only root and exact local image ID. The smoke does not start the worker, execute inference, authenticate, inspect developer homes, test model tools or establish sandbox/provider readiness.
 
@@ -43,3 +43,6 @@ An always-run cleanup step preserves container logs, removes the owned smoke con
 `/tmp/peerly-ops01-actionlint .github/workflows/ai-image.yml` passed with exit 0 on 10 November 2026. No image build, native process, suite, registry operation or actual inference was executed locally for this task. Existing backend acceptance is not rerun by this packaging workflow.
 
 Parent copies the workflow, committed base-image reference and this document alongside the authorised exact AI Dockerfile to the isolated `feature/peerly-staging-ai` branch. Publishing that branch triggers the pipeline with the committed accepted base digest without any main/default-branch edit. Parent reviews the workflow/native smoke receipt and selects the returned worker digest. Once available, manual dispatch may override the base with another validated exact digest from the same backend repository. Package access, actual CI publication and deployment remain parent-owned. A passing version smoke establishes packaging/execution under the stated container restrictions only; it does not establish model-tool secret isolation, native sandbox operation, authentication, provider compatibility or inference readiness.
+
+
+Approved packaging follow-up: the AI worker uses dedicated UID/GID 10002:10002; the core backend retains 10001:10001. Noether owns the Dockerfile USER update. Workflow expected image user, smoke user and private tmpfs ownership all use 10002. Actionlint passed after this narrow change; no build, smoke or test rerun was performed.

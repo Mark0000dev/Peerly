@@ -72,7 +72,7 @@ if bubblewrap.stat().st_mode & 0o777 != 0o555:
 if Path("/usr/bin/bwrap").exists():
     raise RuntimeError("System bubblewrap would override the pinned native helper")
 PY
-USER 10001:10001
+USER 10002:10002
 HEALTHCHECK NONE
 STOPSIGNAL SIGTERM
 CMD ["python", "-m", "studymate.ai_worker"]

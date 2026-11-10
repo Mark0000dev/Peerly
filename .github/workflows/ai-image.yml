@@ -104,14 +104,14 @@ jobs:
           image = os.environ["IMAGE_REPOSITORY"] + ":staging-" + os.environ["GITHUB_SHA"]
           container = os.environ["SMOKE_CONTAINER"]
           image_config = json.loads(subprocess.check_output(["docker", "image", "inspect", image]))[0]
-          if image_config["Config"]["User"] != "10001:10001":
+          if image_config["Config"]["User"] != "10002:10002":
               raise RuntimeError("Worker image must default to its actual nonroot identity")
           if image_config["Config"]["Cmd"] != ["python", "-m", "studymate.ai_worker"]:
               raise RuntimeError("Worker image lost its application entry command")
           subprocess.run([
               "docker", "create", "--name", container, "--network", "none",
-              "--user", "10001:10001", "--read-only",
-              "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001,mode=0700",
+              "--user", "10002:10002", "--read-only",
+              "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m,uid=10002,gid=10002,mode=0700",
               "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
               "--pids-limit", "64", "--memory", "256m", "--cpus", "1",
               "--env", "HOME=/tmp", "--env", "CODEX_HOME=/tmp/codex",
@@ -129,7 +129,7 @@ jobs:
           details = json.loads(subprocess.check_output(["docker", "inspect", container]))[0]
           if details["State"]["ExitCode"] != 0 or details["State"]["OOMKilled"]:
               raise RuntimeError("Native version process did not finish cleanly")
-          if (details["Config"]["User"] != "10001:10001"
+          if (details["Config"]["User"] != "10002:10002"
                   or not details["HostConfig"]["ReadonlyRootfs"]
                   or details["HostConfig"]["NetworkMode"] != "none"):
               raise RuntimeError("Smoke restrictions do not match the inspected container")
@@ -142,7 +142,7 @@ jobs:
                      "image_id": details["Image"], "base_image": os.environ["BACKEND_IMAGE"],
                      "base_image_id": base["Id"],
                      "base_source_sha": (base["Config"].get("Labels") or {}).get("org.opencontainers.image.revision"),
-                     "native_version": expected, "user": "10001:10001", "read_only": True,
+                     "native_version": expected, "user": "10002:10002", "read_only": True,
                      "network": "none", "inference_executed": False}
           Path(os.environ["RECEIPT_DIRECTORY"], "smoke.json").write_text(
               json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
