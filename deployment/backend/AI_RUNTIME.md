@@ -33,23 +33,31 @@ No new probe was executed for this documentation update. The previously frozen h
 ## Temporary AI-only lifecycle overlay
 
 The AI build now copies exactly
-`backend/src/studymate/infrastructure/ai/process.py` from its checked-out AI
-working-branch checkpoint into `/app/src/studymate/infrastructure/ai/process.py`
+`backend/src/studymate/infrastructure/ai/process.py` and
+`backend/src/studymate/infrastructure/ai/runtime/policy.py` from its checked-out
+AI working-branch checkpoint into their matching `/app/src/studymate/` paths
 above the immutable backend base. This is the narrowly approved physical
 process-termination correction, not a claim that the running core API image
 contains that patch. Nash owns the module/regression; parent selects and publishes
-the exact non-main checkpoint. No other backend source is overlaid.
+the exact non-main checkpoint. No other backend source is overlaid. The policy adds only the fixed public
+`project_doc_max_bytes=0`: production structured tasks must not load developer
+project AGENTS instructions. Pinned CLI source returns before the filesystem
+helper at this value. The actual Subject and Photo trial succeeded at the same
+PID32 after the earlier unwanted AGENTS helper fork failed; this is not a PID
+increase or a relaxation of tool, credential, filesystem or network controls.
 
-The workflow must record the exact checked-out source SHA and module SHA256 as
-`runtime_patch_source_sha` and `runtime_patch_sha256`, label the image with
-`dev.peerly.ai.runtime-patch.sha256`, and compare the actual packaged module bytes
-with that SHA before publication. Module compile/import smoke is separate from
+The workflow must record the exact checked-out source SHA and each module SHA256. Preserve the process receipt fields
+`runtime_patch_source_sha` and `runtime_patch_sha256` plus its
+`dev.peerly.ai.runtime-patch.sha256` label; add a separate policy source/hash
+receipt and label. Compare both actual packaged module bytes with their exact
+checked-out SHA before publication. Module compile/import smoke is separate from
 the owned lifecycle regression evidence. The branch commit and hash come from
 the actual publication receipt, never a moving branch name or an invented hash.
 The unchanged base digest retains its original API revision/provenance.
 
-Remove this temporary COPY and its one-file context/receipt machinery when a
-newly accepted immutable backend base already includes the same lifecycle fix;
-verify the resulting image module hash before dropping the separate provenance.
+Remove the temporary COPY statements and their two-file context/receipt
+machinery when a newly accepted immutable backend base already includes the
+same lifecycle and fixed policy changes; verify both resulting image module
+hashes before dropping their separate provenance.
 This does not change namespace, AppArmor, UID10002, NPROC32/cgroup32, credential
 recovery, provider acceptance or readiness requirements.

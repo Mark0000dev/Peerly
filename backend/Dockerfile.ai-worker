@@ -2,9 +2,10 @@
 # Example: docker build -f Dockerfile.ai-worker --build-arg BACKEND_IMAGE=ghcr.io/...@sha256:... .
 ARG BACKEND_IMAGE
 FROM ${BACKEND_IMAGE}
-# AI-only lifecycle correction; workflow supplies this single reviewed source file.
+# AI-only lifecycle correction; workflow supplies only these two reviewed source files.
 # Backend base/API revision stays immutable; verify overlay SHA from the built image.
 COPY --chmod=0444 src/studymate/infrastructure/ai/process.py /app/src/studymate/infrastructure/ai/process.py
+COPY --chmod=0444 src/studymate/infrastructure/ai/runtime/policy.py /app/src/studymate/infrastructure/ai/runtime/policy.py
 USER 0:0
 # Process limits only; namespace launcher comes from the pinned native distribution.
 RUN apt-get update \
