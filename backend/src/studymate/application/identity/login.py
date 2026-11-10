@@ -43,7 +43,7 @@ class CallbackBudget:
 
 
 class AccountUnavailableError(GoogleRejectedError):
-    """Retained deleted identity: no new account, session or automatic restore."""
+    """Resolved actor unavailable; never grant a session to a deleted/banned tombstone."""
 
 
 @dataclass(frozen=True, slots=True)

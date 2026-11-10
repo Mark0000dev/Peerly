@@ -2,7 +2,8 @@
 
 Login flows in the current schema are unbound until callback resolution. Their
 source/IP digests are not account ownership, so they are not reassigned here.
-The callback's existing deleted-identity guard denies later session creation.
+Fresh verified Google login may create a NEW actor after deletion; retained
+identity associations and bans remain authoritative, never old-session revival.
 Already in-flight external delivery/execution is not claimed to be recalled.
 """
 
@@ -18,6 +19,9 @@ from studymate.infrastructure.ai.persistence import cancel_actor_jobs
 from studymate.infrastructure.persistence.email_models import (
     EmailChallengeRecord,
     EmailDeliveryRecord,
+)
+from studymate.infrastructure.persistence.identity_claims import (
+    retire_deleted_claims,
 )
 from studymate.infrastructure.persistence.identity_models import SessionRecord
 from studymate.infrastructure.persistence.product_events import (
@@ -56,6 +60,7 @@ async def apply_lifecycle_effects(session: AsyncSession, transition: LifecycleRe
     account_id = transition.after.account_id
     if isinstance(transition, DeletionTransition):
         at = transition.revision.deleted_at
+        await retire_deleted_claims(session, account_id)
         await session.execute(
             update(SessionRecord)
             .where(SessionRecord.account_id == account_id, SessionRecord.revoked_at.is_(None))

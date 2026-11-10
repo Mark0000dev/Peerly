@@ -353,6 +353,11 @@ EVENT_REFERENCE_SHAPE = (
 )
 
 
+EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE.replace(
+    "'read_support_case')", "'read_support_case','search_support_cases')"
+)
+
+
 class ProductEventRecord(Base):
     __tablename__ = "product_events"
     __table_args__ = (

@@ -1,6 +1,7 @@
 import ssl
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from email.headerregistry import Address
 from email.message import EmailMessage
 from email.utils import format_datetime
 from typing import Literal
@@ -43,7 +44,7 @@ class SmtpEmailSender:
         configuration = self.configuration
         domain = configuration.sender.rpartition("@")[2]
         mail = EmailMessage()
-        mail["From"] = configuration.sender
+        mail["From"] = str(Address(display_name="Peerly", addr_spec=configuration.sender))
         if configuration.reply_to is not None:
             mail["Reply-To"] = configuration.reply_to
         mail["To"] = message.email.value
@@ -51,8 +52,11 @@ class SmtpEmailSender:
         mail["Date"] = format_datetime(datetime.now(UTC))
         mail["Message-ID"] = f"<{delivery_id}@{domain}>"
         mail.set_content(
-            f"Your Peerly student email verification code is: {message.code.value}\n\n"
-            "This code expires in 10 minutes. If you did not request it, ignore this email.\n"
+            f"Your Peerly verification code is: {message.code.value}\n\n"
+            "Use this code only in Peerly to confirm access to your APU student mailbox.\n"
+            "Peerly is an independent student project.\n\n"
+            "Use only your latest requested code. It expires 10 minutes after the request.\n"
+            "Never share your code. If you did not request it, ignore this email.\n"
         )
         try:
             await aiosmtplib.send(

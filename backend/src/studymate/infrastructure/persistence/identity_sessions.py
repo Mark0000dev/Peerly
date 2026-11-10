@@ -15,6 +15,7 @@ from studymate.domain.identity import Session, StudentEmail
 from studymate.domain.membership import Membership
 from studymate.infrastructure.observability.tracing import record_authenticated_actor
 from studymate.infrastructure.persistence.email_models import EmailChallengeRecord
+from studymate.infrastructure.persistence.identity_claims import identity_lineage_banned
 from studymate.infrastructure.persistence.identity_models import (
     AccountRecord,
     InstitutionalBindingRecord,
@@ -98,7 +99,8 @@ class SqlIdentityTransaction:
                 stored.id, stored.account_id, stored.issued_at, stored.expires_at, stored.revoked_at
             ),
             membership=membership,
-            banned=account.banned_at is not None,
+            banned=account.banned_at is not None
+            or await identity_lineage_banned(self.session, account.id),
             deleted_at=account.deleted_at,
             registration=await read_receipt(self.session, account.id),
             email_challenge_id=pending_challenge,

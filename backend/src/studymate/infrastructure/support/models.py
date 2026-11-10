@@ -58,6 +58,7 @@ class SupportCaseRecord(Base):
         ),
         Index("ix_support_cases_proof_received", "proof_digest", "received_at"),
         Index("ix_support_cases_actor_received", "actor_id", "received_at", "id"),
+        Index("ix_support_cases_received_id", "received_at", "id"),
         CheckConstraint(
             "topic IN ('cannot_sign_in','email_not_accepted','code_not_arriving',"
             "'email_already_in_use','deleted_account','other')",

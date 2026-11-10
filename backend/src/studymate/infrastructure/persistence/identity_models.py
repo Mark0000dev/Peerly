@@ -8,9 +8,11 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     LargeBinary,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +22,7 @@ from studymate.infrastructure.persistence.base import Base
 class AccountRecord(Base):
     __tablename__ = "accounts"
     __table_args__ = (
+        UniqueConstraint("id", "deleted_at", name="uq_accounts_id_deleted_at"),
         CheckConstraint(
             "lifecycle_version IS NULL OR lifecycle_version>0", name="lifecycle_source_version"
         ),
@@ -44,7 +47,20 @@ class AccountRecord(Base):
 class ExternalIdentityRecord(Base):
     __tablename__ = "external_identities"
     __table_args__ = (
-        UniqueConstraint("issuer", "subject", name="uq_external_identities_issuer_subject"),
+        Index(
+            "uq_external_identities_active_issuer_subject",
+            "issuer",
+            "subject",
+            unique=True,
+            postgresql_where=text("retired_at IS NULL"),
+        ),
+        Index("ix_external_identities_issuer_subject_history", "issuer", "subject"),
+        ForeignKeyConstraint(
+            ["account_id", "retired_at"],
+            ["accounts.id", "accounts.deleted_at"],
+            name="fk_external_identities_retired_account",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("account_id", name="uq_external_identities_account_id"),
         CheckConstraint("issuer = 'https://accounts.google.com'", name="google_issuer"),
         CheckConstraint("length(subject) > 0", name="nonempty_subject"),
@@ -55,6 +71,7 @@ class ExternalIdentityRecord(Base):
     issuer: Mapped[str] = mapped_column(String(255))
     subject: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class SessionRecord(Base):
@@ -80,7 +97,19 @@ class SessionRecord(Base):
 class InstitutionalBindingRecord(Base):
     __tablename__ = "institutional_bindings"
     __table_args__ = (
-        UniqueConstraint("email", name="uq_institutional_bindings_email"),
+        Index(
+            "uq_institutional_bindings_active_email",
+            "email",
+            unique=True,
+            postgresql_where=text("retired_at IS NULL"),
+        ),
+        Index("ix_institutional_bindings_email_history", "email"),
+        ForeignKeyConstraint(
+            ["account_id", "retired_at"],
+            ["accounts.id", "accounts.deleted_at"],
+            name="fk_institutional_bindings_retired_account",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "email = lower(btrim(email)) AND "
             "email ~ '^[a-z0-9!#$%&''*+/=?^_`{|}~-]+"
@@ -96,6 +125,7 @@ class InstitutionalBindingRecord(Base):
     )
     email: Mapped[str] = mapped_column(String(254))
     verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

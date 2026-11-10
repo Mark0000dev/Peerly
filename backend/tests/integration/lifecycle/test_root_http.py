@@ -26,6 +26,7 @@ from tests.integration.http_identity import BrowserHarness, login, write_headers
 from tests.integration.student_actor import actor
 
 pytestmark = pytest.mark.integration
+RECREATED_ACCOUNT_COUNT = 2
 
 
 async def test_root_preflight_retries_delete_and_narrow_status_survive_session_clear(
@@ -102,7 +103,7 @@ async def test_root_preflight_retries_delete_and_narrow_status_survive_session_c
     assert no_proof.status_code == HTTPStatus.NOT_FOUND
 
 
-async def test_root_deleted_google_identity_never_recreates_account(
+async def test_root_deleted_google_identity_creates_distinct_unverified_account(
     browser: BrowserHarness,
     identity_engine: AsyncEngine,
 ) -> None:
@@ -122,11 +123,17 @@ async def test_root_deleted_google_identity_never_recreates_account(
     started = await http.get("/api/v1/auth/google/start")
     state = parse_qs(urlsplit(started.headers["location"]).query)["state"][0]
     await http.get("/api/v1/auth/google/callback", params={"state": state, "code": "code"})
-    assert (await http.get("/api/v1/me")).status_code == HTTPStatus.UNAUTHORIZED
+    fresh = IdentityResponse.model_validate((await http.get("/api/v1/me")).json())
+    assert fresh.membership_status == "unverified"
+    assert fresh.registration is None
     async with async_sessionmaker(identity_engine)() as session:
         accounts = tuple(await session.scalars(select(AccountRecord)))
-        assert len(accounts) == 1
-        assert accounts[0].deleted_at is not None
+        assert len(accounts) == RECREATED_ACCOUNT_COUNT
+        assert any(account.deleted_at is not None for account in accounts)
+        assert (
+            next(account for account in accounts if account.id == fresh.account_id).deleted_at
+            is None
+        )
 
 
 async def grant(browser: BrowserHarness, engine: AsyncEngine) -> UUID:

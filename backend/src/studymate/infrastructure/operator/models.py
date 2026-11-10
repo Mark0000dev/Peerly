@@ -124,6 +124,18 @@ OPERATOR_INSPECTION_SHAPE = (
 )
 
 
+_BEFORE_SUPPORT_SEARCH_INSPECTION_SHAPE = OPERATOR_INSPECTION_SHAPE
+OPERATOR_INSPECTION_SHAPE = (
+    f"({_BEFORE_SUPPORT_SEARCH_INSPECTION_SHAPE}) OR ("
+    "action='search_support_cases' AND resource_kind='support_case' AND requested_id IS "
+    "NULL AND outcome='search' AND query_fingerprint IS NOT NULL AND "
+    "octet_length(query_fingerprint)=32 AND cardinality(result_ids)<=50 AND "
+    "requested_media_owner_id IS NULL AND requested_media_attempt_id IS NULL AND "
+    "requested_media_kind IS NULL AND actual_source_upload_id IS NULL"
+    ")"
+)
+
+
 class OperatorAuditRecord(Base):
     __tablename__ = "operator_audits"
     __table_args__ = (

@@ -27,6 +27,7 @@ from studymate.infrastructure.persistence.email_models import (
     EmailDeliveryRecord,
     EmailIntentRecord,
 )
+from studymate.infrastructure.persistence.identity_claims import email_lineage_banned
 from studymate.infrastructure.persistence.identity_models import InstitutionalBindingRecord
 from studymate.infrastructure.persistence.identity_sessions import SqlIdentityTransaction
 from studymate.infrastructure.persistence.product_events import record_membership_event
@@ -260,6 +261,8 @@ class SqlEmailTransaction(SqlIdentityTransaction):
         )
 
     async def bind_membership(self, account_id: UUID, email: StudentEmail, at: datetime) -> bool:
+        if await email_lineage_banned(self.session, email.value):
+            return False
         statement = (
             insert(InstitutionalBindingRecord)
             .values(

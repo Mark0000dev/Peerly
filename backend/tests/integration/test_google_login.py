@@ -286,7 +286,7 @@ async def test_expired_flow_never_contacts_google(identity_engine: AsyncEngine) 
     assert provider.calls == 0
 
 
-async def test_deleted_subject_cannot_recreate_or_reactivate_account(
+async def test_deleted_subject_creates_new_actor_without_restoring_original(
     identity_engine: AsyncEngine,
 ) -> None:
     sessions = async_sessionmaker(identity_engine, expire_on_commit=False)
@@ -309,6 +309,57 @@ async def test_deleted_subject_cannot_recreate_or_reactivate_account(
     with pytest.raises(UnauthenticatedError):
         await reader(original.credential)
     new_flow = await begin(return_to="/", source_digest=SOURCE)
+    recreated = await complete(
+        state=state_from(new_flow.redirect_url),
+        browser=new_flow.browser,
+        code=GoogleCode("code"),
+    )
+    current = await reader(recreated.credential)
+    assert current.session.account_id != account_id
+    assert current.membership is None
+    assert current.registration is None
+    with pytest.raises(UnauthenticatedError):
+        await reader(original.credential)
+    expected_accounts = {account_id, current.session.account_id}
+    async with sessions() as session:
+        assert (
+            await session.scalars(select(func.count()).select_from(AccountRecord))
+        ).one() == len(expected_accounts)
+        assert (
+            await session.scalars(select(func.count()).select_from(SessionRecord))
+        ).one() == len(expected_accounts)
+        retained = tuple(await session.scalars(select(ExternalIdentityRecord)))
+        assert len(retained) == len(expected_accounts)
+        assert all(row.subject == provider.subject for row in retained)
+        assert {row.account_id for row in retained} == {account_id, current.session.account_id}
+        old = next(row for row in retained if row.account_id == account_id)
+        assert old.retired_at is not None
+
+
+async def test_deleted_banned_subject_cannot_evade_ban_by_creating_new_actor(
+    identity_engine: AsyncEngine,
+) -> None:
+    sessions = async_sessionmaker(identity_engine, expire_on_commit=False)
+    uow = SqlLoginUnitOfWork(sessions)
+    provider = GoogleProviderDouble()
+    begin = BeginGoogleLogin(uow, provider, vault())
+    complete = CompleteGoogleLogin(uow, provider, vault())
+    flow = await begin(return_to="/", source_digest=SOURCE)
+    signed_in = await complete(
+        state=state_from(flow.redirect_url), browser=flow.browser, code=GoogleCode("code")
+    )
+    reader = ReadIdentity(SqlIdentityUnitOfWork(sessions), Sha256SessionHasher())
+    account_id = (await reader(signed_in.credential)).session.account_id
+    async with sessions.begin() as session:
+        await session.execute(
+            update(AccountRecord)
+            .where(AccountRecord.id == account_id)
+            .values(
+                banned_at=func.clock_timestamp(),
+                deleted_at=func.clock_timestamp(),
+            )
+        )
+    new_flow = await begin(return_to="/", source_digest=SOURCE)
     with pytest.raises(AccountUnavailableError):
         await complete(
             state=state_from(new_flow.redirect_url),
@@ -316,10 +367,7 @@ async def test_deleted_subject_cannot_recreate_or_reactivate_account(
             code=GoogleCode("code"),
         )
     async with sessions() as session:
-        assert (await session.scalars(select(func.count()).select_from(AccountRecord))).one() == 1
-        assert (await session.scalars(select(func.count()).select_from(SessionRecord))).one() == 1
-        retained = (await session.scalars(select(ExternalIdentityRecord))).one()
-        assert retained.subject == provider.subject
+        assert await session.scalar(select(func.count()).select_from(AccountRecord)) == 1
 
 
 async def test_banned_subject_can_authenticate_only_in_restricted_state(

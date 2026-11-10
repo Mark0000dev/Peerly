@@ -17,6 +17,10 @@ from studymate.domain.identity import Session
 from studymate.domain.membership import GoogleIdentity
 from studymate.infrastructure.persistence.callback_models import CallbackAttemptRecord
 from studymate.infrastructure.persistence.discovery_exposure import record_foreground_activity
+from studymate.infrastructure.persistence.identity_claims import (
+    identity_lineage_banned,
+    retire_deleted_claims,
+)
 from studymate.infrastructure.persistence.identity_models import (
     AccountRecord,
     ExternalIdentityRecord,
@@ -150,61 +154,84 @@ class SqlLoginTransaction(SqlIdentityTransaction):
             update(LoginFlowRecord).where(LoginFlowRecord.id == flow_id).values(completed_at=at)
         )
 
+    async def _lock_google_scope(
+        self,
+        identities: tuple[ExternalIdentityRecord, ...],
+        previous_digest: bytes | None,
+    ) -> dict[UUID, AccountRecord]:
+        account_ids = {identity.account_id for identity in identities}
+        if previous_digest is not None:
+            previous = await self.session.scalar(
+                select(SessionRecord.account_id).where(
+                    SessionRecord.secret_digest == previous_digest
+                )
+            )
+            if previous is not None:
+                account_ids.add(previous)
+        # Include retained same-person accounts: a concurrent ban/deletion must
+        # settle before deciding whether a genuinely new actor may be created.
+        locked = await self.session.scalars(
+            select(AccountRecord)
+            .where(AccountRecord.id.in_(account_ids))
+            .order_by(AccountRecord.id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        )
+        return {account.id: account for account in locked}
+
     async def resolve_google(
         self, identity: GoogleIdentity, at: datetime, previous_digest: bytes | None = None
     ) -> GoogleAccount:
-        # Equal subjects serialize; the unique constraint remains a final defence.
+        # Equal trusted subjects serialize across every retained incarnation.
+        # Partial unique active-claim index remains the final database defence.
         await self.session.execute(
             select(func.pg_advisory_xact_lock(func.hashtextextended(identity.subject, 0)))
         )
-        existing = (
+        identities = tuple(
             await self.session.scalars(
-                select(ExternalIdentityRecord.account_id).where(
+                select(ExternalIdentityRecord)
+                .where(
                     ExternalIdentityRecord.issuer == identity.issuer,
                     ExternalIdentityRecord.subject == identity.subject,
                 )
-            )
-        ).one_or_none()
-        if existing is None:
-            account_id = uuid4()
-            self.session.add(AccountRecord(id=account_id, created_at=at))
-            await self.session.flush()
-            self.session.add(
-                ExternalIdentityRecord(
-                    id=uuid4(),
-                    account_id=account_id,
-                    issuer=identity.issuer,
-                    subject=identity.subject,
-                    created_at=at,
-                )
-            )
-            await self.session.flush()
-        else:
-            account_id = existing
-        account_ids = {account_id}
-        if previous_digest is not None:
-            previous_account = (
-                await self.session.scalars(
-                    select(SessionRecord.account_id).where(
-                        SessionRecord.secret_digest == previous_digest
-                    )
-                )
-            ).one_or_none()
-            if previous_account is not None:
-                account_ids.add(previous_account)
-        # Lock lifecycle before issuance. A stable order also prevents opposite
-        # account switches from each holding the other's previous account lock.
-        locked = (
-            await self.session.scalars(
-                select(AccountRecord)
-                .where(AccountRecord.id.in_(account_ids))
-                .order_by(AccountRecord.id)
-                .with_for_update(key_share=True)
                 .execution_options(populate_existing=True)
             )
-        ).all()
-        account = {record.id: record for record in locked}[account_id]
-        return GoogleAccount(account.id, account.deleted_at)
+        )
+        accounts = await self._lock_google_scope(identities, previous_digest)
+        active = tuple(row for row in identities if row.retired_at is None)
+        if len(active) > 1:
+            raise RuntimeError("Google identity has multiple active claims")
+        if active:
+            account = accounts[active[0].account_id]
+            if account.deleted_at is None:
+                # Session guards still apply current and retained-lineage bans;
+                # existing banned actors retain their restricted support login.
+                return GoogleAccount(account.id, None)
+        for row in identities:
+            prior = accounts[row.account_id]
+            if prior.banned_at is not None or await identity_lineage_banned(self.session, prior.id):
+                # Deletion and later credential changes cannot clear a known ban.
+                return GoogleAccount(prior.id, prior.deleted_at)
+        for row in identities:
+            if accounts[row.account_id].deleted_at is None:
+                raise RuntimeError("A live Google association was retired without deletion")
+            if row.retired_at is None:
+                await retire_deleted_claims(self.session, row.account_id)
+        created_at = max(at, await self.now())
+        account_id = uuid4()
+        self.session.add(AccountRecord(id=account_id, created_at=created_at))
+        await self.session.flush()
+        self.session.add(
+            ExternalIdentityRecord(
+                id=uuid4(),
+                account_id=account_id,
+                issuer=identity.issuer,
+                subject=identity.subject,
+                created_at=created_at,
+            )
+        )
+        await self.session.flush()
+        return GoogleAccount(account_id, None)
 
     async def add_session(self, session: Session, digest: bytes) -> None:
         self.session.add(
