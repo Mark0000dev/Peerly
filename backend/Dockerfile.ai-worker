@@ -1,0 +1,78 @@
+# Build only from the frozen application's immutable image digest.
+# Example: docker build -f Dockerfile.ai-worker --build-arg BACKEND_IMAGE=ghcr.io/...@sha256:... .
+ARG BACKEND_IMAGE
+FROM ${BACKEND_IMAGE}
+USER 0:0
+# Process limits only; namespace launcher comes from the pinned native distribution.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y util-linux ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN python - <<'PY'
+import base64
+import hashlib
+import io
+import os
+import platform
+import tarfile
+import urllib.request
+from pathlib import Path, PurePosixPath
+
+if platform.machine() != "x86_64":
+    raise RuntimeError("Reviewed native runtime is Linux x86_64 only")
+url = "https://registry.npmjs.org/@openai/codex/-/codex-0.167.0-linux-x64.tgz"
+integrity = "FNc7danfUng9Sp6w+Fh7kofNHHZpA6VMyNKWsWrS3OwHly69gywTWeiuwrUPXpJSho8Df4xqRsHfHRPzj7zYQg=="
+expected_bwrap = "77360cb751ccedc5971391444ac86a8a33c15b04d6b4a6fe45f5d25496e62c4c"
+expected = "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda"
+limit = 512 * 1024 * 1024
+with urllib.request.urlopen(url, timeout=60) as response:
+    archive = response.read(limit + 1)
+if len(archive) > limit or base64.b64encode(hashlib.sha512(archive).digest()).decode() != integrity:
+    raise RuntimeError("Pinned native distribution integrity mismatch")
+prefix = PurePosixPath("package/vendor/x86_64-unknown-linux-musl")
+root = Path("/usr/local/lib/peerly-codex/vendor/x86_64-unknown-linux-musl")
+root.mkdir(parents=True)
+expanded = 0
+with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as package:
+    for item in package:
+        name = PurePosixPath(item.name)
+        if ".." in name.parts or name.is_absolute():
+            raise RuntimeError("Unsafe pinned distribution path")
+        if not name.is_relative_to(prefix):
+            continue
+        destination = root.joinpath(*name.relative_to(prefix).parts)
+        if item.isdir():
+            destination.mkdir(parents=True, exist_ok=True)
+            continue
+        if not item.isfile() or item.size < 0:
+            raise RuntimeError("Unsupported pinned distribution entry")
+        expanded += item.size
+        if expanded > limit:
+            raise RuntimeError("Pinned distribution expansion exceeds build bound")
+        stream = package.extractfile(item)
+        if stream is None:
+            raise RuntimeError("Pinned distribution file missing")
+        with stream:
+            data = stream.read(item.size + 1)
+        if len(data) != item.size:
+            raise RuntimeError("Pinned distribution file length mismatch")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("xb") as target:
+            target.write(data)
+        destination.chmod(0o555 if item.mode & 0o111 else 0o444)
+binary = root / "bin/codex"
+if hashlib.sha256(binary.read_bytes()).hexdigest() != expected:
+    raise RuntimeError("Pinned native executable digest mismatch")
+bubblewrap = root / "codex-resources/bwrap"
+if not bubblewrap.is_file() or not (root / "codex-path/rg").is_file():
+    raise RuntimeError("Pinned native resource layout changed")
+if hashlib.sha256(bubblewrap.read_bytes()).hexdigest() != expected_bwrap:
+    raise RuntimeError("Pinned bundled namespace launcher digest mismatch")
+if bubblewrap.stat().st_mode & 0o777 != 0o555:
+    raise RuntimeError("Pinned bundled namespace launcher permissions changed")
+if Path("/usr/bin/bwrap").exists():
+    raise RuntimeError("System bubblewrap would override the pinned native helper")
+PY
+USER 10001:10001
+HEALTHCHECK NONE
+STOPSIGNAL SIGTERM
+CMD ["python", "-m", "studymate.ai_worker"]

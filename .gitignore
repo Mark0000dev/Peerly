@@ -28,3 +28,6 @@ client_secret*.json
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Reviewed synthetic AI worker configuration template.
+!/backend/.env.ai-worker.example
