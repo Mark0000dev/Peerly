@@ -1,0 +1,46 @@
+<section aria-label="Email delivery help">
+  @switch (delivery()) {
+    @case ('sent') {
+      <p role="status">
+        The mail service accepted your verification email. This does not confirm delivery to your
+        inbox.
+      </p>
+    }
+    @case ('queued') {
+      <p role="status">
+        Your verification email is queued. The mail service has not confirmed acceptance yet.
+      </p>
+    }
+    @case ('sending') {
+      <p role="status">
+        Your verification email is being submitted to the mail service. Acceptance is not confirmed
+        yet.
+      </p>
+    }
+    @case ('failed') {
+      <p role="alert">
+        We couldn’t confirm that the mail service accepted this email. Check your mailbox in case it
+        arrives.
+      </p>
+    }
+    @case ('cancelled') {
+      <p role="alert">
+        We couldn’t confirm that the mail service accepted this email. Check your mailbox in case it
+        arrives.
+      </p>
+    }
+  }
+  <p>
+    APU’s email filters may hold messages in quarantine. If the code is missing, check Junk Email
+    and
+    <a
+      tuiLink
+      href="https://security.microsoft.com/quarantine"
+      target="_blank"
+      rel="noopener noreferrer"
+      >your university email quarantine (opens in a new tab)</a
+    >. View a message or request its release if those options are available. Permissions depend on
+    your university’s settings. If access is denied, contact APU IT.
+    <a tuiLink routerLink="/help/contact">Contact support if you still cannot find the code</a>.
+  </p>
+</section>

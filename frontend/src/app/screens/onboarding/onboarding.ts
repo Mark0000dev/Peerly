@@ -1,3 +1,4 @@
+import { EmailDeliveryHint } from './email-delivery/email-delivery-hint';
 import { StudySetup } from './setup/setup';
 import { HelpSubjects } from './study/help';
 import { StudyGoal } from './study/goal';
@@ -50,6 +51,7 @@ interface VerifyIntent {
 @Component({
   selector: 'app-onboarding',
   imports: [
+    EmailDeliveryHint,
     Brand,
     ProfileBasics,
     StudyGoal,

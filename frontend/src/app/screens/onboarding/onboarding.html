@@ -129,14 +129,7 @@
           >.
         </p>
         <button tuiLink type="button" (click)="changeEmail()">Change email</button>
-        @if (current.delivery === 'queued' || current.delivery === 'sending') {
-          <p role="status">Your code is being sent.</p>
-        }
-        @if (current.delivery === 'failed' || current.delivery === 'cancelled') {
-          <p role="alert">
-            We couldn’t confirm delivery. Check your mailbox or request a new code when available.
-          </p>
-        }
+        <peerly-email-delivery-hint [delivery]="current.delivery" />
         @if (current.state === 'locked') {
           <p role="alert">Too many incorrect attempts. Request a new code when available.</p>
         } @else if (current.state === 'expired') {
@@ -147,8 +140,8 @@
           </p>
         }
         <form [formGroup]="codeForm" (ngSubmit)="confirmCode()">
+          <label tuiLabel for="verification-code">Verification code</label>
           <tui-textfield
-            ><label tuiLabel for="verification-code">Verification code</label
             ><input
               tuiInput
               id="verification-code"

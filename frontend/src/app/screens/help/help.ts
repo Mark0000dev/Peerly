@@ -14,8 +14,20 @@ import { TuiButton, TuiLink } from '@taiga-ui/core';
     </p>
     <h2>The code doesn’t arrive</h2>
     <p>
-      Check spam and other folders. You can check delivery status and request another code when it
-      becomes available.
+      Check Junk and your university email quarantine. APU’s email filter may hold a code before it
+      reaches your Outlook inbox. The email service accepting a message does not confirm inbox
+      delivery. On the verification screen, check status and resend only when it becomes available.
+      Open
+      <a
+        tuiLink
+        href="https://security.microsoft.com/quarantine"
+        target="_blank"
+        rel="noopener noreferrer"
+        >Microsoft quarantine</a
+      >
+      if your university account has access. Available actions depend on APU’s policy: request
+      release if offered. If access is denied or release needs an administrator, contact APU IT. If
+      you still cannot find a code, contact support below.
     </p>
     <h2>My APU email is already in use</h2>
     <p>Try the Google account you used before. We don’t move or combine accounts automatically.</p>
