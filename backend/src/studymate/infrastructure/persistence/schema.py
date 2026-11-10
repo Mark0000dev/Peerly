@@ -1,6 +1,7 @@
 """Explicit product model registry for migrations and schema drift checks."""
 
 from studymate.infrastructure.ai.models import AI_MODELS
+from studymate.infrastructure.bootstrap_data.models import BOOTSTRAP_DATA_MODELS
 from studymate.infrastructure.changes.models import (
     ChangeHeadRecord,
     ChangeOutboxRecord,
@@ -24,6 +25,10 @@ from studymate.infrastructure.messaging.goal_share_models import (
     ConversationGoalShareHeadRecord,
     ConversationGoalShareIntentRecord,
     ConversationGoalShareRecord,
+)
+from studymate.infrastructure.notification_preferences.models import (
+    PreferenceIntentRecord,
+    PreferenceRevisionRecord,
 )
 from studymate.infrastructure.operator.models import (
     OperatorAccessRecord,
@@ -122,6 +127,14 @@ from studymate.infrastructure.requests.view_models import (
     RequestDisclosureRecord,
     RequestViewAcknowledgementRecord,
 )
+from studymate.infrastructure.support.models import (
+    SupportCaseRecord,
+    SupportIntentRecord,
+    SupportOperatorIntentRecord,
+    SupportPreparationRecord,
+    SupportProofRecord,
+    SupportRevisionRecord,
+)
 
 MODELS: tuple[type[Base], ...] = (
     *CHAT_IMAGE_MODELS,
@@ -169,6 +182,15 @@ MODELS: tuple[type[Base], ...] = (
     ProfileReportIntentRecord,
     MessageReportContextRecord,
     *AI_MODELS,
+    *BOOTSTRAP_DATA_MODELS,
+    PreferenceIntentRecord,
+    PreferenceRevisionRecord,
+    SupportCaseRecord,
+    SupportIntentRecord,
+    SupportOperatorIntentRecord,
+    SupportPreparationRecord,
+    SupportProofRecord,
+    SupportRevisionRecord,
     AccountRecord,
     ExternalIdentityRecord,
     SessionRecord,

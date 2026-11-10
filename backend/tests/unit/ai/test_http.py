@@ -40,7 +40,7 @@ def payload() -> dict[str, object]:
 
 
 @asynccontextmanager
-async def client(store: Store, *, accepting: bool = True) -> AsyncIterator[AsyncClient]:
+async def client(store: Store, *, runtime_available: bool = True) -> AsyncIterator[AsyncClient]:
     app = FastAPI()
     app.add_middleware(JsonCommandBodyLimit)
     app.add_exception_handler(RequestValidationError, validation_problem)
@@ -52,10 +52,11 @@ async def client(store: Store, *, accepting: bool = True) -> AsyncIterator[Async
                 CancelStudentJob(store, Sha256SessionHasher()),
                 SIGNER,
                 BrowserConfiguration(ORIGIN, frozenset({ORIGIN})),
-                accepting,
             )
         )
     )
+    if not runtime_available:
+        store.runtime_fact = None
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url=ORIGIN,
@@ -104,7 +105,7 @@ async def test_create_read_cancel_safe_projection() -> None:
 
 async def test_disabled_authenticates_live_actor_and_never_admits() -> None:
     store = Store()
-    async with client(store, accepting=False) as http:
+    async with client(store, runtime_available=False) as http:
         unavailable = await http.post("/api/v1/ai/jobs", json=payload())
         assert unavailable.status_code == HTTPStatus.SERVICE_UNAVAILABLE
         assert unavailable.headers["retry-after"] == "1"
@@ -187,7 +188,7 @@ def test_retry_configuration_is_bounded() -> None:
         SIGNER,
         BrowserConfiguration(ORIGIN, frozenset({ORIGIN})),
     )
-    assert not services.accepting
+    assert not hasattr(services, "accepting")
     with pytest.raises(ValueError, match="bounded"):
         replace(services, retry_after_seconds=0)
 

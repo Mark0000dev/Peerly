@@ -100,6 +100,9 @@ class LinuxSandbox:
             str(self.temporary_bytes),
             "--tmpfs",
             "/scratch",
+            "--symlink",
+            "scratch",
+            "/tmp",  # noqa: S108 - alias to bounded private scratch, never a host mount.
             "--bind",
             str(directory),
             str(directory),

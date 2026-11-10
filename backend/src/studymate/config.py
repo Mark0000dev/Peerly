@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -9,6 +10,7 @@ from sqlalchemy.engine import make_url
 from studymate.infrastructure.email.reply_to import require_reply_to
 
 AUTHENTICATION_KEY_COUNT = 3
+MAX_AI_ACCOUNT_BINDING_LENGTH = 255
 
 
 class AuthenticationConfiguration(BaseModel):
@@ -264,6 +266,93 @@ class ChangesWorkerSettings(BaseSettings):
         hide_input_in_errors=True,
     )
     database_url: SecretStr
+    observability: ObservabilityConfiguration | None = None
+
+    @field_validator("database_url")
+    @classmethod
+    def require_asyncpg(cls, value: SecretStr) -> SecretStr:
+        return Settings.require_asyncpg(value)
+
+
+class AiWorkerRuntimeConfiguration(BaseModel):
+    """Explicit runtime inputs; configuration alone grants no provider readiness."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    executable: Path
+    expected_version: str = Field(min_length=1, max_length=100)
+    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._-]+$")
+    credential_directory: Path
+    expected_account: SecretStr
+    expected_login_owner: SecretStr
+    expected_oauth_issuer: str = Field(min_length=1, max_length=512)
+    expected_oauth_client_id: str = Field(min_length=1, max_length=255)
+    acceptance_artifact: Path
+    workspaces_root: Path
+    bubblewrap: Path = Path("/usr/bin/bwrap")
+    prlimit: Path = Path("/usr/bin/prlimit")
+
+    @field_validator("executable", "bubblewrap", "prlimit")
+    @classmethod
+    def require_runtime_binary(cls, value: Path) -> Path:
+        if not value.is_absolute() or ".." in value.parts or not value.is_relative_to("/usr"):
+            raise ValueError("Runtime binaries require explicit absolute paths under /usr")
+        return value
+
+    @field_validator("credential_directory", "workspaces_root")
+    @classmethod
+    def require_private_runtime_root(cls, value: Path) -> Path:
+        if (
+            not value.is_absolute()
+            or value == Path("/")
+            or ".." in value.parts
+            or any(
+                value.is_relative_to(root)
+                for root in ("/home", "/root", "/usr", "/etc", "/proc", "/sys", "/dev")
+            )
+        ):
+            raise ValueError("Dedicated non-home runtime directories are required")
+        return value
+
+    @field_validator("acceptance_artifact")
+    @classmethod
+    def require_explicit_acceptance_path(cls, value: Path) -> Path:
+        if not value.is_absolute() or ".." in value.parts or value == Path("/"):
+            raise ValueError("An explicit absolute runtime acceptance artifact is required")
+        return value
+
+    @field_validator("expected_account", "expected_login_owner")
+    @classmethod
+    def require_account_binding(cls, value: SecretStr) -> SecretStr:
+        if (
+            not value.get_secret_value().strip()
+            or len(value.get_secret_value()) > MAX_AI_ACCOUNT_BINDING_LENGTH
+        ):
+            raise ValueError("An explicit bounded subscription account binding is required")
+        return value
+
+    @model_validator(mode="after")
+    def require_disjoint_roots(self) -> "AiWorkerRuntimeConfiguration":
+        if self.credential_directory.is_relative_to(
+            self.workspaces_root
+        ) or self.workspaces_root.is_relative_to(self.credential_directory):
+            raise ValueError("Persistent credentials and disposable jobs require disjoint roots")
+        return self
+
+
+class AiWorkerSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=None,
+        extra="forbid",
+        frozen=True,
+        env_nested_delimiter="__",
+        hide_input_in_errors=True,
+    )
+
+    database_url: SecretStr
+    media: MediaConfiguration
+    runtime: AiWorkerRuntimeConfiguration
     observability: ObservabilityConfiguration | None = None
 
     @field_validator("database_url")

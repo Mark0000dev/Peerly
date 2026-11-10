@@ -1,6 +1,7 @@
 """Actual main lifecycle effects with retained business history and atomic rollback."""
 
 import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
@@ -30,6 +31,8 @@ from studymate.infrastructure.persistence.product_events import record_operator_
 from studymate.infrastructure.requests.models import ConnectionRequestRecord, RequestSendDayRecord
 from studymate.infrastructure.security.intent_fingerprint import HmacIntentFingerprinter
 from studymate.infrastructure.security.session_digest import Sha256SessionHasher
+from tests.integration.ai.runtime.facts import fake_runtime_ready
+from tests.integration.ai.test_queue import VERSIONS
 from tests.integration.lifecycle.test_deletion_transactions import command_for
 from tests.integration.operator.test_reads import operator
 from tests.integration.requests.fixture import prepared, sent
@@ -37,6 +40,13 @@ from tests.integration.student_actor import Actor, actor
 
 pytestmark = pytest.mark.integration
 ONE_SEND = 1
+
+
+@pytest.fixture
+async def controlled_ai_runtime(identity_engine: AsyncEngine) -> AsyncIterator[None]:
+    # These tests submit to a controlled fake executor, not a configured provider.
+    async with fake_runtime_ready(identity_engine, VERSIONS):
+        yield
 
 
 async def seed_verification(engine: AsyncEngine, owner: Actor) -> tuple[UUID, UUID]:
@@ -242,6 +252,7 @@ async def test_ban_closes_pending_request_without_refunding_or_revoking_and_unba
         assert all(event.account_id == owner.id for event in lifecycle_events)
 
 
+@pytest.mark.usefixtures("controlled_ai_runtime")
 async def test_delete_cancels_running_ai_but_retains_executor_slot_and_private_business_input(
     identity_engine: AsyncEngine,
 ) -> None:

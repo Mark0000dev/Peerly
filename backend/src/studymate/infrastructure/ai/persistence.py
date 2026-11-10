@@ -43,6 +43,7 @@ from studymate.infrastructure.ai.models import (
     AiJobRecord,
     AiSlotRecord,
 )
+from studymate.infrastructure.ai.runtime.availability import require_runtime_ready
 from studymate.infrastructure.observability.origin import ExecutionOrigin
 from studymate.infrastructure.observability.tracing import current_origin
 from studymate.infrastructure.persistence.catalogue_models import SubjectRecord
@@ -130,6 +131,11 @@ async def lock_slot(session: AsyncSession) -> AiSlotRecord:
 class SqlAiTransaction(SqlIdentityTransaction):
     policy: AdmissionPolicy = field(default_factory=AdmissionPolicy)
 
+    async def runtime_versions(self, at: datetime) -> Versions:
+        del at  # Re-read DB clock after acquiring the bounded canonical lock.
+        slot = await lock_slot(self.session)
+        return require_runtime_ready(slot, await self.now())
+
     async def prepare(self, actor_id: UUID, submission: StudentSubmission) -> AiTask:
         if isinstance(submission.source, DraftSourceIntent):
             snapshot = draft_snapshot_source(submission)
@@ -215,6 +221,7 @@ class SqlAiTransaction(SqlIdentityTransaction):
         )
         slot = await lock_slot(self.session)
         at = await self.now()
+        require_runtime_ready(slot, at, versions)
         prior = await self.replay(actor_id, kind_of(task), key, digest)
         if prior is not None:
             return prior

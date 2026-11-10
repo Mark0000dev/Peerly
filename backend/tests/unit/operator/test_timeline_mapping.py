@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from studymate.domain.operator.audit import OperatorAction
-from studymate.domain.operator.timeline import OperatorEventKind
+from studymate.domain.operator.timeline import OperatorEventKind, OperatorSourceKind
 from studymate.infrastructure.operator.models import (
     OperatorAccessRevisionRecord,
     OperatorAuditRecord,
@@ -101,6 +101,11 @@ def journal_fields(row: ProductEventRecord, kind: OperatorEventKind) -> None:
         row.peer_feedback_id, row.peer_feedback_version, row.feedback_again = uuid4(), 1, "maybe"
     elif kind == OperatorEventKind.STUDY_PROMPT:
         row.study_prompt_id, row.study_prompt_conversation_id = uuid4(), uuid4()
+    elif kind == OperatorEventKind.NOTIFICATION_PREFERENCE_CHANGED:
+        row.notification_preference_version = 1
+    elif kind in {OperatorEventKind.SUPPORT_RECEIVED, OperatorEventKind.SUPPORT_STATUS_CHANGED}:
+        row.support_case_id = uuid4()
+        row.support_case_version = 1 if kind == OperatorEventKind.SUPPORT_RECEIVED else 2
 
 
 @pytest.mark.parametrize("kind", list(OperatorEventKind))
@@ -115,7 +120,18 @@ def test_actual_canonical_columns_map_to_closed_metadata_not_private_source_cont
     assert dto.kind == kind
     assert dto.schema_version == row.schema_version
     assert actual.sources[0].owner_id == row.account_id
-    for field in ("goal_text", "message_body", "team_note", "ai_input", "result", "secret_digest"):
+    for field in (
+        "goal_text",
+        "message_body",
+        "team_note",
+        "ai_input",
+        "result",
+        "secret_digest",
+        "reply_address",
+        "message",
+        "details",
+        "proof_digest",
+    ):
         assert field not in type(dto).model_fields
 
 
@@ -142,6 +158,7 @@ def test_all_actual_audit_actions_preserve_original_active_grant_and_hide_query_
         OperatorAction.SEARCH_REPORTS: "report",
         OperatorAction.READ_REPORT: "report",
         OperatorAction.READ_MEDIA: "profile_media",
+        OperatorAction.READ_SUPPORT_CASE: "support_case",
     }[action]
     requested = None if searching else uuid4()
     returned: list[UUID] = (
@@ -173,6 +190,11 @@ def test_all_actual_audit_actions_preserve_original_active_grant_and_hide_query_
     assert dto.operator_access_changed_at == grant.changed_at
     assert dto.action == action
     assert dto.query_fingerprinted == searching
+    if action == OperatorAction.READ_SUPPORT_CASE:
+        assert actual.audit.requested is not None
+        assert actual.audit.requested.kind.value == resource
+        assert actual.audit.requested.id == requested
+        assert tuple(ref.id for ref in actual.audit.results) == tuple(returned)
     assert "query_fingerprint" not in type(dto).model_fields
 
 
@@ -222,3 +244,35 @@ def test_lifecycle_projection_retains_actor_target_and_exact_source_without_reas
     assert "reason" not in response
     assert "reason" not in event_response(actual).facts.model_fields_set
     assert response["subject_account_id"] == str(row.account_id)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        OperatorEventKind.NOTIFICATION_PREFERENCE_CHANGED,
+        OperatorEventKind.SUPPORT_RECEIVED,
+        OperatorEventKind.SUPPORT_STATUS_CHANGED,
+    ],
+)
+def test_preference_and_support_projection_preserves_exact_source_and_owner_revision(
+    kind: OperatorEventKind,
+) -> None:
+    row = row_for(kind)
+    actual = event_value(row)
+    source = actual.sources[0]
+    if kind == OperatorEventKind.NOTIFICATION_PREFERENCE_CHANGED:
+        assert source.kind == OperatorSourceKind.NOTIFICATION_PREFERENCE
+        assert source.id == row.account_id
+        assert source.version == row.notification_preference_version
+    else:
+        assert source.kind == OperatorSourceKind.SUPPORT_CASE
+        assert source.id == row.support_case_id
+        assert source.version == row.support_case_version
+    assert source.owner_id == row.account_id
+    assert source.conversation_id is None
+    assert source.related_account_id is None
+    assert source.operator_access_version is None
+    response = event_response(actual).model_dump(mode="json")
+    assert response["subject_account_id"] == str(row.account_id)
+    assert set(response["facts"]) == set(type(event_response(actual).facts).model_fields)
+    assert all(value is None for value in response["facts"].values())

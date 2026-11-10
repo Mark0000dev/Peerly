@@ -1,4 +1,4 @@
-"""Authored reference subjects; names/aliases never auto-map a student's custom choice."""
+"""Authored knowledge areas; equivalent-label aliases never certify study or ability."""
 
 from dataclasses import dataclass, field
 from datetime import datetime

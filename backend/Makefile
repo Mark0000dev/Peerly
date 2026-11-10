@@ -1,4 +1,4 @@
-.PHONY: check lint typecheck architecture test test-unit test-integration run run-media-worker run-requests-worker run-changes-worker
+.PHONY: check lint typecheck architecture test test-unit test-integration run run-media-worker run-requests-worker run-changes-worker run-ai-worker
 check: lint typecheck architecture test
 lint:
 	uv run ruff check .
@@ -24,3 +24,6 @@ run-requests-worker:
 
 run-changes-worker:
 	uv run python -m studymate.changes_worker
+
+run-ai-worker:
+	uv run python -m studymate.ai_worker

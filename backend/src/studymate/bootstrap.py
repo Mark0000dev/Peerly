@@ -2,7 +2,7 @@ import asyncio
 import ssl
 from collections.abc import AsyncIterator, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import httpx2 as httpx
 from aiobotocore.config import AioConfig
@@ -86,6 +86,10 @@ from studymate.application.messaging.goal_shares import ReadGoalShares, ShareCur
 from studymate.application.messaging.history import ReadMessageHistory
 from studymate.application.messaging.participants import ReadChatAvatar, ReadChatParticipant
 from studymate.application.messaging.read_positions import AcknowledgeConversationRead
+from studymate.application.notification_preferences.preferences import (
+    ChooseOwnNotificationPreference,
+    ReadOwnNotificationPreference,
+)
 from studymate.application.operator.accounts import ReadOperatorAccount, SearchOperatorAccounts
 from studymate.application.operator.ai_jobs import ReadOperatorAiJob, ReadOperatorAiJobs
 from studymate.application.operator.goals import ReadOperatorGoalHistory, ReadOperatorGoals
@@ -129,8 +133,21 @@ from studymate.application.safety.message_reports import (
     SubmitMessageImageReport,
 )
 from studymate.application.safety.profile_reports import SubmitProfileReport
+from studymate.application.support.cases import (
+    CreateSupportCase,
+    PrepareSupport,
+    ReadActorSupportCase,
+    ReadRecentActorSupportCases,
+    ReadRecentSupportCases,
+    ReadSupportCase,
+)
+from studymate.application.support.operator import (
+    ChangeOperatorSupportStatus,
+    ReadOperatorSupportCase,
+)
 from studymate.config import (
     AiHttpConfiguration,
+    AiWorkerSettings,
     AuthenticationConfiguration,
     ChangesWorkerSettings,
     EmailWorkerSettings,
@@ -140,7 +157,6 @@ from studymate.config import (
     RequestsWorkerSettings,
     Settings,
 )
-from studymate.domain.ai.jobs import Versions
 from studymate.infrastructure.ai.persistence import SqlAiUnitOfWork
 from studymate.infrastructure.changes.loop import ChangeMaintenance, run_change_loop
 from studymate.infrastructure.changes.publication import SqlChangePublicationUnitOfWork
@@ -172,6 +188,7 @@ from studymate.infrastructure.messaging.cursors import FernetMessageHistoryCurso
 from studymate.infrastructure.messaging.goal_share_cursors import FernetGoalShareCursorCodec
 from studymate.infrastructure.messaging.goal_shares import SqlGoalShareUnitOfWork
 from studymate.infrastructure.messaging.history import SqlMessageHistoryUnitOfWork
+from studymate.infrastructure.notification_preferences.persistence import SqlPreferenceUnitOfWork
 from studymate.infrastructure.observability.changes import ObservedChangeStep
 from studymate.infrastructure.observability.email import ObservedVerificationDelivery
 from studymate.infrastructure.observability.http import JsonHttpObserver
@@ -239,12 +256,14 @@ from studymate.infrastructure.persistence.product_events import (
     record_conversation_read,
     record_message_outcome,
     record_message_report_event,
+    record_notification_preference_event,
     record_operator_audit,
     record_peer_feedback,
     record_request_outcome,
     record_request_viewed,
     record_study_outcome,
     record_study_prompt,
+    record_support_event,
 )
 from studymate.infrastructure.persistence.profile_reports import SqlProfileReportUnitOfWork
 from studymate.infrastructure.persistence.profiles import SqlProfileUnitOfWork
@@ -264,6 +283,9 @@ from studymate.infrastructure.security.email_vault import AeadEmailVault
 from studymate.infrastructure.security.intent_fingerprint import HmacIntentFingerprinter
 from studymate.infrastructure.security.login_vault import AeadLoginVault
 from studymate.infrastructure.security.session_digest import Sha256SessionHasher
+from studymate.infrastructure.support.operator import SqlOperatorSupportUnitOfWork
+from studymate.infrastructure.support.persistence import SqlSupportUnitOfWork
+from studymate.infrastructure.support.proofs import OpaqueSupportProofs
 from studymate.infrastructure.workers.email_loop import run_email_loop
 from studymate.infrastructure.workers.media_loop import run_media_loop
 from studymate.presentation.ai import AiHttpServices, ai_router
@@ -290,6 +312,10 @@ from studymate.presentation.lifecycle.recovery import (
 from studymate.presentation.media import MediaServices, media_router
 from studymate.presentation.messaging.goal_shares import GoalSharingHttpServices, goal_shares_router
 from studymate.presentation.messaging.router import MessagingHttpServices, messaging_router
+from studymate.presentation.notification_preferences.router import (
+    PreferenceHttpServices,
+    notification_preferences_router,
+)
 from studymate.presentation.onboarding import OnboardingServices, onboarding_router
 from studymate.presentation.operator.ai_router import OperatorAiHttpServices, operator_ai_router
 from studymate.presentation.operator.goal_router import (
@@ -330,7 +356,28 @@ from studymate.presentation.request_errors import validation_problem
 from studymate.presentation.requests.router import RequestHttpServices, requests_router
 from studymate.presentation.storage_errors import storage_problem
 from studymate.presentation.study_context import StudyServices, study_router
+from studymate.presentation.support.operator_router import (
+    OperatorSupportHttpServices,
+    operator_support_router,
+)
+from studymate.presentation.support.router import SupportHttpServices, support_router
 from studymate.presentation.unexpected_errors import unexpected_problem
+
+if TYPE_CHECKING:
+    from studymate.application.bootstrap_data.apply import BootstrapApplied
+    from studymate.domain.bootstrap_data.inputs import BootstrapBatch
+
+
+async def apply_bootstrap_reference_data(
+    batch: "BootstrapBatch", database_url: str
+) -> "BootstrapApplied":
+    """Explicit CLI composition only; API startup never applies reference data."""
+    from studymate.application.bootstrap_data.apply import ApplyBootstrapData
+    from studymate.infrastructure.bootstrap_data.persistence import SqlBootstrapDataUnitOfWork
+    from studymate.infrastructure.bootstrap_data.runtime import open_bootstrap_database
+
+    async with open_bootstrap_database(database_url) as sessions:
+        return await ApplyBootstrapData(SqlBootstrapDataUnitOfWork(sessions))(batch)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -798,6 +845,7 @@ def _student_routers(
         *_lifecycle_routers(configuration, sessions, auth_services, intent_fingerprinter),
         _chat_image_router(sessions, auth_services, intent_fingerprinter, media_storage),
         *_operator_routers(configuration, sessions, intent_fingerprinter, media_storage),
+        *_student_support_routers(sessions, auth_services, intent_fingerprinter),
     )
 
 
@@ -807,7 +855,7 @@ def _ai_router(
     sessions: async_sessionmaker[AsyncSession],
     auth_services: AuthenticationServices,
 ) -> APIRouter:
-    # Admission is deliberately disabled: no configuration switch proves runtime isolation.
+    # Availability comes from the fresh, accepted singleton runtime fact, never an enable flag.
     uow = SqlAiUnitOfWork(
         sessions, AdmissionPolicy(request_budget_seconds=ai.request_budget_seconds)
     )
@@ -818,13 +866,12 @@ def _ai_router(
                 uow,
                 hasher,
                 HmacIntentFingerprinter(bytes.fromhex(configuration.code_key.get_secret_value())),
-                Versions(model="unconfigured", adapter="disabled"),
+                versions=None,
             ),
             ReadStudentJob(uow, hasher),
             CancelStudentJob(uow, hasher),
             auth_services.signer,
             auth_services.browser,
-            accepting=False,
             retry_after_seconds=ai.retry_after_seconds,
         )
     )
@@ -1248,3 +1295,90 @@ async def run_changes_worker(configuration: ChangesWorkerSettings, stop: asyncio
         finally:
             if telemetry is not None:
                 await telemetry.shutdown()
+
+
+async def run_ai_worker(configuration: AiWorkerSettings, stop: asyncio.Event) -> None:
+    """Own one worker/heartbeat connection; runtime must prove its activation contract."""
+    from studymate.infrastructure.ai.runtime.factory import (
+        AiRuntimeConfiguration,
+        create_ai_worker_runtime,
+    )
+
+    telemetry = _telemetry(configuration.observability, "studymate-ai-worker")
+    engine = create_async_engine(
+        configuration.database_url.get_secret_value(),
+        pool_pre_ping=True,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=2,
+        connect_args={"timeout": 5},
+    )
+    try:
+        async with _open_media_storage(configuration.media) as storage:
+            inputs = configuration.runtime
+            runtime_configuration = AiRuntimeConfiguration(
+                executable=inputs.executable,
+                expected_version=inputs.expected_version,
+                expected_sha256=inputs.expected_sha256,
+                model=inputs.model,
+                credential_directory=inputs.credential_directory,
+                expected_account=inputs.expected_account.get_secret_value(),
+                expected_login_owner=inputs.expected_login_owner.get_secret_value(),
+                expected_oauth_issuer=inputs.expected_oauth_issuer,
+                expected_oauth_client_id=inputs.expected_oauth_client_id,
+                acceptance_artifact=inputs.acceptance_artifact,
+                workspaces_root=inputs.workspaces_root,
+                bubblewrap=inputs.bubblewrap,
+                prlimit=inputs.prlimit,
+            )
+            sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+            runtime = create_ai_worker_runtime(sessions, storage, runtime_configuration)
+            await runtime.run(stop)
+    finally:
+        try:
+            await engine.dispose()
+        finally:
+            if telemetry is not None:
+                await telemetry.shutdown()
+
+
+def _student_support_routers(
+    sessions: async_sessionmaker[AsyncSession],
+    auth_services: AuthenticationServices,
+    fingerprinter: IntentFingerprinter,
+) -> tuple[APIRouter, ...]:
+    hasher = Sha256SessionHasher()
+    preferences = SqlPreferenceUnitOfWork(sessions, record_notification_preference_event)
+    support = SqlSupportUnitOfWork(sessions, record_support_event)
+    operator = SqlOperatorSupportUnitOfWork(sessions, record_support_event, record_operator_audit)
+    proofs = OpaqueSupportProofs()
+    return (
+        notification_preferences_router(
+            PreferenceHttpServices(
+                ReadOwnNotificationPreference(preferences, hasher),
+                ChooseOwnNotificationPreference(preferences, hasher, fingerprinter),
+                auth_services.signer,
+                auth_services.browser,
+            )
+        ),
+        support_router(
+            SupportHttpServices(
+                PrepareSupport(support, proofs),
+                CreateSupportCase(support, proofs, hasher, fingerprinter),
+                ReadSupportCase(support, proofs),
+                ReadActorSupportCase(support, hasher),
+                auth_services.signer,
+                auth_services.browser,
+                ReadRecentSupportCases(support, proofs),
+                ReadRecentActorSupportCases(support, hasher),
+            )
+        ),
+        operator_support_router(
+            OperatorSupportHttpServices(
+                ReadOperatorSupportCase(operator, hasher),
+                ChangeOperatorSupportStatus(operator, hasher, fingerprinter),
+                auth_services.signer,
+                auth_services.browser,
+            )
+        ),
+    )

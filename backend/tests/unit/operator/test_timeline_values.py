@@ -51,6 +51,7 @@ def test_every_actual_event_kind_has_finite_owned_version_and_conversation_sourc
             OperatorSourceKind.HELP,
             OperatorSourceKind.PHOTO,
             OperatorSourceKind.VISIBILITY,
+            OperatorSourceKind.NOTIFICATION_PREFERENCE,
         }
         else uuid4(),
         owner,
@@ -235,3 +236,32 @@ def test_valid_crypto_with_invalid_cursor_metadata_is_not_accepted(fault: str) -
 
 def test_origin_pairs_are_optional_technical_refs_not_invented_context() -> None:
     assert OperatorEventOrigin().http_request_id is None
+
+
+@pytest.mark.parametrize(
+    ("kind", "source_kind"),
+    [
+        (
+            OperatorEventKind.NOTIFICATION_PREFERENCE_CHANGED,
+            OperatorSourceKind.NOTIFICATION_PREFERENCE,
+        ),
+        (OperatorEventKind.SUPPORT_RECEIVED, OperatorSourceKind.SUPPORT_CASE),
+        (OperatorEventKind.SUPPORT_STATUS_CHANGED, OperatorSourceKind.SUPPORT_CASE),
+    ],
+)
+def test_preference_and_support_event_kinds_require_actual_versioned_owned_sources(
+    kind: OperatorEventKind, source_kind: OperatorSourceKind
+) -> None:
+    assert EVENT_SOURCES[kind] == source_kind
+    assert source_kind in VERSIONED_SOURCES
+    owner = uuid4()
+    source_id = owner if source_kind == OperatorSourceKind.NOTIFICATION_PREFERENCE else uuid4()
+    source = OperatorEventSource(source_kind, source_id, owner, version=1)
+    actual = replace(event(owner=owner), kind=kind, sources=(source,))
+    assert actual.sources == (source,)
+    with pytest.raises(ValueError, match="subject/kind"):
+        replace(actual, subject_account_id=uuid4())
+    with pytest.raises(ValueError, match="positive revision"):
+        replace(source, version=None)
+    with pytest.raises(ValueError, match="positive revision"):
+        replace(source, version=0)

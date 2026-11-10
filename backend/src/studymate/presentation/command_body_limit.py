@@ -9,6 +9,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from studymate.presentation.problems import problem
 
 COMMAND_BODY_BYTES = 8192
+SUPPORT_BODY_BYTES = 32768
 BODY_TIMEOUT_SECONDS = 5
 
 
@@ -18,6 +19,16 @@ def _operator_ban(scope: Scope) -> bool:
     match scope["path"].split("/"):
         case ["", "api", "v1", "operator", "accounts", account_id, "ban"]:
             return bool(account_id)
+        case _:
+            return False
+
+
+def _operator_support_status(scope: Scope) -> bool:
+    if scope["type"] != "http" or scope["method"] != "PUT":
+        return False
+    match scope["path"].split("/"):
+        case ["", "api", "v1", "operator", "cases", case_id, "status"]:
+            return bool(case_id)
         case _:
             return False
 
@@ -42,14 +53,22 @@ class JsonCommandBodyLimit:
                         "/api/v1/conversations/",
                     )
                 )
-                and scope["path"] not in {"/api/v1/reports", "/api/v1/requests"}
+                and scope["path"]
+                not in {
+                    "/api/v1/reports",
+                    "/api/v1/requests",
+                    "/api/v1/support-context",
+                    "/api/v1/support-cases",
+                }
                 and not _operator_ban(scope)
+                and not _operator_support_status(scope)
             )
         ):
             await self.app(scope, receive, send)
             return
         if (
             _operator_ban(scope)
+            or _operator_support_status(scope)
             or (
                 scope["path"].startswith("/api/v1/conversations/")
                 and scope["path"].endswith(
@@ -75,6 +94,10 @@ class JsonCommandBodyLimit:
             or scope["path"]
             in (
                 "/api/v1/me/registration",
+                "/api/v1/me/notification-preference",
+                "/api/v1/me/support-cases",
+                "/api/v1/support-context",
+                "/api/v1/support-cases",
                 "/api/v1/me/deletion",
                 "/api/v1/me/deletion-workflows",
                 "/api/v1/media/uploads",
@@ -92,6 +115,11 @@ class JsonCommandBodyLimit:
             if content_type != "application/json":
                 await self._reject(scope, receive, send, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
                 return
+        body_limit = (
+            SUPPORT_BODY_BYTES
+            if scope["path"] in {"/api/v1/support-cases", "/api/v1/me/support-cases"}
+            else COMMAND_BODY_BYTES
+        )
         body = bytearray()
         try:
             async with asyncio.timeout(BODY_TIMEOUT_SECONDS):
@@ -102,7 +130,7 @@ class JsonCommandBodyLimit:
                     chunk: object = message.get("body", b"")
                     if not isinstance(chunk, bytes):
                         raise ValueError("Invalid ASGI body message")
-                    if len(body) + len(chunk) > COMMAND_BODY_BYTES:
+                    if len(body) + len(chunk) > body_limit:
                         await self._reject(
                             scope, receive, send, HTTPStatus.REQUEST_ENTITY_TOO_LARGE
                         )
@@ -160,10 +188,15 @@ class JsonCommandBodyLimit:
                 )
             )
             or _operator_ban(scope)
+            or _operator_support_status(scope)
             or scope["path"]
             in {
                 "/api/v1/reports",
                 "/api/v1/requests",
+                "/api/v1/support-context",
+                "/api/v1/support-cases",
+                "/api/v1/me/support-cases",
+                "/api/v1/me/notification-preference",
                 "/api/v1/me/deletion",
                 "/api/v1/me/deletion-workflows",
             }

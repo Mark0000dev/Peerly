@@ -151,3 +151,53 @@ def test_reciprocal_reason_requires_saved_counterpart_goal_and_viewer_help_subje
     )
     with pytest.raises(ValueError, match="belong"):
         replace(first, account_id=UUID(int=99))
+
+
+@pytest.mark.parametrize("mode", list(DiscoveryMode))
+def test_knowledge_area_matches_across_course_and_workplace_context(mode: DiscoveryMode) -> None:
+    student = learner(shared=True)
+    assert student.goal is not None
+    student = replace(
+        student,
+        goal=replace(
+            student.goal,
+            content=GoalContent(
+                CanonicalSubjectRef(SUBJECT),
+                topic="SQL joins",
+                context="IDB coursework",
+                shared_learning=True,
+            ),
+        ),
+    )
+    peer = learner(2, shared=True)
+    assert peer.goal is not None
+    peer = replace(
+        peer,
+        goal=replace(
+            peer.goal,
+            content=GoalContent(
+                CanonicalSubjectRef(SUBJECT),
+                topic="Query optimisation",
+                context="Workplace database task; no IDB enrolment",
+                shared_learning=True,
+            ),
+        ),
+        help_subjects=HelpSubjects((HelpSubject(SUBJECT, "Workplace SQL experience"),)),
+    )
+    first, second = (peer, student) if mode == DiscoveryMode.OFFER_HELP else (student, peer)
+    match = discovery_match(first, second, mode)
+    assert match is not None
+    assert match.subject_id == SUBJECT
+    assert not match.same_topic
+
+    # Identical task/module wording cannot bridge different canonical areas.
+    assert student.goal is not None
+    unrelated = replace(
+        student,
+        goal=replace(
+            student.goal,
+            content=replace(student.goal.content, subject=CanonicalSubjectRef(OTHER)),
+        ),
+    )
+    first, second = (peer, unrelated) if mode == DiscoveryMode.OFFER_HELP else (unrelated, peer)
+    assert discovery_match(first, second, mode) is None

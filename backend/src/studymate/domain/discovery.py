@@ -1,4 +1,4 @@
-"""Grounded subject relevance only; callers must independently enforce access."""
+"""Exact declared knowledge-area relevance; callers independently enforce access."""
 
 from dataclasses import dataclass, field
 from enum import StrEnum

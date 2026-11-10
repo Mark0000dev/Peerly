@@ -46,6 +46,9 @@ class OperatorEventKind(StrEnum):
     STUDY_REPORTED = "study.reported"
     FEEDBACK_SAVED = "feedback.saved"
     STUDY_PROMPT = "study.prompt_offered"
+    NOTIFICATION_PREFERENCE_CHANGED = "notification_preference.changed"
+    SUPPORT_RECEIVED = "support.received"
+    SUPPORT_STATUS_CHANGED = "support.status_changed"
 
 
 class OperatorSourceKind(StrEnum):
@@ -70,6 +73,8 @@ class OperatorSourceKind(StrEnum):
     STUDY_OUTCOME = "study_outcome"
     FEEDBACK = "feedback_revision"
     STUDY_PROMPT = "study_prompt"
+    NOTIFICATION_PREFERENCE = "notification_preference_revision"
+    SUPPORT_CASE = "support_case_revision"
 
 
 VERSIONED_SOURCES = frozenset(
@@ -86,6 +91,8 @@ VERSIONED_SOURCES = frozenset(
         OperatorSourceKind.GOAL_SHARE,
         OperatorSourceKind.STUDY_OUTCOME,
         OperatorSourceKind.FEEDBACK,
+        OperatorSourceKind.NOTIFICATION_PREFERENCE,
+        OperatorSourceKind.SUPPORT_CASE,
     }
 )
 CONVERSATION_SOURCES = frozenset(
@@ -142,6 +149,7 @@ class OperatorEventSource:
                 OperatorSourceKind.HELP,
                 OperatorSourceKind.PHOTO,
                 OperatorSourceKind.VISIBILITY,
+                OperatorSourceKind.NOTIFICATION_PREFERENCE,
             }
             and self.id != self.owner_id
         ):
@@ -219,6 +227,9 @@ EVENT_SOURCES = {
     OperatorEventKind.STUDY_REPORTED: OperatorSourceKind.STUDY_OUTCOME,
     OperatorEventKind.FEEDBACK_SAVED: OperatorSourceKind.FEEDBACK,
     OperatorEventKind.STUDY_PROMPT: OperatorSourceKind.STUDY_PROMPT,
+    OperatorEventKind.NOTIFICATION_PREFERENCE_CHANGED: OperatorSourceKind.NOTIFICATION_PREFERENCE,
+    OperatorEventKind.SUPPORT_RECEIVED: OperatorSourceKind.SUPPORT_CASE,
+    OperatorEventKind.SUPPORT_STATUS_CHANGED: OperatorSourceKind.SUPPORT_CASE,
 }
 
 

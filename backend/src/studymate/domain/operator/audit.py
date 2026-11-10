@@ -17,6 +17,7 @@ class OperatorAction(StrEnum):
     SEARCH_ACCOUNTS = "search_accounts"
     SEARCH_EVENTS = "search_events"
     SEARCH_REPORTS = "search_reports"
+    READ_SUPPORT_CASE = "read_support_case"
     READ_REPORT = "read_report"
     READ_MEDIA = "read_media"
     READ_EVENT = "read_event"
@@ -33,6 +34,7 @@ class OperatorResourceKind(StrEnum):
     AUDIT = "audit"
     REPORT = "report"
     PROFILE_MEDIA = "profile_media"
+    SUPPORT_CASE = "support_case"
 
 
 class OperatorAuditOutcome(StrEnum):
@@ -105,6 +107,7 @@ class OperatorAudit:
             OperatorAction.READ_EVENT: OperatorResourceKind.EVENT,
             OperatorAction.READ_AUDIT: OperatorResourceKind.AUDIT,
             OperatorAction.READ_REPORT: OperatorResourceKind.REPORT,
+            OperatorAction.READ_SUPPORT_CASE: OperatorResourceKind.SUPPORT_CASE,
             OperatorAction.READ_MEDIA: OperatorResourceKind.PROFILE_MEDIA,
             OperatorAction.READ_CONVERSATION_MESSAGES: OperatorResourceKind.CONVERSATION,
         }.get(self.action)
@@ -123,6 +126,7 @@ class OperatorAudit:
             OperatorAction.READ_EVENT,
             OperatorAction.READ_AUDIT,
             OperatorAction.READ_REPORT,
+            OperatorAction.READ_SUPPORT_CASE,
             OperatorAction.READ_MEDIA,
         ):
             if self.results != (self.requested,):

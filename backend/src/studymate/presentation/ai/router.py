@@ -47,7 +47,6 @@ class AiHttpServices:
     cancel: CancelStudentJob
     signer: BrowserTokenSigner
     browser: BrowserConfiguration
-    accepting: bool = False
     retry_after_seconds: int = 1
 
     def __post_init__(self) -> None:
@@ -126,7 +125,6 @@ def ai_router(services: AiHttpServices) -> APIRouter:
                 credential,
                 body.submission(),
                 IntentKey(headers.idempotency_key),
-                accepting=services.accepting,
             )
             result = job_response(saved)
         except AI_ERRORS as error:

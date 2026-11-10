@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -18,10 +19,18 @@ from studymate.infrastructure.persistence.identity_models import SessionRecord
 from studymate.infrastructure.persistence.product_event_models import ProductEventRecord
 from studymate.infrastructure.persistence.product_events import record_ai_terminal
 from studymate.infrastructure.security.session_digest import Sha256SessionHasher
-from tests.integration.ai.test_queue import Services, goal, services, submission
+from tests.integration.ai.runtime.facts import fake_runtime_ready
+from tests.integration.ai.test_queue import VERSIONS, Services, goal, services, submission
 from tests.integration.student_actor import actor
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture
+async def controlled_ai_runtime(identity_engine: AsyncEngine) -> AsyncIterator[None]:
+    # These tests submit to a controlled fake executor, not a configured provider.
+    async with fake_runtime_ready(identity_engine, VERSIONS):
+        yield
 
 
 async def prepared(engine: AsyncEngine) -> tuple[Services, AiJob, ExecutionOrigin]:
@@ -45,6 +54,7 @@ async def prepared(engine: AsyncEngine) -> tuple[Services, AiJob, ExecutionOrigi
 
 
 @pytest.mark.parametrize("state", [JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED])
+@pytest.mark.usefixtures("controlled_ai_runtime")
 async def test_ai_terminal_event_is_once_only_and_uses_the_stored_submission_origin(
     identity_engine: AsyncEngine,
     state: JobState,
@@ -110,6 +120,7 @@ async def actor_credential(engine: AsyncEngine, job: AiJob) -> SessionCredential
     return credential
 
 
+@pytest.mark.usefixtures("controlled_ai_runtime")
 async def test_ai_event_requires_a_real_terminal_source_fact(
     identity_engine: AsyncEngine,
 ) -> None:
@@ -130,6 +141,7 @@ async def test_ai_event_requires_a_real_terminal_source_fact(
         ).all() == []
 
 
+@pytest.mark.usefixtures("controlled_ai_runtime")
 async def test_ai_terminal_transition_and_canonical_event_roll_back_together(
     identity_engine: AsyncEngine,
 ) -> None:

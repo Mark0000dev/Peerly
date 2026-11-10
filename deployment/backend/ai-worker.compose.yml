@@ -1,0 +1,43 @@
+# Configuration template only. Parent provisions volumes, private env and egress policy.
+# Build/publish the image from the same frozen application digest before using this file.
+services:
+  ai-worker:
+    image: ${PEERLY_AI_IMAGE:?Set the accepted immutable AI image digest}
+    command: [python, -m, studymate.ai_worker]
+    user: '10001:10001'
+    read_only: true
+    init: true
+    restart: 'no'
+    stop_grace_period: 90s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 32
+    mem_limit: 1g
+    cpus: 0.5
+    env_file:
+      - ${PEERLY_AI_ENV_FILE:?Set the parent-provisioned private environment file}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=33554432,uid=10001,gid=10001,mode=0700
+      - /var/lib/peerly-ai/jobs:rw,noexec,nosuid,nodev,size=67108864,uid=10001,gid=10001,mode=0700
+    volumes:
+      - type: volume
+        source: ai-credentials
+        target: /var/lib/peerly-ai/credentials
+      - type: bind
+        source: ${PEERLY_AI_ACCEPTANCE_DIRECTORY:?Set the private runtime artifact directory}
+        target: /var/lib/peerly-ai/acceptance
+        read_only: true
+    networks: [ai-egress]
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: '2'
+volumes:
+  ai-credentials:
+    external: true
+    name: ${PEERLY_AI_CREDENTIAL_VOLUME:?Set the private owner-provisioned volume}
+networks:
+  ai-egress:
+    external: true
+    name: ${PEERLY_AI_EGRESS_NETWORK:?Set the parent-provisioned restricted egress network}

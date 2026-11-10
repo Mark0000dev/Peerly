@@ -252,6 +252,7 @@ class SqlOperatorTransaction(SqlIdentityTransaction):
             OperatorAction.SEARCH_REPORTS: "report",
             OperatorAction.READ_REPORT: "report",
             OperatorAction.READ_MEDIA: "profile_media",
+            OperatorAction.READ_SUPPORT_CASE: "support_case",
         }[audit.action]
         self.session.add(
             OperatorAuditRecord(

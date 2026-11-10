@@ -20,7 +20,7 @@ from studymate.domain.ai.tasks import (
     PhotoAssessment,
     SubjectSuggestions,
 )
-from studymate.infrastructure.ai.models import AiJobRecord
+from studymate.infrastructure.ai.models import AiJobRecord, AiSlotRecord
 from studymate.infrastructure.persistence.identity_models import AccountRecord
 from studymate.infrastructure.persistence.media_uploads import SqlMediaTransaction
 from studymate.presentation.ai import AiHttpServices, ai_router
@@ -40,8 +40,13 @@ pytestmark = pytest.mark.integration
 
 @asynccontextmanager
 async def client(
-    api: Services, owner: Actor, *, accepting: bool = True
+    api: Services, owner: Actor, *, runtime_available: bool = True
 ) -> AsyncIterator[AsyncClient]:
+    if not runtime_available:
+        async with api.sessions.begin() as session:
+            await session.execute(
+                update(AiSlotRecord).where(AiSlotRecord.id == 1).values(runtime_state="blocked")
+            )
     app = FastAPI()
     app.add_middleware(JsonCommandBodyLimit)
     app.add_exception_handler(RequestValidationError, validation_problem)
@@ -53,7 +58,6 @@ async def client(
                 api.cancel,
                 SIGNER,
                 BrowserConfiguration(ORIGIN, frozenset({ORIGIN})),
-                accepting,
             )
         )
     )
@@ -110,7 +114,7 @@ async def test_http_draft_idempotency_owner_and_typed_fake_result(ai_engine: Asy
         assert result.json()["state"] == "succeeded"
         assert "Private synthetic" not in result.text
         assert result.json()["source"]["content_hash"]
-    async with client(api, owner, accepting=False) as disabled:
+    async with client(api, owner, runtime_available=False) as disabled:
         assert (await disabled.get(location)).json() == result.json()
         assert (await disabled.post(location + "/cancel")).json() == result.json()
         assert (
@@ -130,7 +134,7 @@ async def test_http_cancel_and_live_guard_when_provider_disabled(ai_engine: Asyn
         cancelled = await http.post(location + "/cancel")
         assert cancelled.json()["state"] == "cancelled"
         assert (await http.post(location + "/cancel")).json() == cancelled.json()
-    async with client(api, unverified, accepting=False) as http:
+    async with client(api, unverified, runtime_available=False) as http:
         assert (
             await http.post("/api/v1/ai/jobs", json=draft())
         ).status_code == HTTPStatus.FORBIDDEN
@@ -138,7 +142,7 @@ async def test_http_cancel_and_live_guard_when_provider_disabled(ai_engine: Asyn
         await session.execute(
             update(AccountRecord).where(AccountRecord.id == owner.id).values(banned_at=func.now())
         )
-    async with client(api, owner, accepting=False) as http:
+    async with client(api, owner, runtime_available=False) as http:
         assert (
             await http.post("/api/v1/ai/jobs", json=draft())
         ).status_code == HTTPStatus.FORBIDDEN

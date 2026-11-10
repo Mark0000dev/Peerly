@@ -78,3 +78,21 @@ def test_launcher_exposes_only_fixed_runtime_and_job_mounts_with_hard_limits() -
     assert "/home" not in command
     assert "/run" not in command
     assert command.count("--share-net") == 1
+
+
+def test_nested_cli_temporary_path_is_private_bounded_scratch() -> None:
+    command = sandbox().command(("/usr/bin/codex",), Path("/jobs/synthetic"))
+    aliases = [command[i + 1 : i + 3] for i, value in enumerate(command) if value == "--symlink"]
+    assert ("scratch", str(Path("/") / "tmp")) in aliases
+    assert (str(Path("/") / "tmp"),) * 2 not in [
+        command[i + 1 : i + 3]
+        for i, value in enumerate(command)
+        if value in {"--bind", "--ro-bind"}
+    ]
+    offset = command.index("--tmpfs")
+    assert command[offset - 2 : offset + 2] == (
+        "--size",
+        str(sandbox().temporary_bytes),
+        "--tmpfs",
+        "/scratch",
+    )

@@ -405,7 +405,7 @@ async def test_fake_process_refreshes_persistent_credentials_without_inheriting_
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from studymate.infrastructure.ai.process import CodexProcessExecutor, ProcessConfiguration
-    from tests.unit.ai.test_process import FakePhotos, executable, task
+    from tests.unit.ai.test_process import FakePhotos, executable, fake_policy, task
 
     state = await cache(tmp_path)
     marker = tmp_path / "invocations"
@@ -445,9 +445,10 @@ async def test_fake_process_refreshes_persistent_credentials_without_inheriting_
         "synthetic-cli 1",
         "synthetic-model",
         state.workspaces_root,
-        isolation_confirmed=True,
     )
-    executor = CodexProcessExecutor(configuration, state, FakePhotos())
+    executor = CodexProcessExecutor(
+        configuration, state, FakePhotos(), await fake_policy(configuration.executable)
+    )
     await executor.execute(task(), 2)
     await executor.execute(task(), 2)
     assert await asyncio.to_thread(marker.read_text) == "2"
@@ -510,7 +511,7 @@ async def test_unknown_process_stop_retains_auth_handoff_until_kernel_stop_proof
 
     from studymate.infrastructure.ai import process
     from studymate.infrastructure.ai.process import CodexProcessExecutor, ProcessConfiguration
-    from tests.unit.ai.test_process import FakePhotos, executable, task
+    from tests.unit.ai.test_process import FakePhotos, executable, fake_policy, task
 
     state = await cache(tmp_path)
     body = (
@@ -524,9 +525,10 @@ async def test_unknown_process_stop_retains_auth_handoff_until_kernel_stop_proof
         "synthetic-cli 1",
         "synthetic-model",
         state.workspaces_root,
-        isolation_confirmed=True,
     )
-    executor = CodexProcessExecutor(configuration, state, FakePhotos())
+    executor = CodexProcessExecutor(
+        configuration, state, FakePhotos(), await fake_policy(configuration.executable)
+    )
     stops = 0
 
     def uncertain_after_probe(pid: int) -> bool:
@@ -552,7 +554,7 @@ async def test_cancel_during_os_spawn_reaps_child_before_auth_checkpoint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from studymate.infrastructure.ai.process import CodexProcessExecutor, ProcessConfiguration
-    from tests.unit.ai.test_process import FakePhotos, executable, task
+    from tests.unit.ai.test_process import FakePhotos, executable, fake_policy, task
 
     state = await cache(tmp_path)
     started, release = asyncio.Event(), asyncio.Event()
@@ -587,10 +589,10 @@ async def test_cancel_during_os_spawn_reaps_child_before_auth_checkpoint(
             "synthetic-cli 1",
             "synthetic-model",
             state.workspaces_root,
-            isolation_confirmed=True,
         ),
         state,
         FakePhotos(),
+        await fake_policy(binary),
     )
     operation = asyncio.create_task(executor.execute(task(), 2))
     await started.wait()

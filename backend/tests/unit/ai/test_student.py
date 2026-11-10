@@ -9,6 +9,7 @@ from studymate.application.ai.ports import (
     Admission,
     AiJobNotFoundError,
     AiTransaction,
+    AiUnavailableError,
     StudentSubmission,
 )
 from studymate.application.ai.student import CancelStudentJob, SubmitStudentJob
@@ -26,6 +27,7 @@ class Store(IdentityStore):
         super().__init__()
         self.jobs: dict[UUID, AiJob] = {}
         self.expire_after_write = False
+        self.runtime_fact: Versions | None = None
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[AiTransaction]:
@@ -35,6 +37,12 @@ class Store(IdentityStore):
         except BaseException:
             self.jobs = before
             raise
+
+    async def runtime_versions(self, at: datetime) -> Versions:
+        assert at == self.clock
+        if self.runtime_fact is None:
+            raise AiUnavailableError
+        return self.runtime_fact
 
     async def replay(
         self, actor_id: UUID, kind: AiKind, key: IntentKey, digest: bytes
@@ -80,6 +88,7 @@ class Store(IdentityStore):
 
 
 def submit(store: Store) -> SubmitStudentJob:
+    store.runtime_fact = Versions("synthetic")  # Explicit controlled fake-worker fixture.
     return SubmitStudentJob(
         store, Sha256SessionHasher(), HmacIntentFingerprinter(b"x" * 32), Versions("synthetic")
     )
@@ -104,3 +113,20 @@ async def test_session_expiry_before_cancel_commit_rolls_back_cancellation() -> 
     with pytest.raises(UnauthenticatedError):
         await CancelStudentJob(store, Sha256SessionHasher())(CREDENTIAL, created.id)
     assert store.jobs[created.id] == created
+
+
+async def test_cold_runtime_does_not_create_a_job() -> None:
+    store = Store()
+    service = submit(store)
+    store.runtime_fact = None
+    with pytest.raises(AiUnavailableError):
+        await service(CREDENTIAL, request(), IntentKey(str(uuid4())))
+    assert not store.jobs
+
+
+async def test_runtime_tuple_is_authority_without_configured_fake_model() -> None:
+    store = Store()
+    store.runtime_fact = Versions("controlled-live-model")
+    service = SubmitStudentJob(store, Sha256SessionHasher(), HmacIntentFingerprinter(b"x" * 32))
+    job = await service(CREDENTIAL, request(), IntentKey(str(uuid4())))
+    assert job.versions == store.runtime_fact

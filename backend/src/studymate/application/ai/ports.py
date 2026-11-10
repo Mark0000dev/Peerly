@@ -97,6 +97,8 @@ class Admission:
 
 
 class AiTransaction(IdentityReader, Protocol):
+    async def runtime_versions(self, at: datetime) -> Versions: ...
+
     async def replay(
         self, actor_id: UUID, kind: AiKind, key: IntentKey, digest: bytes
     ) -> AiJob | None: ...
@@ -110,6 +112,10 @@ class AiTransaction(IdentityReader, Protocol):
 
 class AiUnitOfWork(Protocol):
     def transaction(self) -> AbstractAsyncContextManager[AiTransaction]: ...
+
+
+class AiExecutorStateUncertainError(Exception):
+    """Do not commit an outcome/release the slot until external physical/cache recovery."""
 
 
 class AiExecutorError(Exception):

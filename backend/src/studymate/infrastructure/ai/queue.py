@@ -37,6 +37,7 @@ from studymate.infrastructure.ai.persistence import (
     save_state,
     terminal_event,
 )
+from studymate.infrastructure.ai.runtime.availability import require_runtime_ready
 from studymate.infrastructure.observability.origin import ExecutionOrigin
 from studymate.infrastructure.persistence.identity_models import (
     AccountRecord,
@@ -132,6 +133,7 @@ class AiQueueSnapshot:
 class SqlAiQueue:
     sessions: async_sessionmaker[AsyncSession]
     reports: TrustedReportSource | None = None
+    worker_id: UUID | None = None
 
     async def snapshot(self) -> AiQueueSnapshot:
         async with open_transaction(self.sessions) as session:
@@ -214,6 +216,8 @@ class SqlAiQueue:
             invalid = await self._eligible(session, original)
             slot = await lock_slot(session)
             at = await transaction.now()
+            if self.worker_id is not None:
+                require_runtime_ready(slot, at, original.versions, worker_id=self.worker_id)
             if (
                 slot.token is not None
                 or slot.circuit is not None
@@ -315,12 +319,18 @@ class SqlAiQueue:
                 slot.paused_until = at + retry_after
             return value
 
-    async def recover_stopped(self, token: UUID, generation: int, *, stopped: bool) -> None:
+    async def recover_stopped(
+        self, token: UUID, generation: int, *, stopped: bool, expected_worker: UUID | None = None
+    ) -> None:
         """Runtime proves old group/container dead; never infer from a database lease."""
         if not stopped:
             raise ValueError("Uncertain physical termination keeps executor paused")
         async with open_transaction(self.sessions) as session:
             slot = await lock_slot(session)
+            if expected_worker is not None and (
+                slot.runtime_worker_id != expected_worker or slot.runtime_state != "blocked"
+            ):
+                raise LeaseLostError
             if slot.token != token or slot.generation != generation or slot.job_id is None:
                 raise LeaseLostError
             at = await SqlAiTransaction(session).now()

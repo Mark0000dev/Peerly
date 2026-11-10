@@ -49,7 +49,21 @@ def profile_event_source(
 ) -> OperatorEventSource | None:
     owner = row.account_id
     source: OperatorEventSource | None = None
-    if kind in {OperatorEventKind.GOAL_SAVED, OperatorEventKind.GOAL_COMPLETED}:
+    if kind == OperatorEventKind.NOTIFICATION_PREFERENCE_CHANGED:
+        source = OperatorEventSource(
+            OperatorSourceKind.NOTIFICATION_PREFERENCE,
+            owner,
+            owner,
+            version=row.notification_preference_version,
+        )
+    elif kind in {OperatorEventKind.SUPPORT_RECEIVED, OperatorEventKind.SUPPORT_STATUS_CHANGED}:
+        source = OperatorEventSource(
+            OperatorSourceKind.SUPPORT_CASE,
+            required_id(row.support_case_id),
+            owner,
+            version=row.support_case_version,
+        )
+    elif kind in {OperatorEventKind.GOAL_SAVED, OperatorEventKind.GOAL_COMPLETED}:
         source = OperatorEventSource(
             OperatorSourceKind.GOAL, required_id(row.goal_id), owner, version=row.goal_version
         )
@@ -250,6 +264,7 @@ def audit_value(
         OperatorAction.SEARCH_REPORTS: OperatorResourceKind.REPORT,
         OperatorAction.READ_REPORT: OperatorResourceKind.REPORT,
         OperatorAction.READ_MEDIA: OperatorResourceKind.PROFILE_MEDIA,
+        OperatorAction.READ_SUPPORT_CASE: OperatorResourceKind.SUPPORT_CASE,
     }[action]
     if (
         row.operator_id != grant.account_id

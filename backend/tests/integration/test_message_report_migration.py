@@ -28,9 +28,14 @@ def downgrade49(connection: Connection) -> None:
 async def test_existing_profile_report_is_classified_from_real_old_shape_without_new_events(
     engine: AsyncEngine,
 ) -> None:
+    # The current application writes current canonical columns. Materialize genuine
+    # source context first, then return it to the actual old schema before inserting
+    # the historical report; never execute the head52 mapper against head48 tables.
     async with engine.begin() as connection:
-        await connection.run_sync(migrate, "0048_chat_image_cleanup")
+        await connection.run_sync(migrate, "head")
     viewer, _, context = await profile_context(engine)
+    async with engine.begin() as connection:
+        await connection.run_sync(downgrade49)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     report_id = uuid4()
     async with sessions.begin() as session:

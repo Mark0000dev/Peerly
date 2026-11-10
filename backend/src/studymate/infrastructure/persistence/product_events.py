@@ -17,6 +17,7 @@ from studymate.domain.media import PhotoRevision
 from studymate.domain.message_reads import ConversationReadPosition
 from studymate.domain.message_reports import MessageImageReport
 from studymate.domain.messaging import MessageOperation
+from studymate.domain.notification_preferences.state import NotificationPreference
 from studymate.domain.onboarding import OnboardingActivation, ProfileLifecycle
 from studymate.domain.operator.audit import OperatorAudit
 from studymate.domain.profiles import ProfileRevision
@@ -25,16 +26,19 @@ from studymate.domain.reports import ProfileReport
 from studymate.domain.requests.states import ConnectionRequest, RequestState
 from studymate.domain.requests.views import RequestViewReceipt
 from studymate.domain.study_context import HelpRevision, StudyGoal
+from studymate.domain.support.cases import SupportReceipt
 from studymate.domain.time import require_aware
 from studymate.infrastructure.ai.models import AiJobRecord
 from studymate.infrastructure.changes.staging import stage_change_outbox
 from studymate.infrastructure.lifecycle.models import LifecycleRevisionRecord
+from studymate.infrastructure.notification_preferences.models import PreferenceRevisionRecord
 from studymate.infrastructure.observability.origin import ExecutionOrigin
 from studymate.infrastructure.observability.tracing import current_origin
 from studymate.infrastructure.persistence.discovery_exposure import record_foreground_activity
 from studymate.infrastructure.persistence.media_origin_models import MediaOriginRecord
 from studymate.infrastructure.persistence.product_event_models import ProductEventRecord
 from studymate.infrastructure.persistence.report_models import ProfileReportRecord
+from studymate.infrastructure.support.models import SupportCaseRecord, SupportRevisionRecord
 
 
 async def _append(
@@ -598,4 +602,71 @@ async def record_account_lifecycle(
         ),
         foreground=False,
         capture_origin=False,
+    )
+
+
+async def record_notification_preference_event(
+    session: AsyncSession, account_id: UUID, result: NotificationPreference
+) -> None:
+    source = await session.get(PreferenceRevisionRecord, (account_id, result.version))
+    if (
+        source is None
+        or result.changed_at is None
+        or source.mode != result.mode.value
+        or source.changed_at != result.changed_at
+    ):
+        raise RuntimeError("Preference event requires its actual immutable owner revision")
+    await _append(
+        session,
+        ProductEventRecord(
+            id=uuid4(),
+            account_id=account_id,
+            kind="notification_preference.changed",
+            occurrence_key=f"notification-preference:{account_id}:{result.version}",
+            schema_version=1,
+            occurred_at=result.changed_at,
+            notification_preference_version=result.version,
+        ),
+        foreground=False,
+    )
+
+
+async def record_support_event(
+    session: AsyncSession, actor_id: UUID | None, receipt: SupportReceipt
+) -> None:
+    case = await session.get(SupportCaseRecord, receipt.case_id)
+    revision = await session.get(SupportRevisionRecord, (receipt.case_id, receipt.version))
+    if (
+        case is None
+        or revision is None
+        or case.received_at != receipt.received_at
+        or revision.changed_at != receipt.changed_at
+        or revision.status != receipt.status.value
+        or actor_id != (case.actor_id if receipt.version == 1 else revision.changed_by_id)
+    ):
+        raise RuntimeError("Support event requires its actual retained actor/source revision")
+    if receipt.version == 1 and case.http_request_id is None:
+        origin = current_origin()
+        if origin is not None:
+            case.http_request_id = origin.request_id
+            case.action_id = origin.action_id
+            case.trace_id = origin.trace_id
+            case.span_id = origin.span_id
+        await session.flush()
+    if actor_id is None:
+        # Anonymous case/revision is the real retained source, not a fictitious account event.
+        return
+    await _append(
+        session,
+        ProductEventRecord(
+            id=uuid4(),
+            account_id=actor_id,
+            kind="support.received" if receipt.version == 1 else "support.status_changed",
+            occurrence_key=f"support:{receipt.case_id}:{receipt.version}",
+            schema_version=1,
+            occurred_at=receipt.changed_at,
+            support_case_id=receipt.case_id,
+            support_case_version=receipt.version,
+        ),
+        foreground=False,
     )

@@ -148,6 +148,28 @@ class AiSlotRecord(Base):
             "(token IS NULL) = (job_id IS NULL) AND (token IS NULL) = (lease_until IS NULL)",
             name="lease_shape",
         ),
+        CheckConstraint(
+            "(runtime_state='stopped' AND runtime_worker_id IS NULL AND runtime_started_at IS"
+            " NULL AND runtime_heartbeat_at IS NULL AND runtime_valid_until IS NULL AND runti"
+            "me_model IS NULL AND runtime_prompt IS NULL AND runtime_schema IS NULL AND runti"
+            "me_adapter IS NULL) OR (runtime_state IN ('starting','ready','blocked') AND runt"
+            "ime_worker_id IS NOT NULL AND runtime_started_at IS NOT NULL AND runtime_heartbe"
+            "at_at IS NOT NULL AND runtime_valid_until IS NOT NULL AND runtime_model IS NOT N"
+            "ULL AND runtime_prompt IS NOT NULL AND runtime_schema IS NOT NULL AND runtime_ad"
+            "apter IS NOT NULL)",
+            name="runtime_shape",
+        ),
+        CheckConstraint(
+            "runtime_worker_id IS NULL OR (runtime_heartbeat_at>=runtime_started_at AND runti"
+            "me_valid_until=runtime_heartbeat_at+interval '15 seconds')",
+            name="runtime_clock",
+        ),
+        CheckConstraint(
+            "runtime_worker_id IS NULL OR (length(btrim(runtime_model)) BETWEEN 1 AND 100 AND"
+            " length(btrim(runtime_prompt)) BETWEEN 1 AND 100 AND length(btrim(runtime_schema"
+            ")) BETWEEN 1 AND 100 AND length(btrim(runtime_adapter)) BETWEEN 1 AND 100)",
+            name="runtime_versions",
+        ),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     generation: Mapped[int] = mapped_column()
@@ -158,6 +180,15 @@ class AiSlotRecord(Base):
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     circuit: Mapped[str | None] = mapped_column(String(32))
     paused_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    runtime_worker_id: Mapped[UUID | None] = mapped_column()
+    runtime_state: Mapped[str] = mapped_column(String(16), server_default="stopped")
+    runtime_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    runtime_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    runtime_valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    runtime_model: Mapped[str | None] = mapped_column(String(100))
+    runtime_prompt: Mapped[str | None] = mapped_column(String(100))
+    runtime_schema: Mapped[str | None] = mapped_column(String(100))
+    runtime_adapter: Mapped[str | None] = mapped_column(String(100))
 
 
 class AiAttemptRecord(Base):

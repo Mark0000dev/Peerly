@@ -30,6 +30,7 @@ from studymate.infrastructure.ai.process import (
 MAX_CREDENTIAL_BYTES = 65_536
 MAX_JOURNAL_BYTES = 4096
 PRIVATE_MASK = 0o077
+PRIVATE_DIRECTORY_MODE = 0o700
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +77,24 @@ def _directory(path: Path) -> int:
     except (OSError, ValueError):
         os.close(descriptor)
         raise
+
+
+async def validate_private_runtime_directory(path: Path) -> None:
+    """Validate existing owned0700 directory metadata only, never enumerate/read files.
+
+    Every path component is opened relative to its predecessor with O_NOFOLLOW.
+    Parent must preserve these dedicated mounts between validation and CLI launch.
+    """
+
+    def validate() -> None:
+        descriptor = _directory(path)
+        try:
+            if stat.S_IMODE(os.fstat(descriptor).st_mode) != PRIVATE_DIRECTORY_MODE:
+                raise ValueError("Runtime directory must have mode0700")
+        finally:
+            os.close(descriptor)
+
+    await asyncio.to_thread(validate)
 
 
 def _read(directory: int, name: str, limit: int) -> bytes:
@@ -230,6 +249,19 @@ class DedicatedCredentialCache:
             # Otherwise keep the journal/staged cache for trusted stopped recovery.
         finally:
             lease.resources.close()
+
+    async def validate_ready(self) -> None:
+        def validate() -> None:
+            with ExitStack() as resources:
+                source = self._source(resources)
+                if _exists(source, "active.json"):
+                    raise CredentialStateUncertainError
+                self._document(_read(source, "auth.json", MAX_CREDENTIAL_BYTES))
+
+        try:
+            await asyncio.to_thread(validate)
+        except (OSError, ValueError):
+            raise AiExecutorError(Failure.AUTH) from None
 
     @asynccontextmanager
     async def lease(self, destination: Path) -> AsyncIterator[None]:

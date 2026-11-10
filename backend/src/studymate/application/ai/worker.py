@@ -5,7 +5,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from studymate.application.ai.policy import retry_delay
-from studymate.application.ai.ports import AiExecutor, AiExecutorError
+from studymate.application.ai.ports import (
+    AiExecutor,
+    AiExecutorError,
+    AiExecutorStateUncertainError,
+)
 from studymate.domain.ai.jobs import AiJob, Failure
 from studymate.domain.ai.tasks import AiResult
 
@@ -57,6 +61,8 @@ class ExecuteNextJob:
                     return True
             try:
                 result = await task
+            except AiExecutorStateUncertainError:
+                raise
             except AiExecutorError as error:
                 await self.queue.complete(
                     job, error.failure, stopped=True, retry_after=retry_delay(job, error)

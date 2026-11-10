@@ -333,9 +333,44 @@ EVENT_REFERENCE_SHAPE = (
 )
 
 
+BEFORE_STUDENT_SUPPORT_EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE
+_SUPPORT_LEGACY_SHAPE = EVENT_REFERENCE_SHAPE.replace(
+    "'read_media')", "'read_media','read_support_case')"
+)
+_SUPPORT_NULL_LEGACY_REFERENCES = " AND ".join(
+    f"{column} IS NULL" for column in (*_REVISION_SOURCE_COLUMNS, *_LIFECYCLE_SOURCE_COLUMNS)
+)
+EVENT_REFERENCE_SHAPE = (
+    f"(({_SUPPORT_LEGACY_SHAPE}) AND notification_preference_version IS NULL "
+    "AND support_case_id IS NULL AND support_case_version IS NULL) OR "
+    "(kind='notification_preference.changed' AND notification_preference_version "
+    "IS NOT NULL AND notification_preference_version>0 AND support_case_id IS NULL "
+    f"AND support_case_version IS NULL AND {_SUPPORT_NULL_LEGACY_REFERENCES}) OR "
+    "(kind IN ('support.received','support.status_changed') AND support_case_id IS "
+    "NOT NULL AND support_case_version IS NOT NULL AND support_case_version>0 "
+    "AND notification_preference_version IS NULL AND "
+    f"{_SUPPORT_NULL_LEGACY_REFERENCES})"
+)
+
+
 class ProductEventRecord(Base):
     __tablename__ = "product_events"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["account_id", "notification_preference_version"],
+            [
+                "notification_preference_revisions.account_id",
+                "notification_preference_revisions.version",
+            ],
+            name="fk_product_events_notification_preference_source",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["support_case_id", "support_case_version"],
+            ["support_case_revisions.case_id", "support_case_revisions.version"],
+            name="fk_product_events_support_revision_source",
+            ondelete="RESTRICT",
+        ),
         ForeignKeyConstraint(
             [
                 "lifecycle_revision_id",
@@ -604,6 +639,9 @@ class ProductEventRecord(Base):
     feedback_again: Mapped[str | None] = mapped_column(String(16))
     study_prompt_id: Mapped[UUID | None] = mapped_column()
     study_prompt_conversation_id: Mapped[UUID | None] = mapped_column()
+    notification_preference_version: Mapped[int | None] = mapped_column()
+    support_case_id: Mapped[UUID | None] = mapped_column()
+    support_case_version: Mapped[int | None] = mapped_column()
 
 
 Index(

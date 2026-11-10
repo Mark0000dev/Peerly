@@ -1,4 +1,4 @@
-"""Versioned self-declared study context; no inferred ability or canonical mapping."""
+"""Versioned knowledge-area declarations; no enrolment or verified-competence claims."""
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime

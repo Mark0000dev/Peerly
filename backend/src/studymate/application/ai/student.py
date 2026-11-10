@@ -22,15 +22,13 @@ class SubmitStudentJob:
     unit_of_work: AiUnitOfWork
     hasher: SessionHasher
     fingerprinter: IntentFingerprinter
-    versions: Versions
+    versions: Versions | None = None
 
     async def __call__(
         self,
         credential: SessionCredential,
         submission: StudentSubmission,
         key: IntentKey,
-        *,
-        accepting: bool = True,
     ) -> AiJob:
         # Fingerprint the explicit intent, not a mutable catalogue rendering.
         digest = await self.fingerprinter.fingerprint(
@@ -50,14 +48,15 @@ class SubmitStudentJob:
             actor, now = await require_verified_student(
                 transaction, await self.hasher.digest(credential)
             )
-            if not accepting:
-                raise AiUnavailableError
             prior = await transaction.replay(actor.session.account_id, submission.kind, key, digest)
             if prior is not None:
                 return prior
             task = await transaction.prepare(actor.session.account_id, submission)
+            versions = await transaction.runtime_versions(now)
+            if self.versions is not None and versions != self.versions:
+                raise AiUnavailableError
             result = await transaction.admit(
-                Admission(actor.session.account_id, task, key, digest, self.versions), now
+                Admission(actor.session.account_id, task, key, digest, versions), now
             )
             if not actor.session.is_active(await transaction.now()):
                 raise UnauthenticatedError
