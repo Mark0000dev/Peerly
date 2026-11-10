@@ -19,15 +19,16 @@
     <a tuiButton routerLink="/onboarding">Sign in</a>
     <a tuiLink routerLink="/account/deletion-status">Check deletion status</a>
   } @else {
-    <p>Deleting your account signs you out everywhere and ends your use of Peerly.</p>
+    <p>Deleting this account signs you out everywhere. This account cannot be restored.</p>
     <ul>
-      <li>You’re signed out and can’t sign in again.</li>
+      <li>All sessions for this account end.</li>
       <li>People you talked to see “Deleted account”.</li>
       <li>Open requests close; you leave Discover.</li>
       <li>Your messages stay readable to them.</li>
     </ul>
     <p>
-      This can’t be undone in the app. What we keep is explained in the
+      Joining again creates a new account and requires student email verification again. Your old
+      profile, chats and history will not transfer. What we keep is explained in the
       <a tuiLink routerLink="/privacy">Privacy Policy</a>.
     </p>
     @if (preparing.isPending) {
@@ -58,8 +59,9 @@
       [tuiDialogOptions]="{ label: 'Delete your account?', appearance: 'fullscreen' }"
     >
       <p>
-        You’ll be signed out on every device and won’t be able to sign in again. This can’t be
-        undone in the app.
+        This account cannot be restored. You’ll be signed out on every device. Joining again creates
+        a new account and requires student email verification; your old profile and chats will not
+        transfer.
       </p>
       <div class="actions">
         <button

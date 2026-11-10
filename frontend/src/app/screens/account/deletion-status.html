@@ -9,7 +9,12 @@
       The account for this request is deleted. Its sessions have ended. Other people see “Deleted
       account” in those conversations.
     </p>
-    <a tuiButton routerLink="/">Back to Peerly</a>
+    <p>
+      You can start fresh with a new account and verify your student email again. Your old profile,
+      chats and history will not transfer; the deleted account cannot be restored.
+    </p>
+    <a tuiButton tuiButtonVertical routerLink="/onboarding">Start a new account</a>
+    <a tuiLink routerLink="/">Back to Peerly</a>
   } @else if (status.isSuccess) {
     <h2>Deletion hasn’t been confirmed</h2>
     <p>
