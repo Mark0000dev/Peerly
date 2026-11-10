@@ -3,10 +3,11 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import DateTime, cast, func, select, text
+from sqlalchemy import DateTime, cast, func, insert, select, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from studymate.infrastructure.persistence.identity_models import InstitutionalBindingRecord
 from tests.integration.catalogue_fixture import subject
 from tests.integration.migrations import migrate
 from tests.integration.student_actor import actor
@@ -25,13 +26,22 @@ async def test_topic_key_upgrade_backfills_unicode_without_revising_source_histo
 ) -> None:
     async with engine.begin() as connection:
         await connection.run_sync(migrate, "0028_request_events")
-    owner = await actor(engine)
+    owner = await actor(engine, verified=False)
     known = await subject(engine)
     goal_id = uuid4()
     async with engine.begin() as connection:
         now = (
             await connection.execute(select(cast(func.clock_timestamp(), DateTime(timezone=True))))
         ).scalar_one()
+        # This revision predates identity retirement columns. Use an explicit Core
+        # INSERT, not the current ORM unit-of-work's nullable-column projection.
+        await connection.execute(
+            insert(InstitutionalBindingRecord).values(
+                account_id=owner.id,
+                email=f"synthetic-{owner.id.hex}@mail.apu.edu.my",
+                verified_at=now,
+            )
+        )
         await connection.execute(
             text(
                 "INSERT INTO goals (id,account_id,current_version,created_at) VALUES (:id"

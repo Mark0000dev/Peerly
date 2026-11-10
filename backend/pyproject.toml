@@ -41,15 +41,20 @@ select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "SIM", "C4", "PIE", "RUF", "AN
 "migrations/versions/*.py" = ["TID251"] # Alembic schema DDL requires Core Column, not ORM mapped_column.
 
 [tool.mypy]
+# Tests also inspect standalone deployment tools from the repository namespace.
+mypy_path = ["src", ".."]
+explicit_package_bases = true
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 disallow_any_unimported = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
-files = ["src", "tests", "migrations"]
+files = ["src", "tests", "migrations", "../deployment/backend/manual_stage_verification.py"]
 
 [tool.pytest.ini_options]
+# Keep ordinary make check independent of a caller-supplied PYTHONPATH.
+pythonpath = [".."]
 # Load tests retain record_property metrics; xunit2 rejects that supported fixture.
 junit_family = "legacy"
 asyncio_mode = "auto"

@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from studymate.application.idempotency import IntentKey
@@ -11,6 +11,7 @@ from studymate.application.media.cleanup import CleanupMediaTransport, Transport
 from studymate.application.media.uploads import PhotoUploadCommand, UploadAction
 from studymate.domain.media import MediaObjectKind
 from studymate.infrastructure.media.images import BoundedImageProcessor
+from studymate.infrastructure.persistence.identity_models import InstitutionalBindingRecord
 from studymate.infrastructure.persistence.media_models import (
     PhotoUploadRecord,
     PhotoUploadRevisionRecord,
@@ -164,8 +165,18 @@ async def test_cleanup_revision_backfills_existing_intents_without_altering_sour
 ) -> None:
     async with engine.begin() as connection:
         await connection.run_sync(migrate, "0011_photo_attempts")
-    owner = await actor(engine)
+    owner = await actor(engine, verified=False)
     now, upload_id = datetime.now(UTC), uuid4()
+    # Seed only columns present at 0011; current ORM binding inserts also emit
+    # retired_at, which belongs to a later migration and must not be backported.
+    async with engine.begin() as connection:
+        await connection.execute(
+            insert(InstitutionalBindingRecord).values(
+                account_id=owner.id,
+                email=f"synthetic-{owner.id.hex}@mail.apu.edu.my",
+                verified_at=now,
+            )
+        )
     async with async_sessionmaker(engine).begin() as session:
         session.add(
             PhotoUploadRecord(
