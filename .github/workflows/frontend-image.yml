@@ -98,7 +98,7 @@ jobs:
                   status, body, _ = fetch("/healthz")
                   if status == 200 and body == b"ok\n":
                       break
-              except (urllib.error.URLError, TimeoutError):
+              except (urllib.error.URLError, TimeoutError, ConnectionResetError):
                   pass
               if time.monotonic() >= deadline:
                   raise RuntimeError("nginx did not serve the exact health receipt within 45 seconds")
