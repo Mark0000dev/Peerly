@@ -147,6 +147,7 @@ def test_all_actual_audit_actions_preserve_original_active_grant_and_hide_query_
         OperatorAction.SEARCH_ACCOUNTS,
         OperatorAction.SEARCH_EVENTS,
         OperatorAction.SEARCH_REPORTS,
+        OperatorAction.SEARCH_SUPPORT_CASES,
     }
     resource = {
         OperatorAction.SEARCH_ACCOUNTS: "account",
@@ -159,6 +160,7 @@ def test_all_actual_audit_actions_preserve_original_active_grant_and_hide_query_
         OperatorAction.READ_REPORT: "report",
         OperatorAction.READ_MEDIA: "profile_media",
         OperatorAction.READ_SUPPORT_CASE: "support_case",
+        OperatorAction.SEARCH_SUPPORT_CASES: "support_case",
     }[action]
     requested = None if searching else uuid4()
     returned: list[UUID] = (

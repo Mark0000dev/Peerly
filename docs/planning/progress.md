@@ -1,8 +1,142 @@
 # Implementation progress
 
-Updated: 9 November 2026 (current combined run and completed scoped checkpoints). Follow the [autonomous workflow](autonomous-workflow.md) and [approved product decisions](product-decisions-v1.md).
+Updated:10November2026 (deployed identity-recreation hotfix; new full CI pending). Follow the [autonomous workflow](autonomous-workflow.md) and [approved product decisions](product-decisions-v1.md).
 
 ## Current state
+
+**10November current development:** the owner has reopened BE07 operator completion
+following the urgent manual staging operation. Parent applied exactly four explicit
+manual staging memberships (two previously requested real addresses, two owner-approved
+UUID-derived placeholders), zero consumed OTPs, four durable manual canonical events;
+deleted accounts were untouched. This was not a general auto-verifier and did not
+activate registration/profile capabilities on the user's behalf. Executed helper
+`6ae9b5d3fdf8f8d5de48043d545fe6c9063927e62e4ad2a78eb9fd1aaf2681c2`
+remains immutable with parent-private receipts. Strict-clean helper/source/test/tooling
+checkpoint74e04a7 was parent-published: actual whole strict mypy1040 and Ruff/format1042
+passed there. Its full CI follows in the background; do not call it full green.
+Current app/AI staging images remain as previously verified; no new agent live actions.
+
+**BE07-O1 local acceptance:**150PASS in37.65s =136unit+14actual PostgreSQL cases,
+including all ten new GET mounts, actual role/audit/canonical rollback, raw retained
+sources, old operator root regression, all-action timeline mapping, deterministic
+export and head54 model/migration drift. Canonical scoped mypy20/Ruff/format20 pass;
+the added all-action enum fixture also passed. Four architecture contracts pass.
+No new full-backend or live deployment claim: parent publication/CI remains separate.
+
+Actual enabled-auth schema is now locally106paths/119operations, SHA256
+`4da93c8717724c4c4c8472c9ce6593e9fd2af3683f2c4e1e2968da2fa9a9e433`,
+`/tmp/peerly-be07-head54-openapi.json`. It adds eight previously delivered Requests/
+disclosure/chat-image metadata/feedback GETs and support inbox/history GETs. Every
+old96 path object remains identical; the only changed old component is additive
+`OperatorAction.search_support_cases`. No new business mutation/permission/DDL,
+student/AI change or manual-verification HTTP route. Inspections retain actual
+same-transaction metadata audit; immutable shipped0053 hash remains
+`c44cc7b21b44828eba8a9812c13a61f45a1fc33f9e7042cdde6233f89558b5ea`.
+Actual deployed staging is not inferred to expose these routes merely from head54.
+Halley received the actual tested export/hash and can regenerate; backend active
+runtime remains stable during the frontend's next explicit fixture lease.
+[Current bounded epic](epic-be-07-operator-completion.md) and
+[owned support ledger](operator-support-progress.md) describe exact contracts.
+
+## Operator conversation index — local acceptance
+
+After Halley's explicit106 fixture END, main mounted
+`GET /api/v1/operator/accounts/{account_id}/conversations` using Plato's actual
+factory. One coherent batch passed23cases in14.74s (20unit+3actualPG), including
+root role/audit behavior, both actual participants with hidden/deleted retained
+sources, mandatory canonical rollback and export. Strict Ruff/format/mypy14files
+passed without relaxed import following. No new DDL, student behavior or deployment.
+
+Actual schema107paths/120operations, all prior106 path objects identical:
+`/tmp/peerly-operator-index-head54-openapi.json`, SHA256
+`c6432e2c45196ab999231274eeffdf0a1d7371676b0f31139aeef039ed4d88dc`.
+Finite metadata contains only actual conversation/pair/relationship/source-request
+IDs and accepted request revision; UUID-descending50+1 pagination is not chronology,
+message counts or a commit snapshot. Existing READ_ACCOUNT container audit and
+explicit current operator authority remain mandatory. Accepted snapshot:
+`/tmp/peerly-operator-index-accepted-6rpzk42z/manifest.json`, SHA256
+`83c3cd792f443c02f6b3cc40bee9ac52568d966c6b73329b960061bb7b66aaea`.
+No full-suite, coverage or live-stage acceptance is inferred from this scoped result.
+
+## AI worker telemetry — scoped acceptance complete
+
+Nash supplied optional typed tracer/meter runtime composition and a bounded
+asynchronous queue sampler. Main `bootstrap.run_ai_worker` now passes its existing
+owned providers with `studymate.ai` scope (or None), preserving disposal/shutdown.
+Four main regression definitions check optional observed composition, actual
+in-memory tracer ownership and shutdown on runtime failure without credentials,
+SQL or provider access. Main strict Ruff/format/mypy2files and Nash strict6files pass. One coordinated
+batch passed32unit cases in2.07s and4actualPG cases in6.65s, including the four
+main composition regressions. Evidence: `/tmp/peerly-ai-telemetry-a45u0uy_/`.
+No full-backend or production acceptance claim. Local SDK measurement adds two
+kernel tasks; async shutdown transiently uses one executor thread and returns to
+one task after event-loop closure. This is not a deployed-container PID proof.
+The actual deployed AI container remains the previous image and PID32 limits;
+SDK thread/resource headroom and same-namespace runtime proof are parent-owned
+prerequisites before deployment. No flag-only or actual exported-signal claim.
+
+## Prior deployed identity hotfix receipt
+
+**INTERNAL STAGING HOTFIX DEPLOYED AND VERIFIED — current full CI still pending.**
+Parent reports exact selective commit `A828` / image digest prefix `cc5e8d`
+promoted after the one real staging migration from52 through53 to
+`0054_identity_recreation`. API and all four core workers are running (five core
+containers), API health200. The isolated AI worker/image/cache were not changed;
+its durable heartbeat remains fresh. Portainer's async update returned before
+new API visibility; parent resumed verification once the actual new containers
+were running and did **not** rerun migrations.
+
+Parent's post-migration retention verification confirms all three original
+accounts and three original Google identity rows retain their original digests;
+one deleted account's claim is retired, invalid retirement links0. These are
+parent-reported actual deployment/database checks, not new agent SQL/provider
+calls. Both explicitly published policies v2 (two documents) were verified through
+the public API; deployed v1 documents and historical registration receipts remain
+immutable. Actual team repeat-enrolment/deliverability feedback remains distinct
+from controlled regression acceptance.
+
+Hotfix scoped acceptance:186 distinct cases passed across preserved runs
+(126unit,16PG,44PG), including actual three-generation browser deletion/new
+Google login/fresh same-mailbox proof/new registration, no old chat/session/
+workflow/OTP transfer,52→53→54 upgrade, retained-source FK/partial uniqueness,
+concurrent claims and ban/deletion races. Strict scoped mypy21/Ruff/format pass.
+This is not a single full-suite result. Last accepted full CI951 predates this
+hotfix; fresh full CI `42807085513` is **pending**, not green. No additional broad
+local suite is running or authorised merely for status.
+
+Frozen selective source/evidence:
+`/tmp/peerly-identity-recreation-hotfix-frozen/{manifest.json,receipt.json,test-manifest.json,source/}`;
+22-path manifest SHA256
+`51f3b807f5a4dcbfd249e35c354043c7ab1c79ff615da2e60ddc3c4e48826ead`.
+Bootstrap is exact accepted baseline SHA256
+`663cd578c1c01d554a10a4c3353d226b31761f0692f7ebc2d36005d03ba3a103`;
+actual OpenAPI remains96paths/109operations, byte-identical SHA256
+`ed527677f73fad580877c076dd999b21e6f5f9d8a63ab20ae5c55aee5f94348b`.
+SMTP polish and published policy v2 inputs were separately parent-coordinated;
+they are not silently included in that22-path identity manifest.
+
+**Rollback restriction:** after a new account generation is admitted, the old
+global issuer/sub lookup is unsafe against retained duplicate associations.
+Do not roll back to the old API binary or purge/reassign history to make it fit.
+Use an identity-aware forward fix/rollback image or an explicitly planned full
+restore with admission stopped.0054 downgrade refuses retained retirement facts.
+0053 is now a shipped immutable schema prerequisite: do not rename/drop/reuse,
+fork or edit its published contents. Its support-search constraint/index extension
+activated no new operator writer or read route in the urgent checkpoint.
+
+**Current next action:** hold shared runtime/source and operator work until the
+parent closes the urgent handoff; observe the background full-CI result and real
+team feedback. Fix only a concrete reported regression under coordinated scope.
+BE07 operator drafts and eight unaccepted read mounts remain paused (own bootstrap
+WIP preserved under `/tmp/peerly-be07-paused`), not exposed by this hotfix. Parent
+owns publication, real infra/provider operations and monitoring. No agent is
+performing deployment, credential access, repeated migration or broad tests.
+
+## Historical final-batch and implementation receipts
+
+The entries below retain prior candidate states and failures. Older statements
+that staging is only at head50, AI is unavailable or no full CI has ever passed
+are historical and are superseded by the current state above.
 
 **FINAL BACKEND BATCH COMPLETED WITH BOUNDED FOLLOW-UPS (not a new single-full GREEN):** frozen head52 full attempt3 ran3894 cases:3879 passed/15 failed,1014 PostgreSQL+2880 unit,96.15% overall branch coverage,2805.08s. All1050 manifest files matched at completion (SHA5b8beb1b0bf1f5fd748d931143daeb1b27a303ed80b5d8dbbeb666863b121aa7); immutable failed evidence `/tmp/peerly-backend-final-head52-failed-dbm646h9` retains source/log/JUnit/coverage. Earlier collection/import-sort attempts remain RED evidence; no behavior tests ran in those attempts.
 

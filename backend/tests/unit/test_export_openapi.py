@@ -105,3 +105,22 @@ async def test_student_feedback_export_uses_only_the_actual_closed_problem_contr
     assert "/api/v1/people/{person_id}/feedback-summary" in first
     assert "HTTPValidationError" not in first
     assert '"ValidationError"' not in first
+
+
+async def test_retained_operator_read_factory_paths_are_exported() -> None:
+    first = json.dumps(await exporter.build_schema(), sort_keys=True)
+    assert "/api/v1/operator/cases" in first
+    assert "/api/v1/operator/cases/{case_id}/history" in first
+    assert "/api/v1/operator/accounts/{account_id}/connection-requests" in first
+    assert (
+        "/api/v1/operator/accounts/{account_id}/connection-requests/{request_id}/history" in first
+    )
+    assert (
+        "/api/v1/operator/accounts/{account_id}/connection-requests/{request_id}/disclosures"
+        in first
+    )
+    assert "/api/v1/operator/accounts/{account_id}/chat-image-uploads" in first
+    assert "/api/v1/operator/accounts/{account_id}/chat-image-uploads/{image_id}/history" in first
+    assert "/api/v1/operator/accounts/{account_id}/peer-feedback" in first
+    assert "/api/v1/operator/accounts/{account_id}/peer-feedback/{feedback_id}/history" in first
+    assert "/api/v1/operator/accounts/{account_id}/peer-feedback/{feedback_id}/removals" in first

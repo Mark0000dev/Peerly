@@ -2,10 +2,11 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from time import perf_counter
+from time import monotonic, perf_counter
 
 from opentelemetry import context, trace
 from opentelemetry.context import Context
@@ -113,7 +114,15 @@ class ObservedAiQueue:
         job = await self.queue.claim()
         observation = _ACTIVE.get()
         if job is not None and observation is not None:
-            observation.claimed(job, await self.queue.origin(job.id))
+            origin = None
+            if observation.tracer is not None:
+                try:
+                    async with asyncio.timeout(0.25):
+                        origin = await self.queue.origin(job.id)
+                except (StorageUnavailableError, TimeoutError):
+                    # Missing correlation must not strand a durably claimed job.
+                    pass
+            observation.claimed(job, origin)
         return job
 
     async def heartbeat(self, job: AiJob) -> bool:
@@ -223,31 +232,97 @@ class ObservedStudentSubmission:
         return result
 
 
+QUEUE_SAMPLE_SECONDS = 5.0
+QUEUE_SAMPLE_TIMEOUT_SECONDS = 0.25
+QUEUE_SAMPLE_FRESH_SECONDS = 15.0
+
+
+@dataclass(frozen=True, slots=True)
+class AiQueueSample:
+    snapshot: AiQueueSnapshot
+    observed_at: float
+
+
 class AiQueueSignals:
     """The runtime samples asynchronously; SDK callbacks only read immutable cached numbers."""
 
-    def __init__(self, meter: Meter) -> None:
-        self.latest = AiQueueSnapshot()
+    def __init__(self, meter: Meter, *, clock: Callable[[], float] = monotonic) -> None:
+        self._clock = clock
+        # One immutable reference is replaced only after a successful async transaction.
+        # SDK callback threads never mutate this cache or touch SQL/event-loop resources.
+        self._sample: AiQueueSample | None = None
         meter.create_observable_gauge("worker.ai.queue.depth", callbacks=[self.depth])
         meter.create_observable_gauge("worker.ai.queue.oldest", callbacks=[self.oldest], unit="s")
         meter.create_observable_gauge("worker.ai.slot.occupied", callbacks=[self.occupied])
         meter.create_observable_gauge("worker.ai.circuit.open", callbacks=[self.circuit])
+        meter.create_observable_gauge("worker.ai.queue.sample.age", callbacks=[self.age], unit="s")
+        meter.create_observable_gauge("worker.ai.queue.sample.fresh", callbacks=[self.fresh])
 
-    async def sample(self, queue: SqlAiQueue) -> None:
-        self.latest = await queue.snapshot()
+    @property
+    def latest(self) -> AiQueueSnapshot:
+        sample = self._current()
+        if sample is None:
+            raise LookupError("No fresh AI queue observation")
+        return sample.snapshot
 
-    def depth(self, options: CallbackOptions) -> tuple[Observation]:
+    @latest.setter
+    def latest(self, snapshot: AiQueueSnapshot) -> None:
+        self._sample = AiQueueSample(snapshot, self._clock())
+
+    def _current(self) -> AiQueueSample | None:
+        sample = self._sample
+        if (
+            sample is None
+            or not 0 <= self._clock() - sample.observed_at <= QUEUE_SAMPLE_FRESH_SECONDS
+        ):
+            return None
+        return sample
+
+    async def sample(self, queue: SqlAiQueue) -> bool:
+        try:
+            # Includes pool acquisition, all reads and transaction cleanup; no connection
+            # is retained by the sample, inference or an SDK callback.
+            async with asyncio.timeout(QUEUE_SAMPLE_TIMEOUT_SECONDS):
+                snapshot = await queue.snapshot()
+        except (StorageUnavailableError, TimeoutError):
+            # Last known sample ages naturally; failure must never fabricate zeros.
+            return False
+        self.latest = snapshot
+        return True
+
+    async def run(self, queue: SqlAiQueue, stop: asyncio.Event) -> None:
+        while not stop.is_set():
+            await self.sample(queue)
+            with suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), QUEUE_SAMPLE_SECONDS)
+
+    def depth(self, options: CallbackOptions) -> tuple[Observation, ...]:
         del options
-        return (Observation(self.latest.queued),)
+        sample = self._current()
+        return () if sample is None else (Observation(sample.snapshot.queued),)
 
-    def oldest(self, options: CallbackOptions) -> tuple[Observation]:
+    def oldest(self, options: CallbackOptions) -> tuple[Observation, ...]:
         del options
-        return (Observation(self.latest.oldest_seconds),)
+        sample = self._current()
+        return () if sample is None else (Observation(sample.snapshot.oldest_seconds),)
 
-    def occupied(self, options: CallbackOptions) -> tuple[Observation]:
+    def occupied(self, options: CallbackOptions) -> tuple[Observation, ...]:
         del options
-        return (Observation(int(self.latest.occupied)),)
+        sample = self._current()
+        return () if sample is None else (Observation(int(sample.snapshot.occupied)),)
 
-    def circuit(self, options: CallbackOptions) -> tuple[Observation]:
+    def circuit(self, options: CallbackOptions) -> tuple[Observation, ...]:
         del options
-        return (Observation(int(self.latest.circuit_open)),)
+        sample = self._current()
+        return () if sample is None else (Observation(int(sample.snapshot.circuit_open)),)
+
+    def age(self, options: CallbackOptions) -> tuple[Observation, ...]:
+        del options
+        sample = self._sample
+        return (
+            () if sample is None else (Observation(max(0.0, self._clock() - sample.observed_at)),)
+        )
+
+    def fresh(self, options: CallbackOptions) -> tuple[Observation, ...]:
+        del options
+        return (Observation(int(self._current() is not None)),)

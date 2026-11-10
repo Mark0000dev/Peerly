@@ -2,7 +2,15 @@ name: Backend
 
 on:
   pull_request:
+    paths:
+      - backend/**
+      - deployment/backend/**
+      - .github/workflows/backend.yml
   push:
+    paths:
+      - backend/**
+      - deployment/backend/**
+      - .github/workflows/backend.yml
 
 permissions:
   contents: read

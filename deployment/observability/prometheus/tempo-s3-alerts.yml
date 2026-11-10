@@ -1,0 +1,13 @@
+# Optional S3/WAL profile rule_file. Parent adjusts to approved absolute headroom.
+groups:
+  - name: peerly-tempo-local-wal
+    interval: 30s
+    rules:
+      - alert: PeerlyTempoWalAbsoluteHeadroomLow
+        expr: node_filesystem_avail_bytes{peerly_storage="tempo"} < 268435456
+        for: 2m
+        labels: {severity: critical, owner: peerly-team}
+        annotations:
+          summary: 'Tempo local WAL filesystem has less than 256 MiB free'
+          description: 'Check S3 flush/auth/connectivity and the bounded local staging filesystem. Expand approved capacity or restore object storage; do not delete unflushed WAL or expire retained S3 blocks. Calibrate this rule with PEERLY_TEMPO_WAL_MIN_FREE_BYTES before deployment.'
+          dashboard_uid: peerly-technical-v1

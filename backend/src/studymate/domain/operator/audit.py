@@ -17,6 +17,7 @@ class OperatorAction(StrEnum):
     SEARCH_ACCOUNTS = "search_accounts"
     SEARCH_EVENTS = "search_events"
     SEARCH_REPORTS = "search_reports"
+    SEARCH_SUPPORT_CASES = "search_support_cases"
     READ_SUPPORT_CASE = "read_support_case"
     READ_REPORT = "read_report"
     READ_MEDIA = "read_media"
@@ -75,6 +76,7 @@ class OperatorAudit:
             OperatorAction.SEARCH_ACCOUNTS,
             OperatorAction.SEARCH_EVENTS,
             OperatorAction.SEARCH_REPORTS,
+            OperatorAction.SEARCH_SUPPORT_CASES,
         ):
             self._validate_search()
         else:
@@ -97,6 +99,10 @@ class OperatorAudit:
             ),
             OperatorAction.SEARCH_EVENTS: (OperatorResourceKind.EVENT, OPERATOR_EVENT_PAGE_SIZE),
             OperatorAction.SEARCH_REPORTS: (OperatorResourceKind.REPORT, OPERATOR_EVENT_PAGE_SIZE),
+            OperatorAction.SEARCH_SUPPORT_CASES: (
+                OperatorResourceKind.SUPPORT_CASE,
+                OPERATOR_EVENT_PAGE_SIZE,
+            ),
         }[self.action]
         if len(self.results) > limit or any(ref.kind != kind for ref in self.results):
             raise ValueError("Account/event search audit exceeds its actual bounded results")

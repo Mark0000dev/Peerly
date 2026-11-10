@@ -1,0 +1,16 @@
+{
+  "reviewed_utc": "2026-11-10",
+  "collector": "otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea",
+  "tempo": "grafana/tempo:3.1.1@sha256:64e2fbd56d9c2b3412a4b430a58ea59e91a670b1e75f920a0c702213ad145044",
+  "promtool": "prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06",
+  "validation_only_python": "python:3.12-alpine@sha256:e064671ca452259bab50e8e2c7bd896e39e9a343bb06ca25234adf6fe18d0fc7",
+  "primary_sources": [
+    "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/tag/v0.165.0",
+    "https://github.com/grafana/tempo/releases/tag/v3.1.1",
+    "https://github.com/prometheus/prometheus/releases/tag/v3.16.0",
+    "https://hub.docker.com/_/python",
+    "https://github.com/grafana/tempo/blob/v3.1.1/modules/backendscheduler/provider/retention.go",
+    "https://github.com/grafana/tempo/blob/v3.1.1/tempodb/retention.go"
+  ],
+  "storage_preflight_python": "python:3.12-alpine@sha256:e064671ca452259bab50e8e2c7bd896e39e9a343bb06ca25234adf6fe18d0fc7"
+}

@@ -1,0 +1,41 @@
+# Merge these jobs/rule_files into the EXISTING Prometheus. Do not replace its config.
+# Render @@...@@ with real private/TLS reverse-proxy host:ports and CA/auth paths.
+# There is no assumed remote-write receiver and no public collector listener.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+rule_files:
+  - /etc/prometheus/peerly/alerts.yml
+scrape_configs:
+  - job_name: peerly-app-metrics
+    honor_labels: true
+    scheme: https
+    static_configs:
+      - targets: ['@@APP_METRICS_PRIVATE_TARGET@@']
+        labels: {deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'}
+    tls_config:
+      ca_file: '@@MONITORING_CA_FILE@@'
+    authorization:
+      credentials_file: '@@SCRAPE_TOKEN_FILE@@'
+  - job_name: peerly-collector
+    scheme: https
+    static_configs:
+      - targets: ['@@COLLECTOR_METRICS_PRIVATE_TARGET@@']
+        labels: {deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'}
+    tls_config:
+      ca_file: '@@MONITORING_CA_FILE@@'
+    authorization:
+      credentials_file: '@@SCRAPE_TOKEN_FILE@@'
+  - job_name: peerly-tempo
+    scheme: https
+    static_configs:
+      - targets: ['@@TEMPO_PRIVATE_TARGET@@']
+        labels: {deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'}
+    tls_config:
+      ca_file: '@@MONITORING_CA_FILE@@'
+    authorization:
+      credentials_file: '@@SCRAPE_TOKEN_FILE@@'
+# Reuse an existing approved host exporter for capacity: label ONLY the filesystem
+# actually backing PEERLY_TEMPO_DATA_DIR with peerly_storage="tempo". No host mounts,
+# Docker-socket access or node-exporter installation is performed by this bundle.
+# Existing Alertmanager routing/credentials remain owner-managed.

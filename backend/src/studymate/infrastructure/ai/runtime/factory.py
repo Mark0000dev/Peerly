@@ -4,8 +4,11 @@ import asyncio
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
+from opentelemetry.metrics import Meter
+from opentelemetry.trace import Tracer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from studymate.application.ai.worker import ExecuteNextJob
@@ -32,6 +35,16 @@ from studymate.infrastructure.ai.runtime.launch import PinnedProcessPolicy
 from studymate.infrastructure.ai.runtime.preflight import PinnedCli
 from studymate.infrastructure.ai.runtime.supervisor import AiWorkerSupervisor
 from studymate.infrastructure.ai.sandbox import LinuxSandbox
+from studymate.infrastructure.ai.telemetry import AiQueueSignals, ObservedAiQueue, ObservedAiStep
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
+
+async def _stop_sampling(task: asyncio.Task[None] | None) -> None:
+    if task is not None:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +91,7 @@ class AiWorkerRuntime:
     health: SqlRuntimeHealth
     worker_id: UUID
     binding_digest: str
+    signals: AiQueueSignals | None = None
     _active: bool = field(default=False, init=False, repr=False)
 
     async def _renew(self, quiesce: asyncio.Event) -> None:
@@ -118,6 +132,44 @@ class AiWorkerRuntime:
                     await asyncio.wait_for(stop.wait(), min(1.0, remaining))
         return False
 
+    async def _serve(
+        self, stop: asyncio.Event, quiesce: asyncio.Event, tasks: list[asyncio.Task[None]]
+    ) -> None:
+        sampling: asyncio.Task[None] | None = None
+        worker = asyncio.create_task(self.supervisor.run(quiesce))
+        heartbeat = asyncio.create_task(self._renew(quiesce))
+
+        async def await_stop() -> None:
+            await stop.wait()
+
+        stopping = asyncio.create_task(await_stop())
+        tasks.extend((worker, heartbeat, stopping))
+        if self.signals is not None:
+            sampling = asyncio.create_task(self.signals.run(self.queue, quiesce))
+            tasks.append(sampling)
+        try:
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            if stopping not in done:
+                if worker in done:
+                    await worker
+                elif heartbeat in done:
+                    await heartbeat
+                elif sampling is not None:
+                    # Expected storage outages stay inside the sampler. Unexpected
+                    # programming errors retain the usual fail-closed runtime lifecycle.
+                    await sampling
+                raise RuntimeOwnershipError("Worker or durable heartbeat stopped unexpectedly")
+        finally:
+            await _stop_sampling(sampling)
+        quiesce.set()
+        heartbeat.cancel()
+        await asyncio.gather(heartbeat, return_exceptions=True)
+        # Stop new admissions before waiting for physical child/cache cleanup.
+        await self.health.revoke(clean=False)
+        await worker
+        await self.health.recover_current_stopped(self.queue)
+        await self.health.revoke(clean=True)
+
     async def run(self, stop: asyncio.Event) -> None:
         if self._active:
             raise RuntimeOwnershipError("Runtime is already active")
@@ -134,29 +186,7 @@ class AiWorkerRuntime:
             await self.health.register()
             registered = True
             await self.health.heartbeat(ready=True)
-            worker = asyncio.create_task(self.supervisor.run(quiesce))
-            heartbeat = asyncio.create_task(self._renew(quiesce))
-
-            async def await_stop() -> None:
-                await stop.wait()
-
-            stopping = asyncio.create_task(await_stop())
-            tasks.extend((worker, heartbeat, stopping))
-            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            if stopping not in done:
-                if worker in done:
-                    await worker
-                else:
-                    await heartbeat
-                raise RuntimeOwnershipError("Worker or durable heartbeat stopped unexpectedly")
-            quiesce.set()
-            heartbeat.cancel()
-            await asyncio.gather(heartbeat, return_exceptions=True)
-            # Stop new admissions before waiting for physical child/cache cleanup.
-            await self.health.revoke(clean=False)
-            await worker
-            await self.health.recover_current_stopped(self.queue)
-            await self.health.revoke(clean=True)
+            await self._serve(stop, quiesce, tasks)
             registered = False
         finally:
             quiesce.set()
@@ -175,6 +205,9 @@ def create_ai_worker_runtime(
     sessions: async_sessionmaker[AsyncSession],
     storage: MediaStorage,
     configuration: AiRuntimeConfiguration,
+    *,
+    tracer: Tracer | None = None,
+    meter: Meter | None = None,
 ) -> AiWorkerRuntime:
     """Main supplies dedicated pool1/overflow0 and owns engine/storage disposal."""
     cli = PinnedCli(
@@ -209,15 +242,20 @@ def create_ai_worker_runtime(
     worker_id = uuid4()
     queue = SqlAiQueue(sessions, worker_id=worker_id)
     health = SqlRuntimeHealth(sessions, worker_id, Versions(configuration.model))
+    step: Callable[[], Coroutine[object, object, bool]] = ExecuteNextJob(queue, executor)
+    if tracer is not None or meter is not None:
+        step = ObservedAiStep(ExecuteNextJob(ObservedAiQueue(queue), executor), tracer, meter)
+    signals = AiQueueSignals(meter) if meter is not None else None
     return AiWorkerRuntime(
         configuration,
         cli,
         cache,
         queue,
-        AiWorkerSupervisor(ExecuteNextJob(queue, executor)),
+        AiWorkerSupervisor(step),
         health,
         worker_id,
         credential_binding_digest(codec),
+        signals,
     )
 
 

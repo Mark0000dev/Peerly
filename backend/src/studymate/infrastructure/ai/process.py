@@ -30,6 +30,9 @@ MAX_INPUT_BYTES = 32_768
 MAX_IMAGE_BYTES = 10_000_000
 MAX_RUN_SECONDS = 60
 DRAIN_CHUNK = 4096
+STOP_CONFIRM_SECONDS = 5.0
+STOP_TERM_GRACE_SECONDS = 0.2
+STOP_POLL_SECONDS = 0.01
 
 
 class TerminationUncertainError(Exception):
@@ -102,18 +105,35 @@ def _group_exists(pid: int) -> bool:
 
 
 async def _stop(process: asyncio.subprocess.Process) -> None:
-    _signal_group(process.pid, signal.SIGTERM)
+    # SIGKILL delivery and descendant reaping are asynchronous. One shared
+    # deadline covers leader exit AND disappearance of the entire process group.
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + STOP_CONFIRM_SECONDS
     try:
-        async with asyncio.timeout(0.2):
-            await process.wait()
-    except TimeoutError:
+        _signal_group(process.pid, signal.SIGTERM)
+        try:
+            async with asyncio.timeout_at(min(deadline, loop.time() + STOP_TERM_GRACE_SECONDS)):
+                await process.wait()
+        except TimeoutError:
+            pass
+        # The leader exiting is not proof that descendants have exited.
         _signal_group(process.pid, signal.SIGKILL)
-        async with asyncio.timeout(5):
+        async with asyncio.timeout_at(deadline):
             await process.wait()
-    # The leader exiting is not proof that descendants exited.
-    _signal_group(process.pid, signal.SIGKILL)
-    if _group_exists(process.pid):
-        raise TerminationUncertainError("Executor process group still exists")
+            recheck = asyncio.Event()
+            while _group_exists(process.pid):
+                # Non-child descendants have no asyncio wait handle. A bounded
+                # timer wakes the next kernel process-group existence check.
+                timer = loop.call_later(STOP_POLL_SECONDS, recheck.set)
+                try:
+                    await recheck.wait()
+                finally:
+                    timer.cancel()
+                recheck.clear()
+    except (TimeoutError, OSError) as error:
+        # Never map a stop deadline/signal failure to retryable TIMEOUT/TRANSIENT:
+        # callers must retain protected auth/workspace and occupied SQL capacity.
+        raise TerminationUncertainError("Executor physical stop could not be confirmed") from error
 
 
 def _read_output(path: Path) -> bytes:

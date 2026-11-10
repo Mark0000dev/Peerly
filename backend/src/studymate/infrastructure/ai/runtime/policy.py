@@ -90,6 +90,7 @@ class InspectionPolicy:
             "agents.enabled=false",
             "cloud.skills.enabled=false",
             "skills.include_instructions=false",
+            "project_doc_max_bytes=0",
             "tools.experimental_request_user_input.enabled=false",
             "tools.update_plan.enabled=false",
             'cli_auth_credentials_store="file"',

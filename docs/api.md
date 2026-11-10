@@ -416,3 +416,30 @@ The following mounted head52 contract is code-complete integration in progress, 
 - `GET /operator/cases/{case_id}` and `PUT /operator/cases/{case_id}/status` require the existing current operator grant and atomic inspection audit. Status takes CAS version/idempotent intent and records a real operator/grant-bound revision; no student or support proof can set it. This is minimal backend support operation, not renewed operator UI scope.
 
 Support creation has a32KiB byte cap and5-second JSON-read deadline; other new commands retain8KiB/5seconds. Replays preserve the original receipt/version rather than pretending a newer status was the original result; current state comes from owned reads. Foreign/expired proofs do not disclose account/case existence. No private support content, reply address, proof or auth secret belongs in ordinary telemetry. Anonymous cases retain their actual business source and server request/trace references without a fictitious canonical account actor; known actors and real operator changes append source-validated canonical events.
+
+
+## Locally accepted BE07 operator expansion — head54,106paths
+
+The coherent150-case targeted acceptance (136unit/14actualPG) mounts ten additional
+GETs under `/api/v1`: account-scoped connection-requests plus raw history and
+disclosures; chat-image-uploads plus raw history; peer-feedback plus raw history
+and removals; `/operator/cases` and `/operator/cases/{case_id}/history`. These are
+privileged retained reads, not student disclosure/media grants or new mutations.
+Actual enabled-auth export:106paths/119operations, SHA256
+`4da93c8717724c4c4c8472c9ce6593e9fd2af3683f2c4e1e2968da2fa9a9e433`.
+Existing96 path objects are unchanged; `OperatorAction` additively includes
+`search_support_cases`, supported by the already shipped immutable0053 schema.
+No new migration or role is introduced. Local acceptance is not a staging
+deployment/publication receipt.
+
+Support inbox returns50-item metadata pages with exact case/actor/topic/status/
+anonymous and half-open aware received-time filters. Status is explicitly
+`current_at_each_request`; received-at/id keysets and metadata anchors do not
+promise commit snapshots. No private reply address/message/details/proof enters
+the list. Detail is the existing deliberate private-content read. History returns
+actual retained status versions and original operator/grant provenance,50-item
+version-descending pages anchored to the first observed max version. Every read,
+empty search and missing-resource inspection commits the real bounded metadata
+audit/canonical fact before response; role/session/final-commit failure exposes
+no data. All new reads require current explicit operator authority, not student
+activation, participant membership or a support-case permission grant.

@@ -1,0 +1,51 @@
+name: Observability native protocol and strict quality
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - deployment/observability/**
+      - .github/workflows/observability-quality.yml
+  push:
+    paths:
+      - deployment/observability/**
+      - .github/workflows/observability-quality.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: observability-quality-${{ github.ref }}
+  cancel-in-progress: false # Allow the bounded driver to remove its owned resources.
+
+jobs:
+  native-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: '0.13.7'
+      - name: Install backend-locked quality and formatter dependencies
+        working-directory: backend
+        run: uv sync --locked --python 3.12
+      - name: Backend selectors, formatting, strict types and storage rules
+        working-directory: backend
+        run: |
+          uv run --no-sync ruff check --config pyproject.toml ../deployment/observability
+          uv run --no-sync ruff format --check --config pyproject.toml ../deployment/observability
+          uv run --no-sync mypy --config-file pyproject.toml --strict ../deployment/observability
+          uv run --no-sync pytest -c pyproject.toml ../deployment/observability/tests/test_storage_budget.py
+      - name: One bounded credential-free Docker native protocol proof
+        run: backend/.venv/bin/python deployment/observability/validate.py --output /tmp/peerly-observability-proof
+      - name: Preserve proof and failure evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: observability-native-proof
+          path: /tmp/peerly-observability-proof
+          if-no-files-found: warn
+          retention-days: 7

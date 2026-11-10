@@ -265,6 +265,7 @@ def audit_value(
         OperatorAction.READ_REPORT: OperatorResourceKind.REPORT,
         OperatorAction.READ_MEDIA: OperatorResourceKind.PROFILE_MEDIA,
         OperatorAction.READ_SUPPORT_CASE: OperatorResourceKind.SUPPORT_CASE,
+        OperatorAction.SEARCH_SUPPORT_CASES: OperatorResourceKind.SUPPORT_CASE,
     }[action]
     if (
         row.operator_id != grant.account_id

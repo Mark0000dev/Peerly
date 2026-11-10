@@ -1,0 +1,38 @@
+# Parent supplies actual existing UIDs, URLs, TLS/auth and access policy.
+# Import only after inventory; do not overwrite an existing datasource accidentally.
+apiVersion: 1
+datasources:
+  - name: Peerly Prometheus
+    uid: '@@PROMETHEUS_UID@@'
+    type: prometheus
+    access: proxy
+    url: '@@PROMETHEUS_URL@@'
+    editable: false
+  - name: Peerly Tempo
+    uid: '@@TEMPO_UID@@'
+    type: tempo
+    access: proxy
+    url: '@@TEMPO_PRIVATE_URL@@'
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: '@@LOKI_UID@@'
+        spanStartTimeShift: '-1m'
+        spanEndTimeShift: '1m'
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: '@@PROMETHEUS_UID@@'
+        tags: [{key: service.name, value: service_name}]
+  - name: Peerly Loki
+    uid: '@@LOKI_UID@@'
+    type: loki
+    access: proxy
+    url: '@@LOKI_URL@@'
+    editable: false
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace_id"\s*:\s*"([0-9a-f]{32})"'
+          datasourceUid: '@@TEMPO_UID@@'
+          url: '$${__value.raw}'

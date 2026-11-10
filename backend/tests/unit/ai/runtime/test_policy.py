@@ -60,3 +60,16 @@ def test_candidate_keeps_auth_unreadable_to_tools_and_excludes_legacy_sandbox() 
     assert "agents.enabled=false" in overrides
     assert 'forced_login_method="chatgpt"' in overrides
     assert all(name not in " ".join(overrides) for name in ("API_KEY", "API_TOKEN", "dangerously"))
+
+
+def test_project_instructions_are_disabled_by_an_integer_zero_config_override() -> None:
+    import tomllib
+
+    arguments = InspectionPolicy(Path("/job"), Path("/job/private-auth")).overrides(pin())
+    settings = arguments[1::2]
+    config = tomllib.loads("\n".join(settings))
+    assert type(config["project_doc_max_bytes"]) is int
+    assert config["project_doc_max_bytes"] == 0
+    assert [setting for setting in settings if setting.startswith("project_doc_max_bytes=")] == [
+        "project_doc_max_bytes=0"
+    ]

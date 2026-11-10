@@ -1,11 +1,10 @@
 """Singleton worker loop around actual queue execution. Main owns resources/entrypoint."""
 
 import asyncio
+from collections.abc import Callable, Coroutine
 from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
-
-from studymate.application.ai.worker import ExecuteNextJob
 
 MAX_POLL_SECONDS = 5
 
@@ -20,7 +19,7 @@ class WorkerState(StrEnum):
 
 @dataclass(slots=True)
 class AiWorkerSupervisor:
-    step: ExecuteNextJob
+    step: Callable[[], Coroutine[object, object, bool]]
     poll_seconds: float = 1
     state: WorkerState = field(default=WorkerState.IDLE, init=False)
     _active: bool = field(default=False, init=False, repr=False)
