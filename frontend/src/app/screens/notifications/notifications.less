@@ -1,0 +1,43 @@
+:host {
+  display: block;
+}
+
+main {
+  max-inline-size: 44rem;
+  margin-inline: auto;
+  padding: 1.5rem;
+  padding-block-end: max(1.5rem, env(safe-area-inset-bottom));
+  overflow-wrap: anywhere;
+}
+
+fieldset {
+  display: grid;
+  gap: 1.25rem;
+  min-inline-size: 0;
+  border: 0;
+  padding: 0;
+  margin-block: 1.5rem;
+}
+
+label {
+  display: flex;
+  align-items: start;
+  gap: 0.75rem;
+  min-block-size: 2.75rem;
+}
+
+small {
+  display: block;
+  margin-block-start: 0.5rem;
+}
+
+button,
+a {
+  max-inline-size: 100%;
+}
+
+.save {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: var(--tui-height-l);
+}

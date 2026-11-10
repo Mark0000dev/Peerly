@@ -1,0 +1,303 @@
+<main aria-label="Requests">
+  <peerly-student-navigation />
+  <header>
+    <h1>Requests</h1>
+    <a tuiLink routerLink="/discover">Discover</a>
+    @if (actorId !== null) {
+      <button
+        tuiLink
+        type="button"
+        [disabled]="decision.isPending || viewed.isPending || list.isFetching || detail.isFetching"
+        (click)="refresh()"
+      >
+        Refresh requests
+      </button>
+    }
+  </header>
+  @if (session.isPending || session.isFetching) {
+    <p role="status">Checking your account…</p>
+  } @else if (session.isError) {
+    <section aria-label="Account unavailable">
+      <p role="alert">We couldn’t check your account.</p>
+      <button tuiLink type="button" (click)="retrySession()">Retry account check</button>
+    </section>
+  } @else if (actorId === null) {
+    <section>
+      <h2>Complete your profile to use Requests</h2>
+      <a tuiButton routerLink="/onboarding">Continue setup</a>
+    </section>
+  } @else {
+    <nav aria-label="Request boxes">
+      <button
+        tuiButton
+        size="m"
+        type="button"
+        [appearance]="box === 'received' ? 'primary' : 'secondary'"
+        [attr.aria-pressed]="box === 'received'"
+        [disabled]="locked"
+        (click)="changeBox('received')"
+      >
+        Received
+      </button>
+      <button
+        tuiButton
+        size="m"
+        type="button"
+        [appearance]="box === 'sent' ? 'primary' : 'secondary'"
+        [attr.aria-pressed]="box === 'sent'"
+        [disabled]="locked"
+        (click)="changeBox('sent')"
+      >
+        Sent
+      </button>
+    </nav>
+    <nav aria-label="Request views">
+      <button
+        tuiLink
+        type="button"
+        [attr.aria-pressed]="view === 'active'"
+        [disabled]="locked"
+        (click)="changeView('active')"
+      >
+        @if (view === 'active') {
+          <strong>Active</strong>
+        } @else {
+          Active
+        }
+      </button>
+      <button
+        tuiLink
+        type="button"
+        [attr.aria-pressed]="view === 'history'"
+        [disabled]="locked"
+        (click)="changeView('history')"
+      >
+        @if (view === 'history') {
+          <strong>History</strong>
+        } @else {
+          History
+        }
+      </button>
+      @if (box === 'received') {
+        <button
+          tuiLink
+          type="button"
+          [attr.aria-pressed]="view === 'recently_declined'"
+          [disabled]="locked"
+          (click)="changeView('recently_declined')"
+        >
+          @if (view === 'recently_declined') {
+            <strong>Recently declined</strong>
+          } @else {
+            Recently declined
+          }
+        </button>
+      }
+    </nav>
+    @if (list.isSuccess) {
+      @if (box === 'sent') {
+        <p>
+          <span
+            >{{ list.data.outgoing_pending }} of
+            {{ list.data.outgoing_pending_limit }} pending</span
+          >
+          ·
+          <span
+            >{{ list.data.successful_today }} of {{ list.data.daily_send_limit }} sent today</span
+          >
+        </p>
+      } @else {
+        <p>{{ list.data.unread_received }} unread received requests</p>
+      }
+    }
+    @if (selectedId !== null) {
+      <button tuiLink type="button" [disabled]="locked" (click)="select(null)">
+        Back to requests
+      </button>
+    }
+    @if (decision.isPending || viewed.isPending) {
+      <p role="status">Checking with the server…</p>
+    }
+    @if (
+      decision.isError || viewed.isError || list.isError || (selectedId !== null && detail.isError)
+    ) {
+      <section aria-label="Request recovery">
+        <p role="alert">{{ errorText }}</p>
+        @if (uncertain) {
+          <button tuiLink type="button" (click)="retryDecision()">Retry same decision</button>
+        }
+        @if (uncertainView) {
+          <button tuiLink type="button" (click)="retryView()">Retry same acknowledgement</button>
+        }
+      </section>
+    }
+    @if ((selectedId === null && list.isPending) || (selectedId !== null && detail.isPending)) {
+      <p role="status">Loading requests…</p>
+    }
+    @for (item of visibleRequests; track item.request_id) {
+      <article
+        tuiAppearance="neutral"
+        tuiCardLarge="compact"
+        [attr.aria-label]="'Request with ' + peerName(item)"
+      >
+        <h2 tabindex="-1" [tuiAutoFocus]="selectedId !== null">{{ peerName(item) }}</h2>
+        <p>{{ requestReason(item) }}</p>
+        @if (item.topic !== null) {
+          <p>{{ item.topic }}</p>
+        }
+        <p>{{ stateText(item) }}</p>
+        @if (item.unread) {
+          <p>Unread</p>
+        }
+        <blockquote>{{ item.text }}</blockquote>
+        @if (item.note !== null) {
+          <p>Note: {{ item.note }}</p>
+        }
+        <p>
+          Sent <time [attr.datetime]="item.sent_at">{{ sentWhen(item) }}</time>
+        </p>
+        @if (selectedId !== null) {
+          <p>
+            Open for <time [attr.datetime]="item.expires_at">{{ expiresWhen(item) }}</time>
+          </p>
+        } @else {
+          <button tuiLink type="button" [disabled]="locked" (click)="select(item.request_id)">
+            Review request
+          </button>
+        }
+        @if (item.peer.state === 'public' && item.capabilities.view_profile) {
+          <a tuiLink [routerLink]="['/people', item.peer.person_id]">View profile</a>
+        }
+        @if (item.state === 'accepted' && item.conversation_id !== null) {
+          <p>Connected. No message was sent by accepting.</p>
+        }
+        @for (disclosed of selectedDetail; track disclosed.disclosure_id) {
+          <section aria-label="Academic context when sent">
+            <h3>Academic context when sent</h3>
+            @if (disclosed.context.sender_goal; as goal) {
+              <p>Sender’s goal: {{ goal.subject_label }}</p>
+              @if (goal.topic !== null) {
+                <p>{{ goal.topic }}</p>
+              }
+              @if (goal.context !== null) {
+                <p>{{ goal.context }}</p>
+              }
+            }
+            @if (disclosed.context.recipient_goal; as goal) {
+              <p>Recipient’s goal: {{ goal.subject_label }}</p>
+              @if (goal.topic !== null) {
+                <p>{{ goal.topic }}</p>
+              }
+              @if (goal.context !== null) {
+                <p>{{ goal.context }}</p>
+              }
+            }
+            @if (disclosed.context.sender_help; as help) {
+              <p>Sender’s help area: {{ help.subject_label }}</p>
+              @if (help.topic_note !== null) {
+                <p>{{ help.topic_note }}</p>
+              }
+            }
+            @if (disclosed.context.recipient_help; as help) {
+              <p>Recipient’s help area: {{ help.subject_label }}</p>
+              @if (help.topic_note !== null) {
+                <p>{{ help.topic_note }}</p>
+              }
+            }
+          </section>
+          @if (item.unread) {
+            <button
+              tuiLink
+              type="button"
+              [disabled]="locked || detail.isFetching"
+              (click)="acknowledge()"
+            >
+              Mark as viewed
+            </button>
+          }
+        }
+        <div class="actions">
+          @if (item.capabilities.accept) {
+            <button
+              tuiButton
+              type="button"
+              [disabled]="!allowed(item, 'accept')"
+              (click)="decide(item, 'accept')"
+              aria-label="Accept request"
+            >
+              Accept
+            </button>
+          }
+          @if (item.capabilities.decline) {
+            <button
+              tuiLink
+              type="button"
+              [disabled]="!allowed(item, 'decline')"
+              (click)="decide(item, 'decline')"
+            >
+              Decline
+            </button>
+          }
+          @if (item.capabilities.undo_decline) {
+            @if (remaining(item) > 0) {
+              <p>Undo available · {{ remaining(item) }} s left</p>
+            } @else {
+              <p role="status">Checking current Undo availability…</p>
+            }
+            <button
+              tuiLink
+              type="button"
+              [disabled]="!allowed(item, 'undo-decline')"
+              (click)="decide(item, 'undo-decline')"
+            >
+              Undo decline
+            </button>
+          }
+          @if (item.capabilities.withdraw) {
+            <button
+              tuiLink
+              type="button"
+              [disabled]="!allowed(item, 'withdraw')"
+              (click)="withdrawal.set(item.request_id)"
+            >
+              Withdraw
+            </button>
+          }
+        </div>
+        @if (withdrawal() === item.request_id) {
+          <section aria-label="Withdraw confirmation">
+            <h3>Withdraw this request?</h3>
+            <p>
+              The recipient won’t be able to accept it. Withdrawing does not refund the daily send
+              count.
+            </p>
+            <button
+              tuiButton
+              type="button"
+              [disabled]="!allowed(item, 'withdraw')"
+              (click)="decide(item, 'withdraw')"
+              aria-label="Withdraw request"
+            >
+              Withdraw
+            </button>
+            <button tuiLink type="button" [disabled]="locked" (click)="withdrawal.set(null)">
+              Keep request
+            </button>
+          </section>
+        }
+      </article>
+    }
+    @if (selectedId === null && list.isSuccess && list.data.requests.length === 0) {
+      <section>
+        <h2>No requests in this view</h2>
+        <p>Requests and their current availability appear here when returned by the server.</p>
+        <a tuiLink routerLink="/discover">Discover people</a>
+      </section>
+    }
+    @if (selectedId === null && list.isSuccess && list.data.next_cursor !== null) {
+      <button tuiLink type="button" [disabled]="locked || list.isFetching" (click)="next()">
+        Next page
+      </button>
+    }
+  }
+</main>

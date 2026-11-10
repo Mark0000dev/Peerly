@@ -1,0 +1,71 @@
+:host {
+  display: block;
+}
+
+main {
+  max-inline-size: 48rem;
+  margin-inline: auto;
+  padding-block: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-bottom));
+  padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  display: grid;
+  gap: 1rem;
+  overflow-wrap: anywhere;
+}
+
+header,
+nav,
+form,
+fieldset,
+article,
+section {
+  display: grid;
+  gap: 1rem;
+}
+
+button,
+a {
+  max-inline-size: 100%;
+}
+
+fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-block-size: 2.75rem;
+}
+
+.photo {
+  min-block-size: 12rem;
+  display: grid;
+  place-items: center;
+}
+
+.photo img {
+  inline-size: 100%;
+  max-block-size: 24rem;
+  object-fit: cover;
+}
+
+form,
+fieldset {
+  min-inline-size: 0;
+}
+
+h1,
+h2,
+h3,
+p,
+ul {
+  margin-block: 0;
+}
+
+section,
+[role='alert'] {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+form,
+section {
+  grid-template-columns: minmax(0, 1fr);
+}

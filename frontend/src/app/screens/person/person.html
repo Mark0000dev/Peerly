@@ -1,0 +1,270 @@
+<main>
+  <header>
+    <a tuiButton appearance="flat" routerLink="/">Peerly</a>
+    <h1 tuiAutoFocus tabindex="-1">Full profile</h1>
+    @if (
+      !session.isFetching &&
+      session.data?.capabilities?.can_use_student_features === true &&
+      disclosed
+    ) {
+      <button tuiButton appearance="flat" [attr.aria-expanded]="menu()" (click)="menu.set(!menu())">
+        More options
+      </button>
+      @if (menu()) {
+        <nav aria-label="Profile safety">
+          @if (canReport) {
+            <button tuiButton appearance="secondary" (click)="open('report')">
+              Report profile
+            </button>
+          }
+          @if (ownBlock; as block) {
+            <button tuiButton appearance="secondary" (click)="open('block')">
+              {{ block.blocked ? 'Unblock person' : 'Block person' }}
+            </button>
+          }
+        </nav>
+      }
+    }
+  </header>
+  @if (session.isPending || session.isFetching) {
+    <p role="status">Checking your session…</p>
+  } @else if (session.isError) {
+    <p role="alert">We couldn’t check your session.</p>
+    <button tuiButton (click)="session.refetch()">Check session</button>
+  } @else if (session.data?.capabilities?.can_use_student_features !== true) {
+    <p>Sign in and complete student verification to view profiles.</p>
+    <a tuiButton routerLink="/onboarding">Continue</a>
+  } @else {
+    @if (profile.isPending) {
+      <p role="status">Loading profile…</p>
+    }
+    @if (panel() === null) {
+      @if (errorText; as message) {
+        <section role="alert">
+          <p>{{ message }}</p>
+          @if (retryAt; as deadline) {
+            <p>Try again after {{ deadline | date: 'medium' }}.</p>
+          }
+          <button
+            tuiButton
+            appearance="secondary"
+            aria-label="Refresh current status"
+            (click)="refresh()"
+          >
+            Refresh current status
+          </button>
+        </section>
+      }
+    }
+    @if (!profile.isError) {
+      @if (profile.data; as person) {
+        <article tuiCardLarge appearance="floating">
+          <div class="photo">
+            @if (photo.isError || photoDecodeFailed()) {
+              <p role="status">Photo didn’t load. The profile may still be available.</p>
+              <button tuiButton appearance="secondary" (click)="retryPhoto()">Retry photo</button>
+            } @else if (photoUrl(); as url) {
+              <img
+                [src]="url"
+                [alt]="'Photo of ' + person.display_name"
+                (error)="photoDecodeFailed.set(true)"
+              />
+            } @else {
+              <p role="status">Loading photo…</p>
+            }
+          </div>
+          <h2>{{ person.display_name }}</h2>
+          <p>APU email confirmed. This person confirmed access to an APU email address.</p>
+          @if (person.help_subjects; as help) {
+            <section>
+              <h3>Can help with</h3>
+              @for (subject of help.subjects; track subject.subject_id) {
+                <p>
+                  {{ subject.label }}
+                  @if (subject.topic_note !== null) {
+                    — {{ subject.topic_note }}
+                  }
+                </p>
+              }
+            </section>
+          }
+          @if (person.goal; as goal) {
+            <section>
+              <h3>Learning goal</h3>
+              <p>
+                {{ goal.subject.label }}
+                @if (goal.topic !== null) {
+                  — {{ goal.topic }}
+                }
+              </p>
+              @if (goal.context !== null) {
+                <p>{{ goal.context }}</p>
+              }
+            </section>
+          }
+          @if (person.about !== null) {
+            <section>
+              <h3>About</h3>
+              <p>{{ person.about }}</p>
+            </section>
+          }
+          @if (person.programme !== null || person.year_label !== null) {
+            <section>
+              <h3>Programme</h3>
+              <p>{{ person.programme }} {{ person.year_label }}</p>
+              <p>Provided by this student.</p>
+            </section>
+          }
+          @if (person.languages.length > 0) {
+            <section>
+              <h3>Languages</h3>
+              <ul>
+                @for (language of person.languages; track language) {
+                  <li>{{ languageName(language) }}</li>
+                }
+              </ul>
+            </section>
+          }
+          @if (session.data; as feedbackActor) {
+            <app-person-feedback-summary
+              [actorId]="feedbackActor.account_id"
+              [personId]="person.id"
+              (sessionFailure)="summaryFailure($event)"
+            />
+          }
+        </article>
+      }
+    }
+    @if (blocks.data?.next_cursor !== null && blocks.data?.next_cursor !== undefined) {
+      <button tuiButton appearance="flat" (click)="nextBlocks()">Check next blocked people</button>
+    }
+    @if (disclosed) {
+      <ng-template
+        [tuiDialog]="panel() !== null"
+        (tuiDialogChange)="closePanel()"
+        [tuiDialogOptions]="{
+          size: 'm',
+          appearance: breakpoint() === 'mobile' ? 'fullscreen' : 'taiga',
+          label: panel() === 'block' ? 'Profile safety' : 'Report profile',
+        }"
+      >
+        @if (errorText; as message) {
+          <div role="alert">
+            <p>{{ message }}</p>
+            @if (retryAt; as deadline) {
+              <p>Try again after {{ deadline | date: 'medium' }}.</p>
+            }
+            <button
+              tuiButton
+              appearance="secondary"
+              aria-label="Refresh current status"
+              (click)="refresh()"
+            >
+              Refresh
+            </button>
+          </div>
+        }
+        @if (panel() === 'block') {
+          <section aria-label="Confirm block change">
+            <h2>{{ ownBlock?.blocked ? 'Unblock this person?' : 'Block this person?' }}</h2>
+            <p>This changes your own block only. Reporting is a separate action.</p>
+            @if (blockMutation.isPending) {
+              <p role="status">Saving block change…</p>
+            }
+            <button tuiButton [disabled]="blockMutation.isPending" (click)="changeBlock()">
+              Confirm
+            </button>
+            @if (blockUncertain) {
+              <button
+                tuiButton
+                appearance="secondary"
+                aria-label="Retry same block action"
+                (click)="changeBlock(true)"
+              >
+                Retry
+              </button>
+            }
+            <button tuiButton appearance="flat" (click)="panel.set(null)">Close</button>
+          </section>
+        }
+        @if (panel() === 'report') {
+          <section aria-label="Report profile">
+            <p>Reporting does not automatically block this person.</p>
+            @if (reportMutation.isSuccess) {
+              <p role="status">Report stored. This receipt does not confirm human review.</p>
+            } @else {
+              @if (reportMutation.isPending) {
+                <p role="status">Submitting report…</p>
+              }
+              <form [formGroup]="reportForm" (ngSubmit)="submitReport()">
+                <fieldset [disabled]="reportMutation.isPending || reportUncertain">
+                  <legend>Reason</legend>
+                  <label
+                    ><input
+                      tuiRadio
+                      type="radio"
+                      formControlName="category"
+                      value="impersonation"
+                    />
+                    Impersonation</label
+                  >
+                  <label
+                    ><input tuiRadio type="radio" formControlName="category" value="harassment" />
+                    Harassment</label
+                  >
+                  <label
+                    ><input
+                      tuiRadio
+                      type="radio"
+                      formControlName="category"
+                      value="inappropriate_content"
+                    />
+                    Inappropriate content</label
+                  >
+                  <label
+                    ><input tuiRadio type="radio" formControlName="category" value="spam" />
+                    Spam</label
+                  >
+                  <label
+                    ><input tuiRadio type="radio" formControlName="category" value="other" />
+                    Other</label
+                  >
+                </fieldset>
+                <tui-textfield
+                  ><label tuiLabel for="report-comment">Comment (up to 1000 characters)</label>
+                  <textarea
+                    tuiTextarea
+                    id="report-comment"
+                    [readOnly]="reportMutation.isPending || reportUncertain"
+                    formControlName="comment"
+                  ></textarea>
+                </tui-textfield>
+                @if (validation(); as problem) {
+                  <p role="alert">{{ problem }}</p>
+                }
+                <button
+                  tuiButton
+                  type="submit"
+                  [disabled]="reportMutation.isPending || reportUncertain"
+                >
+                  Submit report
+                </button>
+              </form>
+              @if (reportUncertain) {
+                <button
+                  tuiButton
+                  appearance="secondary"
+                  aria-label="Retry same report"
+                  (click)="submitReport(true)"
+                >
+                  Retry
+                </button>
+              }
+            }
+            <button tuiButton appearance="flat" (click)="panel.set(null)">Close</button>
+          </section>
+        }
+      </ng-template>
+    }
+  }
+</main>

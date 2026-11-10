@@ -1,0 +1,274 @@
+<ng-template
+  let-dialogId="id"
+  [tuiDialog]="open()"
+  (tuiDialogChange)="close()"
+  [tuiDialogOptions]="dialogOptions"
+>
+  <div class="composer-layout">
+    <section aria-label="Request composer">
+      @if (displayName; as name) {
+        <h2 [id]="dialogId" [tuiAutoFocus]="true">Review request · To {{ name }}</h2>
+      } @else {
+        <h2 [id]="dialogId" [tuiAutoFocus]="true">Review request</h2>
+      }
+      <p>
+        Review the saved academic context, your request text and optional note. Only Send request
+        sends.
+      </p>
+      @if (mismatch) {
+        <section aria-label="Draft reconciliation">
+          <h3>Your draft belongs to another person or mode</h3>
+          <p>
+            Keep its original context, or deliberately discard it before reviewing this selection.
+          </p>
+          <button tuiLink type="button" [disabled]="pending" (click)="keepOriginal()">
+            Keep original draft
+          </button>
+          <button tuiLink type="button" [disabled]="locked" (click)="discardAndReview()">
+            Discard draft and review this selection
+          </button>
+        </section>
+      } @else {
+        @if (checking.isPending) {
+          <p role="status">Checking the current pair and academic context…</p>
+        }
+        @if (sending.isPending) {
+          <p role="status">Sending your request…</p>
+        }
+        @if (errorText; as message) {
+          <section aria-label="Request recovery">
+            <p role="alert">{{ message }}</p>
+            @if (uncertain) {
+              <button tuiLink type="button" [disabled]="!trusted()" (click)="retrySend()">
+                Retry same request
+              </button>
+            } @else if (previewUncertain) {
+              <button tuiLink type="button" [disabled]="!trusted()" (click)="retryPreview()">
+                Retry same preview check
+              </button>
+            } @else {
+              <button tuiLink type="button" [disabled]="pending || !trusted()" (click)="review()">
+                Review current context
+              </button>
+            }
+          </section>
+        }
+        @if (pair; as relationship) {
+          <section aria-label="Existing pair">
+            <h3>A request or connection reference already exists</h3>
+            <p>
+              This response does not send your draft or accept someone else’s request. Open Requests
+              for its current status.
+            </p>
+            <a tuiLink routerLink="/requests" [queryParams]="requestParameters(relationship)"
+              >Review existing request</a
+            >
+            <button tuiLink type="button" [disabled]="locked" (click)="review()">
+              Recheck current pair
+            </button>
+          </section>
+        } @else {
+          @if (retained; as preview) {
+            <section aria-label="Saved academic context">
+              <h3>Saved academic context · read only</h3>
+              @if (preview.context.sender_goal; as goal) {
+                <p>Sender’s goal: {{ goal.subject_label }}</p>
+                @if (goal.topic !== null) {
+                  <p>{{ goal.topic }}</p>
+                }
+                @if (goal.context !== null) {
+                  <p>{{ goal.context }}</p>
+                }
+              }
+              @if (preview.context.recipient_goal; as goal) {
+                <p>Recipient’s goal: {{ goal.subject_label }}</p>
+                @if (goal.topic !== null) {
+                  <p>{{ goal.topic }}</p>
+                }
+                @if (goal.context !== null) {
+                  <p>{{ goal.context }}</p>
+                }
+              }
+              @if (preview.context.sender_help; as help) {
+                <p>Sender’s help area: {{ help.subject_label }}</p>
+                @if (help.topic_note !== null) {
+                  <p>{{ help.topic_note }}</p>
+                }
+              }
+              @if (preview.context.recipient_help; as help) {
+                <p>Recipient’s help area: {{ help.subject_label }}</p>
+                @if (help.topic_note !== null) {
+                  <p>{{ help.topic_note }}</p>
+                }
+              }
+              @if (preview.context.mode === 'study_together') {
+                <p>Shared learning. Neither person is presented as a teacher.</p>
+              }
+            </section>
+            @if (proposed; as next) {
+              <section aria-label="Changed academic context">
+                <h3>The saved academic context changed</h3>
+                <p>
+                  Your text and note are kept. Review the new source before attaching them to it.
+                </p>
+                @if (next.context.sender_goal; as goal) {
+                  <p>Updated sender’s goal: {{ goal.subject_label }}</p>
+                  @if (goal.topic !== null) {
+                    <p>{{ goal.topic }}</p>
+                  }
+                  @if (goal.context !== null) {
+                    <p>{{ goal.context }}</p>
+                  }
+                }
+                @if (next.context.recipient_goal; as goal) {
+                  <p>Updated recipient’s goal: {{ goal.subject_label }}</p>
+                  @if (goal.topic !== null) {
+                    <p>{{ goal.topic }}</p>
+                  }
+                  @if (goal.context !== null) {
+                    <p>{{ goal.context }}</p>
+                  }
+                }
+                @if (next.context.sender_help; as help) {
+                  <p>Updated sender’s help area: {{ help.subject_label }}</p>
+                  @if (help.topic_note !== null) {
+                    <p>{{ help.topic_note }}</p>
+                  }
+                }
+                @if (next.context.recipient_help; as help) {
+                  <p>Updated recipient’s help area: {{ help.subject_label }}</p>
+                  @if (help.topic_note !== null) {
+                    <p>{{ help.topic_note }}</p>
+                  }
+                }
+                <button tuiLink type="button" [disabled]="locked" (click)="acceptContext(false)">
+                  Use reviewed context and keep my text
+                </button>
+                <button tuiLink type="button" [disabled]="locked" (click)="acceptContext(true)">
+                  Discard draft and use new suggestion
+                </button>
+              </section>
+            }
+            <form id="request-composer-form" tuiForm="m" [formGroup]="form" (ngSubmit)="submit()">
+              <tui-textfield
+                ><label tuiLabel for="request-text">Request text</label>
+                <textarea
+                  #requestTextFocus
+                  tuiTextarea
+                  id="request-text"
+                  formControlName="text"
+                  [readOnly]="locked || proposed !== null"
+                  aria-describedby="request-text-hint"
+                  aria-details="request-text-hint"
+                  [tuiAutoFocus]="false"
+                ></textarea>
+              </tui-textfield>
+              <p id="request-text-hint">
+                Request text: {{ codePoints(form.controls.text.value) }} / 240 characters.
+              </p>
+              <tui-error
+                [formControl]="form.controls.text"
+                [attr.role]="
+                  form.controls.text.touched && form.controls.text.invalid ? 'alert' : null
+                "
+              />
+              @if (edited) {
+                <p>Edited request text. Your saved goal is unchanged.</p>
+              }
+              <button
+                tuiLink
+                type="button"
+                [disabled]="locked || proposed !== null"
+                (click)="resetText()"
+              >
+                Reset request text to server suggestion
+              </button>
+              <button
+                tuiLink
+                type="button"
+                [attr.aria-expanded]="noteOpen()"
+                (click)="noteOpen.set(!noteOpen())"
+              >
+                Personal note · optional
+              </button>
+              @if (noteOpen()) {
+                <tui-textfield
+                  ><label tuiLabel for="request-note">Personal note</label>
+                  <textarea
+                    #requestNoteFocus
+                    tuiTextarea
+                    id="request-note"
+                    formControlName="note"
+                    [readOnly]="locked || proposed !== null"
+                    aria-describedby="request-note-hint"
+                    aria-details="request-note-hint"
+                    [tuiAutoFocus]="false"
+                  ></textarea>
+                </tui-textfield>
+                <p id="request-note-hint">
+                  Personal note: {{ codePoints(form.controls.note.value) }} / 240 characters.
+                </p>
+                <tui-error
+                  [formControl]="form.controls.note"
+                  [attr.role]="
+                    form.controls.note.touched && form.controls.note.invalid ? 'alert' : null
+                  "
+                />
+              }
+              <p>
+                <span
+                  >{{ preview.quota.outgoing_pending }} of
+                  {{ preview.quota.outgoing_pending_limit }} pending</span
+                >
+                ·
+                <span
+                  >{{ preview.quota.successful_today }} of {{ preview.quota.daily_send_limit }} sent
+                  today</span
+                >
+              </p>
+              <p>
+                <span>{{ preview.quota.outgoing_pending_remaining }} pending slots remaining</span>
+                ·
+                <span>{{ preview.quota.daily_sends_remaining }} sends remaining today</span>
+              </p>
+              <p>
+                Daily allowance resets at {{ preview.quota.reset_at | date: 'HH:mm' }} Kuala Lumpur
+                time.
+              </p>
+              @if (!preview.can_send) {
+                <p role="status">{{ availabilityText }}</p>
+                @if (preview.cooldown_until !== null) {
+                  <p>
+                    Available after {{ preview.cooldown_until | date: 'medium' }} Kuala Lumpur time.
+                  </p>
+                }
+                <a tuiLink routerLink="/requests">Review Requests</a>
+              }
+              <button tuiLink type="button" [disabled]="locked" (click)="review()">
+                Recheck availability
+              </button>
+            </form>
+          }
+        }
+      }
+    </section>
+    <footer aria-label="Request actions">
+      @if (retained; as preview) {
+        @if (!mismatch && pair === null && preview.can_send) {
+          <button
+            tuiButton
+            type="submit"
+            form="request-composer-form"
+            aria-label="Send request"
+            [disabled]="!canSend"
+          >
+            Send
+          </button>
+        }
+      }
+      <button tuiLink type="button" [disabled]="pending" (click)="close()">
+        Close without sending
+      </button>
+    </footer>
+  </div>
+</ng-template>

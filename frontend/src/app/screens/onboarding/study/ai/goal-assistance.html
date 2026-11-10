@@ -1,0 +1,156 @@
+<section aria-label="AI assistance">
+  <p>
+    AI assistance · optional. Your text is sent only when you ask. You can write and save as usual.
+  </p>
+  <div class="actions">
+    <button
+      tuiButton
+      type="button"
+      appearance="flat"
+      size="s"
+      [disabled]="!mayClarify"
+      (click)="request('clarify_goal')"
+    >
+      Suggest clearer wording
+    </button>
+    <button
+      tuiButton
+      type="button"
+      appearance="flat"
+      size="s"
+      [disabled]="!maySuggest"
+      (click)="request('suggest_subject')"
+    >
+      Suggest a knowledge area
+    </button>
+  </div>
+  @if (!permitted) {
+    <p role="status">
+      AI assistance needs a current verified session. Your goal text is unchanged.
+    </p>
+  } @else if (submitting) {
+    <p role="status">Requesting AI assistance… Your text is unchanged.</p>
+  } @else if (uncertain) {
+    <p role="status">{{ admissionMessage }}</p>
+    <button tuiButton type="button" appearance="secondary" size="s" (click)="retryAdmission()">
+      Retry the same AI request
+    </button>
+  } @else if (changed) {
+    <p role="status">
+      You changed the goal after asking. This suggestion was for the earlier version.
+    </p>
+    <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+      Dismiss earlier suggestion
+    </button>
+  } @else if (admissionError !== null) {
+    <p role="status">{{ admissionMessage }}</p>
+    <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+      Keep writing myself
+    </button>
+  } @else if (active) {
+    @if (cancelling) {
+      <p role="status">Checking cancellation… Your goal is unchanged.</p>
+    } @else if (cancelFailed) {
+      <p role="status">Cancellation isn’t confirmed. Check the job or retry cancellation.</p>
+      <div class="actions">
+        <button tuiButton type="button" appearance="secondary" size="s" (click)="cancel()">
+          Retry cancellation
+        </button>
+        <button tuiButton type="button" appearance="flat" size="s" (click)="check()">
+          Check AI job
+        </button>
+        <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+          Keep writing myself
+        </button>
+      </div>
+    } @else if (readFailed) {
+      <p role="status">We couldn’t check this AI job. Your goal is unchanged.</p>
+      <button tuiButton type="button" appearance="secondary" size="s" (click)="check()">
+        Check AI job again
+      </button>
+      <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+        Keep writing myself
+      </button>
+    } @else if (checkingJob) {
+      <p role="status">Checking your AI job… Your goal text is unchanged.</p>
+    } @else if (job; as current) {
+      @switch (current.state) {
+        @case ('queued') {
+          <p role="status">AI assistance · waiting. You can keep editing or save.</p>
+        }
+        @case ('running') {
+          <p role="status">AI assistance · preparing a suggestion. You can keep editing or save.</p>
+        }
+        @case ('cancelled') {
+          <p role="status">AI suggestion cancelled. Your goal is unchanged.</p>
+        }
+        @case ('expired') {
+          <p role="status">This AI job expired. You can ask again or keep writing yourself.</p>
+        }
+        @case ('failed') {
+          <p role="status">
+            We couldn’t get a suggestion. You can ask again or keep writing yourself.
+          </p>
+        }
+        @case ('succeeded') {
+          <p>
+            Review before using. Applying a suggestion edits your draft; it does not save your goal.
+          </p>
+          @if (suggestion; as text) {
+            <blockquote>{{ text }}</blockquote>
+            <button
+              tuiButton
+              type="button"
+              size="s"
+              [disabled]="applyDisabled()"
+              (click)="useText()"
+            >
+              Use suggestion
+            </button>
+          } @else {
+            @if (areas.length === 0) {
+              <p role="status">
+                No knowledge area was suggested from this list. Choose one yourself.
+              </p>
+            }
+            @for (area of areas; track area.id) {
+              <button
+                tuiButton
+                type="button"
+                appearance="secondary"
+                size="s"
+                [disabled]="applyDisabled()"
+                (click)="useArea(area.id)"
+              >
+                Use {{ area.name }}
+              </button>
+            }
+            <p>Area suggestions are advice, not verified course knowledge or a guaranteed match.</p>
+          }
+        }
+      }
+      @if (pendingJob) {
+        @if (pollingStopped) {
+          <p role="status">
+            Automatic checking has stopped. Check the job again for its current outcome.
+          </p>
+          <button tuiButton type="button" appearance="flat" size="s" (click)="check()">
+            Check AI job
+          </button>
+        }
+        <button tuiButton type="button" appearance="flat" size="s" (click)="cancel()">
+          Cancel AI job
+        </button>
+      } @else {
+        @if (mayAskAgain) {
+          <button tuiButton type="button" appearance="secondary" size="s" (click)="askAgain()">
+            Ask again
+          </button>
+        }
+        <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+          Keep mine
+        </button>
+      }
+    }
+  }
+</section>

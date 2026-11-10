@@ -1,0 +1,86 @@
+<section aria-label="Message composer">
+  <form #messageForm="ngForm" [formGroup]="form" (ngSubmit)="submit()">
+    <app-chat-image-sender
+      [actor]="actor()"
+      [conversationId]="conversationId()"
+      [canSend]="canSend() && !pending && !unknown"
+      (stateChange)="imageStateChanged()"
+      (stored)="imageStored()"
+    />
+    <tui-textfield
+      ><label tuiLabel for="chat-message-text">Message</label
+      ><textarea
+        id="chat-message-text"
+        tuiTextarea
+        [tuiAutoFocus]="false"
+        [formControl]="form.controls.text"
+        [readOnly]="locked"
+        aria-describedby="chat-message-count chat-message-error"
+        aria-details="chat-message-count"
+      ></textarea>
+    </tui-textfield>
+    <tui-error
+      id="chat-message-error"
+      [error]="
+        form.controls.text.invalid && (messageForm.submitted || form.controls.text.dirty)
+          ? messageProblem(form.controls.text.value)
+          : null
+      "
+    />
+    <output
+      id="chat-message-count"
+      for="chat-message-text"
+      aria-label="Message character count"
+      aria-live="off"
+      >{{ count }} / 2000</output
+    >
+    <button tuiButton type="submit" [disabled]="locked" aria-label="Send message">Send</button>
+  </form>
+  @if (pending) {
+    <p role="status">Checking message operation…</p>
+  }
+  @if (
+    (send.isError || cancel.isError || lookup.isError) &&
+    (terminal === undefined || !('operation_id' in terminal))
+  ) {
+    <p role="alert">{{ errorText }}</p>
+  }
+  @if (unknown) {
+    <button
+      tuiButton
+      type="button"
+      [disabled]="pending"
+      (click)="check()"
+      aria-label="Check message status"
+    >
+      Status
+    </button>
+    <button
+      tuiButton
+      type="button"
+      [disabled]="pending || !canSend()"
+      (click)="retry()"
+      aria-label="Retry same message"
+    >
+      Retry
+    </button>
+    <button
+      tuiButton
+      type="button"
+      [disabled]="pending"
+      (click)="cancelIntent()"
+      aria-label="Cancel message intent"
+    >
+      Cancel
+    </button>
+  }
+  @if (terminal; as receipt) {
+    @if ('message' in receipt) {
+      <p role="status">Message stored. This is not a delivery or read receipt.</p>
+    } @else if ('operation_id' in receipt) {
+      <p role="status">Message intent cancelled. Your text remains editable.</p>
+    } @else {
+      <p role="status">Not observed yet. This does not prove that a send cannot still finish.</p>
+    }
+  }
+</section>

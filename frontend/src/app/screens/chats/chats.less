@@ -1,0 +1,79 @@
+:host {
+  display: block;
+}
+
+.chats {
+  margin: auto;
+  max-inline-size: 90rem;
+  padding: 1rem;
+  padding-block-end: max(1rem, env(safe-area-inset-bottom));
+  overflow-wrap: anywhere;
+}
+
+header,
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+header {
+  justify-content: space-between;
+}
+
+.panes,
+.conversation-list,
+.thread {
+  display: grid;
+  min-inline-size: 0;
+  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.panes.selected .conversation-list {
+  display: none;
+}
+
+article,
+section {
+  min-inline-size: 0;
+}
+
+ol {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.message-text {
+  white-space: pre-wrap;
+}
+
+@media (width >= 60rem) {
+  .panes.selected {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+
+  .panes.selected .conversation-list {
+    display: grid;
+  }
+}
+
+.conversation-row {
+  align-items: start;
+}
+
+.row-copy {
+  min-inline-size: 0;
+}
+
+.row-copy p {
+  margin-block: 0.25rem;
+}
+
+.context-copy p {
+  margin-block: 0.5rem;
+}

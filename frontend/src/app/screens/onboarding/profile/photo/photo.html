@@ -1,0 +1,205 @@
+<section aria-labelledby="photo-heading">
+  <h3 id="photo-heading">Your photo</h3>
+  @if (!permitted) {
+    <p role="status">
+      Your sign-in is being checked. Your selected photo is still here; uploading is paused.
+    </p>
+  }
+  @if (displayPhoto; as photo) {
+    <img class="photo" [src]="photo.display_url" alt="Your current profile photo" />
+  }
+  <p>Use a clear photo of yourself. JPEG or PNG, up to {{ maxBytes / 1000000 }} MB.</p>
+  <input #fileInput type="file" accept="image/jpeg,image/png" hidden (change)="picked($event)" />
+  <button tuiButton type="button" appearance="secondary" [disabled]="locked" (click)="chooseFile()">
+    {{ completedSelection ? 'Choose new photo' : 'Choose photo' }}
+  </button>
+  <input
+    #cameraInput
+    type="file"
+    accept="image/jpeg,image/png"
+    capture="user"
+    hidden
+    (change)="picked($event)"
+  />
+  <button tuiButton type="button" appearance="secondary" [disabled]="locked" (click)="takePhoto()">
+    Take photo
+  </button>
+  @if (history.isPending) {
+    <p role="status">Checking your recent photo uploads…</p>
+  }
+  @if (history.isError) {
+    <p role="alert">
+      We couldn’t load your recent uploads. Refresh before starting another request.
+    </p>
+  }
+  <button tuiLink type="button" [disabled]="busy || history.isFetching" (click)="refreshHistory()">
+    Refresh recent uploads
+  </button>
+  @if (history.data; as recent) {
+    @if (recent.uploads.length > 0) {
+      <h4>Recent uploads</h4>
+      <ul>
+        @for (item of recent.uploads; track item.upload.id; let position = $index) {
+          <li>
+            <span>Upload {{ position + 1 }} · {{ item.upload.state }}</span>
+            <button
+              tuiLink
+              type="button"
+              [disabled]="busy"
+              [attr.aria-label]="'Check upload ' + (position + 1)"
+              (click)="resumeUpload(item.upload.id)"
+            >
+              Check upload
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  }
+  @if (reselecting && !hasSelectedFile && finalizing.isIdle) {
+    <p>
+      To continue this upload, reselect the exact file you previously sent. Nothing is transferred
+      until you confirm it.
+    </p>
+  }
+  @if (hasPreview) {
+    <button tuiLink type="button" [disabled]="locked" (click)="review()">
+      Edit selected photo
+    </button>
+  }
+  @if (nativeBusy) {
+    <tui-loader
+      [loading]="true"
+      textContent="Preparing or transferring your photo…"
+      role="status"
+    />
+  }
+  @if (starting.isPending) {
+    <p role="status">Requesting a photo upload…</p>
+  }
+  @if (finalizing.isPending) {
+    <p role="status">Starting photo processing…</p>
+  }
+  @if (problem; as error) {
+    <p role="alert">{{ error }}</p>
+  }
+  @if (photoConflict) {
+    <button tuiButton type="button" [disabled]="busy || history.isFetching" (click)="reloadPhoto()">
+      Reload current photo
+    </button>
+  }
+  @if (starting.isError && !photoConflict) {
+    <button tuiButton type="button" [disabled]="busy" (click)="retryStart()">
+      Retry photo request
+    </button>
+  }
+  @if (upload.isError) {
+    <p role="alert">We couldn’t check the photo upload. Check status to see its current outcome.</p>
+  }
+  @if (upload.data; as current) {
+    @switch (current.state) {
+      @case ('uploading') {
+        @if (finalizing.isIdle) {
+          <p role="status">Waiting for the file transfer.</p>
+        }
+        @if (hasSelectedFile) {
+          <button
+            tuiButton
+            type="button"
+            [disabled]="busy || !history.isSuccess || history.isFetching"
+            (click)="retryTransfer()"
+          >
+            Retry selected file
+          </button>
+        }
+      }
+      @case ('queued') {
+        <p role="status">Your photo is waiting for processing.</p>
+      }
+      @case ('processing') {
+        <p role="status">Your photo is being processed.</p>
+      }
+      @case ('ready') {
+        <p role="status">Your photo is saved.</p>
+      }
+      @case ('rejected') {
+        <p role="alert">
+          We couldn’t use this photo. Choose another JPEG or PNG, or try again if processing was
+          unavailable.
+        </p>
+      }
+      @case ('expired') {
+        <p role="alert">This upload expired. Choose your photo again to start a new request.</p>
+      }
+      @case ('cancelled') {
+        <p role="status">This upload was cancelled.</p>
+      }
+    }
+    @if (pending) {
+      <button
+        tuiButton
+        type="button"
+        appearance="secondary"
+        [disabled]="!permitted || cancelling.isPending"
+        (click)="cancel()"
+      >
+        {{ cancelling.isPending ? 'Cancelling…' : 'Cancel upload' }}
+      </button>
+    }
+  }
+  @if (upload.data || upload.isError) {
+    <button tuiLink type="button" (click)="checkStatus()">Check photo status</button>
+  }
+  @if (finalizing.isError) {
+    <button tuiLink type="button" [disabled]="busy" (click)="retryFinalize()">
+      Retry finalization
+    </button>
+  }
+</section>
+
+<ng-template
+  [tuiDialog]="editing()"
+  [tuiDialogOptions]="{ label: 'Crop photo', size: 'm', appearance: 'fullscreen' }"
+  (tuiDialogChange)="editing.set($event)"
+>
+  <section aria-label="Photo crop editor">
+    <canvas
+      #preview
+      tuiAutoFocus
+      width="320"
+      height="320"
+      tabindex="0"
+      role="group"
+      aria-label="Crop area. Use arrow keys to move, plus and minus to zoom, zero to reset."
+      (keydown)="key($event)"
+      (tuiPan)="pan($event)"
+      >Use the move and zoom controls to choose your crop.</canvas
+    >
+    <div class="controls">
+      <button tuiButton type="button" appearance="secondary" (click)="move(-8, 0)">Left</button>
+      <button tuiButton type="button" appearance="secondary" (click)="move(8, 0)">Right</button>
+      <button tuiButton type="button" appearance="secondary" (click)="move(0, -8)">Up</button>
+      <button tuiButton type="button" appearance="secondary" (click)="move(0, 8)">Down</button>
+      <button tuiButton type="button" appearance="secondary" (click)="zoom(1.25)">Zoom in</button>
+      <button tuiButton type="button" appearance="secondary" (click)="zoom(0.8)">Zoom out</button>
+    </div>
+    <button tuiLink type="button" (click)="resetCrop()">Reset crop</button>
+    <button
+      tuiButton
+      type="button"
+      [disabled]="busy || !history.isSuccess || history.isFetching"
+      (click)="usePhoto(false)"
+    >
+      Use photo
+    </button>
+    <button
+      tuiLink
+      type="button"
+      [disabled]="busy || !history.isSuccess || history.isFetching"
+      (click)="usePhoto(true)"
+    >
+      Use the original without cropping
+    </button>
+    <button tuiLink type="button" [disabled]="busy" (click)="editing.set(false)">Cancel</button>
+  </section>
+</ng-template>

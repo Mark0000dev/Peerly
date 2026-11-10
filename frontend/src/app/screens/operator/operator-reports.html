@@ -1,0 +1,288 @@
+<main>
+  <header>
+    <a tuiLink routerLink="/">Peerly</a>
+    <h1>Operator · reports</h1>
+    <p>Read only · every search and record inspection is recorded.</p>
+    <a tuiLink routerLink="/operator/accounts">Inspect accounts</a>
+  </header>
+  @if (session.isPending || session.isFetching) {
+    <p role="status">Checking your Google session…</p>
+  } @else if (session.isError) {
+    <section role="alert">
+      <h2>Your session could not be checked</h2>
+      <button tuiButton type="button" (click)="recheck()">Retry</button>
+    </section>
+  } @else if (actorId === null) {
+    <section>
+      <h2>Sign in with your operator Google account</h2>
+      <a tuiLink routerLink="/onboarding">Continue to sign in</a>
+    </section>
+  } @else if (denied) {
+    <section role="alert">
+      <h2>Operator access denied</h2>
+      <p>This account does not currently have access to these records.</p>
+      <button tuiButton type="button" (click)="recheck()" aria-label="Check operator access again">
+        Recheck
+      </button>
+    </section>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="search()" aria-label="Report search">
+      <h2>Find retained reports</h2>
+      <div class="filters">
+        @for (field of fields; track field.key) {
+          <div>
+            <label tuiLabel [for]="'report-' + field.key">{{ field.label }}</label>
+            <tui-textfield
+              ><input
+                tuiInput
+                [id]="'report-' + field.key"
+                [formControl]="form.controls[field.key]"
+                [attr.aria-describedby]="'report-hint-' + field.key"
+                autocomplete="off"
+            /></tui-textfield>
+            <p [id]="'report-hint-' + field.key">{{ field.hint }}</p>
+          </div>
+        }
+        <div>
+          <label tuiLabel for="report-category">Category</label>
+          <tui-textfield
+            ><select
+              tuiSelect
+              id="report-category"
+              [items]="categories"
+              [formControl]="form.controls.category"
+            ></select
+          ></tui-textfield>
+        </div>
+      </div>
+      @if (formError; as error) {
+        <p role="alert">{{ error }}</p>
+      }
+      <button tuiButton type="submit" aria-label="Search retained reports">Search</button>
+    </form>
+    @if (state.error; as error) {
+      <section role="alert">
+        <p>{{ error }}</p>
+        <button tuiButton type="button" (click)="navigate({ reports_cursor: null, report: null })">
+          Reset
+        </button>
+      </section>
+    } @else {
+      <section aria-label="Report results">
+        <h2>Reports</h2>
+        <p>Up to 50 metadata rows per page. Comments open only with an individual report.</p>
+        @if (reports.isPending || reports.isFetching) {
+          <p role="status">Loading reports…</p>
+        } @else if (reports.isError) {
+          <div role="alert">
+            <p>{{ errorText(reports.error) }}</p>
+            <button
+              tuiButton
+              type="button"
+              (click)="retry('list')"
+              aria-label="Retry report search"
+            >
+              Retry
+            </button>
+            @if (cursorError(reports.error)) {
+              <button tuiButton type="button" (click)="navigate({ reports_cursor: null })">
+                First page
+              </button>
+            }
+          </div>
+        } @else if (reports.data; as data) {
+          <p>Anchored search, not an exact snapshot or commit order. Refresh for newer records.</p>
+          <ul>
+            @for (report of data.reports; track report.id) {
+              <li>
+                <h3>{{ report.category }}</h3>
+                <dl>
+                  <div>
+                    <dt>Report ID</dt>
+                    <dd>{{ report.id }}</dd>
+                  </div>
+                  <div>
+                    <dt>Reporter ID</dt>
+                    <dd>{{ report.reporter_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>Target ID</dt>
+                    <dd>{{ report.target_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>Context ID</dt>
+                    <dd>{{ report.context_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>Submitted</dt>
+                    <dd>{{ report.submitted_at }}</dd>
+                  </div>
+                  <div>
+                    <dt>Comment recorded</dt>
+                    <dd>{{ report.has_comment ? 'Yes' : 'No' }}</dd>
+                  </div>
+                </dl>
+                <button
+                  tuiButton
+                  type="button"
+                  [attr.aria-label]="'Inspect report ' + report.id"
+                  (click)="navigate({ report: report.id })"
+                >
+                  Open
+                </button>
+              </li>
+            } @empty {
+              <li>No retained reports matched these filters.</li>
+            }
+          </ul>
+          @if (data.next_cursor; as cursor) {
+            <button
+              tuiButton
+              type="button"
+              (click)="navigate({ reports_cursor: cursor, report: null })"
+              aria-label="Next report page"
+            >
+              Next
+            </button>
+          }
+          @if (state.filters.cursor) {
+            <button
+              tuiButton
+              type="button"
+              (click)="navigate({ reports_cursor: null, report: null })"
+            >
+              First page
+            </button>
+          }
+          <button tuiButton type="button" (click)="retry('list')" aria-label="Refresh report page">
+            Refresh
+          </button>
+        }
+      </section>
+      @if (state.reportId) {
+        <section aria-label="Retained report">
+          <h2>Report record</h2>
+          <button
+            tuiButton
+            type="button"
+            aria-label="Close report"
+            (click)="navigate({ report: null })"
+          >
+            Close
+          </button>
+          @if (detail.isPending || detail.isFetching) {
+            <p role="status">Loading report…</p>
+          } @else if (detail.isError) {
+            <div role="alert">
+              <p>{{ errorText(detail.error) }}</p>
+              <button
+                tuiButton
+                type="button"
+                (click)="retry('detail')"
+                aria-label="Retry report record"
+              >
+                Retry
+              </button>
+            </div>
+          } @else if (detail.data; as data) {
+            <dl>
+              <div>
+                <dt>Report ID</dt>
+                <dd>{{ data.report.id }}</dd>
+              </div>
+              <div>
+                <dt>Category</dt>
+                <dd>{{ data.report.category }}</dd>
+              </div>
+              <div>
+                <dt>Submitted</dt>
+                <dd>{{ data.report.submitted_at }}</dd>
+              </div>
+              <div>
+                <dt>Reporter</dt>
+                <dd>
+                  <a
+                    tuiLink
+                    routerLink="/operator/accounts"
+                    [queryParams]="{ account: data.report.reporter_id }"
+                    >{{ data.report.reporter_id }}</a
+                  >
+                </dd>
+              </div>
+              <div>
+                <dt>Target</dt>
+                <dd>
+                  <a
+                    tuiLink
+                    routerLink="/operator/accounts"
+                    [queryParams]="{ account: data.report.target_id }"
+                    >{{ data.report.target_id }}</a
+                  >
+                </dd>
+              </div>
+            </dl>
+            <h3>Stored comment</h3>
+            <p class="literal">{{ data.comment ?? 'No comment recorded' }}</p>
+            <h3>Retained disclosure context</h3>
+            <dl>
+              <div>
+                <dt>Context ID</dt>
+                <dd>{{ data.context.id }}</dd>
+              </div>
+              <div>
+                <dt>Issued</dt>
+                <dd>{{ data.context.issued_at }}</dd>
+              </div>
+              @if (data.context.kind === 'profile') {
+                <div>
+                  <dt>Profile version</dt>
+                  <dd>{{ data.context.profile_version }}</dd>
+                </div>
+                <div>
+                  <dt>Photo version</dt>
+                  <dd>{{ data.context.photo_version }}</dd>
+                </div>
+                <div>
+                  <dt>Goal ID</dt>
+                  <dd>{{ data.context.goal_id ?? 'Not recorded' }}</dd>
+                </div>
+                <div>
+                  <dt>Goal version</dt>
+                  <dd>{{ data.context.goal_version ?? 'Not recorded' }}</dd>
+                </div>
+                <div>
+                  <dt>Help version</dt>
+                  <dd>{{ data.context.help_version ?? 'Not recorded' }}</dd>
+                </div>
+              }
+            </dl>
+            <app-operator-origin [origin]="data.context.origin" />
+            <h3>Submission provenance</h3>
+            @if (data.submission; as submission) {
+              <p>{{ submission.occurred_at }}</p>
+              <button
+                tuiButton
+                type="button"
+                (click)="navigate({ event: submission.event_id, audit: null })"
+                aria-label="Open submission event"
+              >
+                Event
+              </button>
+              <p>{{ submission.event_id }}</p>
+              <app-operator-origin [origin]="submission.origin" />
+            } @else {
+              <p>
+                Submission event and origin were not recorded. They are not reconstructed from the
+                report time.
+              </p>
+            }
+          }
+        </section>
+      }
+    }
+    <app-operator-investigation
+      [actorId]="actorId"
+      (authorityFailure)="authorityFailure($event.error, $event.actorId)"
+    />
+  }
+</main>

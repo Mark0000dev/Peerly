@@ -1,0 +1,258 @@
+<main class="chats">
+  <header>
+    <h1>Chats</h1>
+    <peerly-student-navigation />
+  </header>
+  @if (session.isPending) {
+    <p role="status">Checking your account…</p>
+  } @else if (session.isError) {
+    <section role="alert">
+      <p>We couldn’t check your account.</p>
+      <button tuiButton type="button" (click)="retrySession()">Retry account check</button>
+    </section>
+  } @else if (owner === null) {
+    <p role="status">Sign in with an eligible student account to view chats.</p>
+    <a tuiLink routerLink="/onboarding">Continue account</a>
+  } @else {
+    <div class="panes" [class.selected]="selectedId !== null">
+      <section class="conversation-list" aria-label="Conversations">
+        @if (list.isPending) {
+          <p role="status">Loading conversations…</p>
+        }
+        @if (list.isError) {
+          <section role="alert">
+            <p>{{ errorText }}</p>
+            <button tuiButton type="button" (click)="retry()">Retry chats</button
+            ><a tuiLink routerLink="/chats">Latest conversations</a>
+          </section>
+        }
+        @if (list.data; as page) {
+          @if (list.isFetching) {
+            <p role="status">Refreshing conversations…</p>
+          }
+          @if (page.conversations.length === 0) {
+            <h2>No chats yet</h2>
+            <p>Accepted requests appear here. No message is sent when a request is accepted.</p>
+            <a tuiLink routerLink="/requests">View requests</a>
+          }
+          @for (item of page.conversations; track item.conversation_id) {
+            <article tuiCell="m" class="conversation-row">
+              @if (item.peer.state === 'available' && item.peer.photo_version !== null) {
+                <app-chat-avatar
+                  [actorId]="owner.account_id"
+                  [conversationId]="item.conversation_id"
+                  [peer]="item.peer"
+                />
+              }
+              <div class="row-copy">
+                <a
+                  tuiLink
+                  routerLink="/chats"
+                  [queryParams]="{ conversation: item.conversation_id, cursor: cursor }"
+                  [attr.aria-current]="selectedId === item.conversation_id ? 'page' : null"
+                  ><h2 tuiTitle="m">{{ peerName(item.peer) }}</h2></a
+                >
+                <p>{{ contextSubject(item.original_context) }}</p>
+                @if (item.last_message; as message) {
+                  <p class="message-text">
+                    {{ message.author_id === owner.account_id ? 'You: ' : '' }}{{ message.text }}
+                  </p>
+                } @else {
+                  <p>Connected · no messages yet</p>
+                }
+                <p>
+                  <time
+                    [attr.datetime]="item.activity_at"
+                    [title]="absoluteChatTime(item.activity_at)"
+                    >{{ when(item.activity_at) }}</time
+                  >
+                </p>
+                @if (item.unread_count > 0) {
+                  <strong>{{ item.unread_count }} unread</strong>
+                }
+                @if (!item.can_send) {
+                  <p>Read-only conversation</p>
+                }
+              </div>
+            </article>
+          }
+          @if (page.next_cursor !== null) {
+            <a tuiLink routerLink="/chats" [queryParams]="{ cursor: page.next_cursor }"
+              >More conversations</a
+            >
+          }
+          @if (cursor !== null) {
+            <a tuiLink routerLink="/chats">Latest conversations</a>
+          }
+        }
+      </section>
+      @if (selectedId !== null) {
+        <section class="thread" aria-label="Selected conversation">
+          <a tuiLink routerLink="/chats" [queryParams]="{ cursor: cursor }">Back to chats</a>
+          @if (details.isPending) {
+            <p role="status">Loading conversation…</p>
+          }
+          @if (details.isError) {
+            <section role="alert">
+              <p>{{ errorText }}</p>
+              <button tuiButton type="button" (click)="retry()">Retry conversation</button>
+            </section>
+          }
+          @if (details.data; as conversation) {
+            @if (
+              conversation.peer.state === 'available' && conversation.peer.photo_version !== null
+            ) {
+              <app-chat-avatar
+                [actorId]="owner.account_id"
+                [conversationId]="conversation.conversation_id"
+                [peer]="conversation.peer"
+              />
+            }
+            <h2 tabindex="-1">{{ peerName(conversation.peer) }}</h2>
+            @if (!conversation.can_send) {
+              <p role="status">
+                This conversation is read-only. Previous messages remain available.
+              </p>
+            }
+            <section tuiCardLarge tuiAppearance="neutral" aria-label="Original accepted context">
+              <h3 tuiTitle="m">Original accepted context · read only</h3>
+              <div class="context-copy">
+                <p>
+                  Accepted
+                  <time
+                    [attr.datetime]="conversation.accepted_at"
+                    [title]="absoluteChatTime(conversation.accepted_at)"
+                    >{{ when(conversation.accepted_at) }}</time
+                  >
+                </p>
+                @if (conversation.original_context.sender_goal; as goal) {
+                  <p>Sender’s goal: {{ goal.subject_label }}</p>
+                  <p>{{ goal.topic }}</p>
+                  <p>{{ goal.context }}</p>
+                }
+                @if (conversation.original_context.recipient_goal; as goal) {
+                  <p>Recipient’s goal: {{ goal.subject_label }}</p>
+                  <p>{{ goal.topic }}</p>
+                  <p>{{ goal.context }}</p>
+                }
+                @if (conversation.original_context.sender_help; as help) {
+                  <p>Sender’s help area: {{ help.subject_label }}</p>
+                  <p>{{ help.topic_note }}</p>
+                }
+                @if (conversation.original_context.recipient_help; as help) {
+                  <p>Recipient’s help area: {{ help.subject_label }}</p>
+                  <p>{{ help.topic_note }}</p>
+                }
+                @if (conversation.original_context.mode === 'study_together') {
+                  <p>Shared learning · neither person is presented as a teacher.</p>
+                }
+              </div>
+            </section>
+            @if (history.isPending) {
+              <p role="status">Loading messages…</p>
+            }
+            @if (history.isError) {
+              <section role="alert">
+                <p>{{ errorText }}</p>
+                <button tuiButton type="button" (click)="retry()">Retry messages</button>
+              </section>
+            }
+            @if (history.data; as page) {
+              @if (history.isFetching) {
+                <p role="status">Refreshing messages…</p>
+              }
+              @if (page.next_cursor !== null) {
+                <a
+                  tuiLink
+                  routerLink="/chats"
+                  [queryParams]="{
+                    conversation: selectedId,
+                    cursor: cursor,
+                    history_cursor: page.next_cursor,
+                  }"
+                  >Earlier messages</a
+                >
+              }
+              @if (historyCursor !== null) {
+                <a
+                  tuiLink
+                  routerLink="/chats"
+                  [queryParams]="{ conversation: selectedId, cursor: cursor }"
+                  >Latest messages</a
+                >
+              }
+              @if (messages.length === 0) {
+                <p>No messages yet. Your accepted request is context, not a human message.</p>
+              }
+              <ol aria-label="Confirmed messages">
+                @for (message of messages; track message.message_id) {
+                  <li>
+                    <app-confirmed-chat-message
+                      [actor]="owner"
+                      [peer]="conversation.peer"
+                      [message]="message"
+                      [readThrough]="conversation.read_position?.through_sequence ?? 0"
+                      [active]="!history.isFetching && !details.isFetching && !session.isFetching"
+                    />
+                  </li>
+                }
+              </ol>
+            }
+          }
+          <app-chat-message-composer
+            [actor]="owner"
+            [conversationId]="selectedId"
+            [canSend]="
+              details.isSuccess &&
+              details.data.can_send &&
+              !details.isFetching &&
+              !session.isFetching
+            "
+          />
+          <app-chat-goal-sharing
+            [actor]="owner"
+            [conversationId]="selectedId"
+            [canShare]="
+              details.isSuccess &&
+              details.data.can_send &&
+              !details.isFetching &&
+              !session.isFetching
+            "
+          />
+          @let studyConversation = details.data;
+          <section aria-label="Study progress actions">
+            @if (studyConversation?.conversation_id === selectedId) {
+              <button
+                tuiButton
+                tuiButtonVertical
+                type="button"
+                appearance="secondary"
+                [disabled]="session.isFetching || details.isFetching || details.isError"
+                (click)="openStudy()"
+              >
+                Study progress
+              </button>
+            }
+            <app-study-progress
+              [actor]="owner"
+              [conversationId]="selectedId"
+              [peerLabel]="
+                studyConversation === undefined || studyConversation.conversation_id !== selectedId
+                  ? null
+                  : peerName(studyConversation.peer)
+              "
+              [contextLabel]="
+                studyConversation === undefined || studyConversation.conversation_id !== selectedId
+                  ? null
+                  : contextSubject(studyConversation.original_context)
+              "
+              [manualOpen]="studyManualOpen()"
+              [visit]="studyVisit"
+              (sessionFailure)="studyFailure($event)"
+            />
+          </section>
+        </section>
+      }
+    </div>
+  }
+</main>

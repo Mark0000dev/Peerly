@@ -1,0 +1,227 @@
+<main>
+  <peerly-brand />
+  @if (loginNotice; as notice) {
+    <aside tuiCardLarge appearance="neutral" [attr.role]="notice.cancelled ? 'status' : 'alert'">
+      <h2>{{ notice.title }}</h2>
+      <p>{{ notice.description }}</p>
+      @if (notice.reference; as reference) {
+        <p>Reference: {{ reference }}</p>
+      }
+      <a tuiLink routerLink="/help">Help</a>
+    </aside>
+  }
+  @if (signingOut.isPending) {
+    <tui-loader [loading]="true" textContent="Signing out…" role="status" />
+  } @else if (session.isPending || (session.isFetching && !retainingEditor)) {
+    <tui-loader [loading]="true" textContent="Checking your sign-in…" role="status" />
+  } @else if (session.isError && !retainingEditor) {
+    <img class="art" src="assets/brand/mascot-oops.svg" width="160" height="140" alt="" />
+    <h1>We couldn’t check your sign-in</h1>
+    <p role="alert">Please try again. Your account hasn’t been changed by this check.</p>
+    <button tuiButton type="button" (click)="checkStatus()">Try again</button>
+  } @else if (session.data; as actor) {
+    @if (retainingEditor && session.isFetching) {
+      <p role="status">Checking your sign-in. Your draft is still here.</p>
+    } @else if (retainingEditor && session.isError) {
+      <p role="alert">We couldn’t check your sign-in. Your draft is still here.</p>
+      <button tuiButton type="button" (click)="checkStatus()">Retry sign-in check</button>
+    }
+
+    <div class="account">
+      <span>Signed in with Google</span
+      ><button tuiLink type="button" (click)="signOut()">Not you?</button>
+    </div>
+    @if (actor.account_status === 'banned') {
+      <h1>Account unavailable</h1>
+      <p>Your account currently has restricted access.</p>
+      <a tuiButton routerLink="/help">Help</a>
+    } @else if (actor.membership_status === 'verified') {
+      <img class="art" src="assets/brand/mascot-hello.svg" width="160" height="140" alt="" />
+      <h1>Your APU email is confirmed</h1>
+      <p>You’re signed in to Peerly.</p>
+      <a tuiLink routerLink="/profile">Profile and settings</a>
+      @if (setupView() === 'complete') {
+        <peerly-study-setup
+          [actor]="actor"
+          (expired)="setupExpired()"
+          (edit)="setupView.set($event)"
+        />
+      } @else if (setupView() === 'profile') {
+        <peerly-profile-basics
+          [actor]="actor"
+          [checking]="session.isFetching || session.isError"
+          (expired)="checkStatus()"
+        />
+      } @else if (setupView() === 'goal') {
+        <peerly-study-goal
+          [actor]="actor"
+          [checking]="session.isFetching || session.isError"
+          (expired)="checkStatus()"
+        />
+      } @else if (setupView() === 'help') {
+        <peerly-help-subjects
+          [actor]="actor"
+          [checking]="session.isFetching || session.isError"
+          (expired)="checkStatus()"
+        />
+      } @else {
+        <button tuiButton type="button" (click)="setupView.set('complete')">
+          Your study setup
+        </button>
+        <button tuiButton type="button" (click)="setupView.set('help')">Your help areas</button>
+        <button tuiButton type="button" (click)="setupView.set('profile')">Your profile</button>
+        <button tuiButton type="button" (click)="setupView.set('goal')">Your study goal</button>
+      }
+      @if (setupView() !== 'entry') {
+        <button tuiLink type="button" (click)="leaveEditor()">Back to setup</button>
+      }
+    } @else if (!actor.capabilities.can_verify_student_email) {
+      <h1>Verification unavailable</h1>
+      <p>Get help with your account to continue.</p>
+      <a tuiButton routerLink="/help">Get help</a>
+    } @else if (showEmail) {
+      <h1>Confirm your APU email</h1>
+      <p>
+        Peerly is for APU students. We’ll send a 6-digit code to your student address. We only send
+        email to it; we never sign in to or read your mailbox.
+      </p>
+      <form #emailSubmit="ngForm" [formGroup]="emailForm" (ngSubmit)="sendCode()">
+        <tui-textfield
+          ><label tuiLabel for="student-email">APU email</label
+          ><input
+            tuiInput
+            id="student-email"
+            type="email"
+            autocomplete="email"
+            inputmode="email"
+            [formControl]="email"
+            [readOnly]="sending.isPending"
+            aria-describedby="email-hint"
+            [attr.aria-invalid]="email.touched && email.invalid"
+        /></tui-textfield>
+        <p id="email-hint">
+          @if (emailSubmit.submitted && email.invalid) {
+            <span role="alert">Enter a student address ending in &#64;mail.apu.edu.my.</span>
+          } @else {
+            Use your &#64;mail.apu.edu.my address.
+          }
+        </p>
+        <button tuiButton type="submit" [disabled]="sending.isPending">
+          {{ sending.isPending ? 'Sending…' : 'Send code' }}
+        </button>
+      </form>
+      <a tuiLink routerLink="/help">Need help with your APU email?</a>
+    } @else if (challenge.isPending) {
+      <tui-loader [loading]="true" textContent="Checking your code status…" role="status" />
+    } @else if (challenge.data; as current) {
+      @if (current.verification_outcome === 'support_required') {
+        <h1>This address needs support</h1>
+        <p>
+          Try the Google account you used before, or get help. We don’t move or combine accounts
+          automatically.
+        </p>
+        <a tuiButton routerLink="/help">Get help</a>
+      } @else {
+        <img class="art" src="assets/brand/mascot-letter.svg" width="160" height="140" alt="" />
+        <h1>Check your APU email</h1>
+        <p>
+          Enter the 6-digit code for <strong>{{ current.email }}</strong
+          >.
+        </p>
+        <button tuiLink type="button" (click)="changeEmail()">Change email</button>
+        @if (current.delivery === 'queued' || current.delivery === 'sending') {
+          <p role="status">Your code is being sent.</p>
+        }
+        @if (current.delivery === 'failed' || current.delivery === 'cancelled') {
+          <p role="alert">
+            We couldn’t confirm delivery. Check your mailbox or request a new code when available.
+          </p>
+        }
+        @if (current.state === 'locked') {
+          <p role="alert">Too many incorrect attempts. Request a new code when available.</p>
+        } @else if (current.state === 'expired') {
+          <p role="alert">This code has expired. Request a new code.</p>
+        } @else if (current.verification_outcome === 'wrong') {
+          <p role="alert">
+            That code didn’t match. Attempts remaining: {{ current.attempts_remaining }}.
+          </p>
+        }
+        <form [formGroup]="codeForm" (ngSubmit)="confirmCode()">
+          <tui-textfield
+            ><label tuiLabel for="verification-code">Verification code</label
+            ><input
+              tuiInput
+              id="verification-code"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              [formControl]="code"
+              [readOnly]="verifying.isPending || sending.isPending || !current.can_verify"
+              aria-describedby="code-hint"
+              [attr.aria-invalid]="code.touched && code.invalid"
+          /></tui-textfield>
+          <p id="code-hint">Code expires at {{ current.expires_at | date: 'shortTime' }}.</p>
+          <button
+            tuiButton
+            type="submit"
+            [disabled]="!current.can_verify || sending.isPending || verifying.isPending"
+          >
+            {{ verifying.isPending ? 'Checking…' : 'Confirm code' }}
+          </button>
+        </form>
+        <button
+          tuiLink
+          type="button"
+          (click)="sendCode(true)"
+          [disabled]="!current.can_resend || sending.isPending"
+        >
+          Resend code
+        </button>
+        @if (!current.can_resend) {
+          <p>
+            Resend available after {{ current.resend_at | date: 'shortTime' }}. Check status to
+            refresh availability.
+          </p>
+        }
+      }
+    } @else {
+      <h1>We couldn’t check your code</h1>
+      <p role="alert">Check status or change the email to continue.</p>
+      <button tuiLink type="button" (click)="changeEmail()">Change email</button>
+    }
+    @if (operationError; as error) {
+      <p role="alert">{{ error }}</p>
+      @if (retryAt; as deadline) {
+        <p>Try again after {{ deadline | date: 'shortTime' }}.</p>
+      }
+    }
+    <a tuiLink routerLink="/account/delete">Delete account</a>
+    <button tuiLink type="button" (click)="checkStatus()">Check status</button
+    ><button tuiLink type="button" (click)="signOut()">Sign out</button>
+  } @else {
+    <img class="art" src="assets/brand/mascot-hello.svg" width="160" height="140" alt="" />
+    <h1>Find someone to study with</h1>
+    <p>Get help, share what you know, or work through a topic together. For APU students.</p>
+    <article tuiCardLarge appearance="floating" aria-label="Example of a connection">
+      <span class="example-label">EXAMPLE</span
+      ><span tuiAppearance="sp-relevance">Can help with SQL</span
+      ><tui-icon icon="@tui.user" /><strong>Aiko</strong>
+      <p>Swipe right to review a request. Nothing is sent until you tap Send.</p>
+    </article>
+    @if (native) {
+      <p>Use Peerly in a web browser to sign in on this device.</p>
+    } @else {
+      <a tuiButton appearance="secondary" href="/api/v1/auth/google/start?return_to=/onboarding"
+        ><img src="assets/brand/google-g.svg" width="20" height="20" alt="" />Continue with
+        Google</a
+      >
+    }
+  }
+  @if (reference; as id) {
+    <p>Reference: {{ id }}</p>
+  }
+  <footer>
+    <a tuiLink routerLink="/help">Help</a><a tuiLink routerLink="/terms">Terms of Use</a
+    ><a tuiLink routerLink="/privacy">Privacy Policy</a>
+  </footer>
+</main>

@@ -1,0 +1,82 @@
+<main>
+  <peerly-brand />
+  <h1>Delete account</h1>
+  @if (deleting.variables !== undefined) {
+    @if (deleting.isPending) {
+      <p role="status">Deleting account…</p>
+    } @else {
+      <p role="status">Check the status of your deletion request.</p>
+    }
+    <a tuiButton tuiButtonVertical routerLink="/account/deletion-status">Check deletion status</a>
+  } @else if (session.isPending || session.isFetching) {
+    <p role="status">Checking your sign-in…</p>
+  } @else if (session.isError) {
+    <p role="alert">We couldn’t check your sign-in.</p>
+    <button tuiButton type="button" (click)="checkSession()">Try again</button>
+    <a tuiLink routerLink="/account/deletion-status">Check an earlier deletion request</a>
+  } @else if (identity === null) {
+    <p>Sign in to start a deletion request, or check an earlier request from this browser.</p>
+    <a tuiButton routerLink="/onboarding">Sign in</a>
+    <a tuiLink routerLink="/account/deletion-status">Check deletion status</a>
+  } @else {
+    <p>Deleting your account signs you out everywhere and ends your use of Peerly.</p>
+    <ul>
+      <li>You’re signed out and can’t sign in again.</li>
+      <li>People you talked to see “Deleted account”.</li>
+      <li>Open requests close; you leave Discover.</li>
+      <li>Your messages stay readable to them.</li>
+    </ul>
+    <p>
+      This can’t be undone in the app. What we keep is explained in the
+      <a tuiLink routerLink="/privacy">Privacy Policy</a>.
+    </p>
+    @if (preparing.isPending) {
+      <p role="status">Preparing your request…</p>
+    }
+    @if (preparing.isError) {
+      <p role="alert">We couldn’t prepare this request. You can try again.</p>
+    }
+    <div class="actions">
+      <button
+        tuiButton
+        tuiButtonVertical
+        appearance="primary-destructive"
+        type="button"
+        [attr.aria-disabled]="preparing.isPending"
+        [attr.aria-busy]="preparing.isPending"
+        (click)="prepare()"
+      >
+        Delete account
+      </button>
+      <a tuiButton tuiButtonVertical appearance="secondary" routerLink="/onboarding"
+        >Keep my account</a
+      >
+    </div>
+    <ng-template
+      [tuiDialog]="confirmation !== null"
+      (tuiDialogChange)="keep()"
+      [tuiDialogOptions]="{ label: 'Delete your account?', appearance: 'fullscreen' }"
+    >
+      <p>
+        You’ll be signed out on every device and won’t be able to sign in again. This can’t be
+        undone in the app.
+      </p>
+      <div class="actions">
+        <button
+          tuiButton
+          tuiButtonVertical
+          appearance="primary-destructive"
+          type="button"
+          (click)="confirm()"
+        >
+          Delete account permanently
+        </button>
+        <button tuiButton appearance="secondary" type="button" (click)="keep()">Cancel</button>
+      </div>
+    </ng-template>
+  }
+  @if (reference; as id) {
+    <p>Reference: {{ id }}</p>
+  }
+  <a tuiLink routerLink="/help">Help</a>
+</main>

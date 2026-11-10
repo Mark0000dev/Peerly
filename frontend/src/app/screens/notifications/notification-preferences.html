@@ -1,0 +1,103 @@
+<main>
+  <a tuiLink routerLink="/profile">Back to profile</a>
+  <h1>Notifications</h1>
+  <p>
+    Choose which updates you want. This saved preference is separate from device permission and
+    notification delivery.
+  </p>
+  @if (!authorized) {
+    <p role="status">
+      An active, verified student sign-in is needed. Your choice has not been changed.
+    </p>
+    <button tuiButton type="button" (click)="checkSession()">Check sign-in state</button>
+    <a tuiLink routerLink="/onboarding">Go to sign-in</a>
+  } @else {
+    @if (result.isFetching) {
+      <p role="status">Checking your saved preference…</p>
+    }
+    @if (result.isError) {
+      <p role="alert">Your preference could not be loaded. Try again.</p>
+      <button tuiButton type="button" (click)="refresh()">Try again</button>
+    }
+    @if (result.isSuccess) {
+      <fieldset [disabled]="locked">
+        <legend>What to notify you about</legend>
+        <label
+          ><input tuiRadio type="radio" [formControl]="mode" value="messages_and_requests" /><span
+            >Messages and requests<small
+              >New messages, requests for you and accepted connections</small
+            ></span
+          ></label
+        >
+        <label
+          ><input tuiRadio type="radio" [formControl]="mode" value="all_updates" /><span
+            >All updates<small>Also partner suggestions, product news and promotions</small></span
+          ></label
+        >
+      </fieldset>
+      @if (result.data.version === 0) {
+        <p>This is the default. You haven’t saved an explicit choice yet.</p>
+      }
+      @if (!saveResult.isSuccess) {
+        <button tuiButton class="save" type="button" [disabled]="locked" (click)="save()">
+          Save preference
+        </button>
+      }
+      @if (saveResult.isPending) {
+        <p role="status">Saving your preference…</p>
+      }
+      @if (saveResult.isSuccess) {
+        <p role="status">
+          Your choice was saved. Check the current preference before making another change.
+        </p>
+        <button tuiButton type="button" [disabled]="result.isFetching" (click)="useCurrent()">
+          Use current saved preference
+        </button>
+      }
+      @if (saveResult.isError) {
+        <p role="alert">
+          @if (uncertain) {
+            The save outcome is unknown. Retry the identical save to confirm it before making
+            another change.
+          } @else if (conflict) {
+            Your preference changed elsewhere. Read the current preference before choosing again.
+          } @else {
+            Your preference could not be saved. Your selection is still here.
+          }
+        </p>
+        @if (reference; as id) {
+          <p>Technical reference: {{ id }}</p>
+        }
+        @if (!conflict) {
+          <button tuiButton type="button" (click)="replay()">Retry identical save</button>
+        }
+        <button
+          tuiButton
+          appearance="secondary"
+          type="button"
+          [disabled]="result.isFetching"
+          (click)="refresh()"
+        >
+          Read current preference
+        </button>
+        @if (!uncertain) {
+          <button
+            tuiButton
+            appearance="secondary"
+            type="button"
+            [disabled]="result.isFetching"
+            (click)="useCurrent()"
+          >
+            Use current saved preference
+          </button>
+        }
+      }
+    }
+  }
+  <h2>On this device</h2>
+  <p>
+    Device delivery is unavailable in this preview. In-app counts on Requests and Chats continue.
+    Saving a preference does not enable notifications, request device permission or change security
+    messages.
+  </p>
+</main>

@@ -1,0 +1,39 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+section {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+h3,
+h4,
+p,
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+dl {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}

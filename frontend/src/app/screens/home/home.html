@@ -1,0 +1,123 @@
+<header class="site-header">
+  <peerly-brand />
+  <nav aria-label="Main navigation">
+    <a tuiLink href="#how">How it works</a><a tuiLink href="#safety">Safety</a
+    ><a tuiLink routerLink="/help">Help</a>
+  </nav>
+  <a tuiButton routerLink="/onboarding" size="m">Open the app</a>
+</header>
+<main>
+  <section class="hero" aria-labelledby="hero-title">
+    <div>
+      <p class="eyebrow">For APU students</p>
+      <h1 id="hero-title">Find someone <br />to study with.</h1>
+      <p class="lead">
+        Get help with a topic, share what you know, or work through it together. Swipe through
+        classmates who match your goal, send a short request, and chat once they accept.
+      </p>
+      <a tuiButton routerLink="/onboarding" size="m">Open the app</a>
+      <p class="note">
+        Sign in with your Google account, then confirm your &#64;mail.apu.edu.my address.
+      </p>
+    </div>
+    <img class="hero-art" src="assets/brand/mascot-chat.svg" width="360" height="240" alt="" />
+  </section>
+  <section id="how" aria-labelledby="how-title">
+    <p class="eyebrow">How it works</p>
+    <h2 id="how-title">Three steps, no awkward cold messages</h2>
+    <div class="cards">
+      <article tuiCardLarge appearance="floating">
+        <span class="step" tuiAppearance="sp-offer">1</span>
+        <h3>Set a goal</h3>
+        <p>
+          Pick a subject and, if you like, the topic you’re stuck on. One active goal keeps things
+          focused.
+        </p>
+      </article>
+      <article tuiCardLarge appearance="floating">
+        <span class="step" tuiAppearance="sp-offer">2</span>
+        <h3>Swipe through people</h3>
+        <p>
+          See classmates who can help with your subject, need help with yours, or are working on the
+          same thing.
+        </p>
+      </article>
+      <article tuiCardLarge appearance="floating">
+        <span class="step" tuiAppearance="sp-offer">3</span>
+        <h3>Send a short request</h3>
+        <p>
+          Review it first; nothing is sent until you tap Send. A chat opens only when they accept.
+        </p>
+      </article>
+    </div>
+  </section>
+  <section aria-labelledby="modes-title">
+    <p class="eyebrow">Three ways to use it</p>
+    <h2 id="modes-title">Learn, help, or both</h2>
+    <div class="cards">
+      <article tuiCardLarge appearance="floating">
+        <tui-icon icon="@tui.hand-helping" />
+        <h3>Find help</h3>
+        <p>Meet someone who listed your subject as something they can help with.</p>
+      </article>
+      <article tuiCardLarge appearance="floating">
+        <tui-icon icon="@tui.graduation-cap" />
+        <h3>Offer help</h3>
+        <p>See who’s working on a subject you know well, and offer a hand.</p>
+      </article>
+      <article tuiCardLarge appearance="floating">
+        <tui-icon icon="@tui.users" />
+        <h3>Study together</h3>
+        <p>Pair up with someone on the same goal. Nobody has to be the teacher.</p>
+      </article>
+    </div>
+  </section>
+  <section id="safety" class="safety" aria-labelledby="safety-title">
+    <div>
+      <p class="eyebrow">Safety</p>
+      <h2 id="safety-title">Built for students, with people watching out</h2>
+      <ul>
+        <li>
+          <strong>APU students only.</strong> Everyone confirms a student address. We only send it a
+          code; we never read your mailbox.
+        </li>
+        <li><strong>Requests before chats.</strong> Nobody can message you until you accept.</li>
+        <li><strong>Report and block.</strong> Ask the team to review a concern.</li>
+        <li><strong>Take a break.</strong> Hide your profile and keep your chats.</li>
+      </ul>
+    </div>
+    <img src="assets/brand/mascot-read.svg" width="240" height="200" alt="" />
+  </section>
+  <section aria-labelledby="questions-title">
+    <p class="eyebrow">Questions</p>
+    <h2 id="questions-title">Good to know</h2>
+    <div class="cards">
+      <article tuiCardLarge appearance="floating">
+        <h3>Who can join?</h3>
+        <p>APU students with a Google account and an address ending in &#64;mail.apu.edu.my.</p>
+      </article>
+      <article tuiCardLarge appearance="floating">
+        <h3>Do you read my APU email?</h3>
+        <p>No. We send a code to confirm the address. We never sign in to or read your mailbox.</p>
+      </article>
+      <article tuiCardLarge appearance="floating">
+        <h3>Is there AI in it?</h3>
+        <p>
+          Optional assistance with subjects, wording and photos. You decide what suggestions to use.
+        </p>
+      </article>
+    </div>
+  </section>
+  <section class="closing" tuiAppearance="primary" aria-labelledby="closing-title">
+    <h2 id="closing-title">Your next study session starts here.</h2>
+    <a tuiButton appearance="primary-grayscale" routerLink="/onboarding" size="m">Open the app</a>
+  </section>
+</main>
+<footer>
+  <peerly-brand />
+  <p>Find someone to study with. For APU students.</p>
+  <nav aria-label="Footer">
+    <a tuiLink routerLink="/help">Help</a><a tuiLink routerLink="/terms">Terms of Use</a
+    ><a tuiLink routerLink="/privacy">Privacy Policy</a>
+  </nav>
+</footer>

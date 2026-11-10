@@ -1,0 +1,156 @@
+<main>
+  <peerly-student-navigation />
+  <h1>Profile</h1>
+  @if (signingOut.isPending) {
+    <p role="status">Signing out…</p>
+  } @else if (session.data; as actor) {
+    @if (actor.account_status !== 'active' || actor.membership_status !== 'verified') {
+      <p>Your student account needs attention before you can edit your profile.</p>
+      <a tuiButton routerLink="/onboarding">Review sign-in</a>
+    } @else {
+      @if (checking) {
+        <p role="status">Checking your sign-in. Unsaved edits are kept on this screen.</p>
+        <button tuiLink type="button" (click)="checkSession()">Check sign-in</button>
+      }
+      @switch (mode) {
+        @case ('profile') {
+          <peerly-profile-basics
+            [actor]="actor"
+            [checking]="checking"
+            [editOptional]="true"
+            (expired)="checkSession()"
+          />
+        }
+        @case ('goal') {
+          <peerly-study-goal [actor]="actor" [checking]="checking" (expired)="checkSession()" />
+        }
+        @case ('help') {
+          <peerly-help-subjects [actor]="actor" [checking]="checking" (expired)="checkSession()" />
+        }
+        @case ('blocks') {
+          <peerly-blocked-people [actor]="actor" [checking]="checking" (expired)="checkSession()" />
+        }
+        @case ('visibility') {
+          @if (status.isError) {
+            <p role="alert">Profile visibility could not be loaded.</p>
+            <button tuiButton type="button" [disabled]="checking" (click)="retryVisibility()">
+              Retry visibility
+            </button>
+          } @else if (status.data; as state) {
+            @if (!checking) {
+              <peerly-profile-visibility
+                [actor]="actor"
+                [status]="state"
+                [checking]="checking"
+                (expired)="checkSession()"
+              />
+            }
+          } @else {
+            <p role="status">Loading profile visibility…</p>
+          }
+        }
+        @default {
+          @if (!checking) {
+            @if (profile.data?.profile; as details) {
+              @if (profile.data.photo; as photo) {
+                <img class="photo" [src]="photo.display_url" alt="Your current profile photo" />
+              }
+              <h2>{{ details.display_name }}</h2>
+              <p>APU email confirmed</p>
+              @if (details.about) {
+                <p>{{ details.about }}</p>
+              }
+              @if (details.programme) {
+                <p>{{ details.programme }}</p>
+              }
+              @if (details.year_label) {
+                <p>{{ details.year_label }}</p>
+              }
+            }
+            @if (goal.data?.goal; as active) {
+              <section aria-label="Your study goal">
+                <h2>{{ active.subject.label }}</h2>
+                @if (active.topic) {
+                  <p>{{ active.topic }}</p>
+                }
+                @if (active.context) {
+                  <p>{{ active.context }}</p>
+                }
+                <peerly-complete-goal
+                  [actorId]="actor.account_id"
+                  [goal]="active"
+                  [checking]="checking"
+                  (expired)="checkSession()"
+                />
+                <p>{{ active.completed_at ? 'Completed goal' : 'Your active goal' }}</p>
+                @if (active.shared_learning) {
+                  <p>Open to studying together</p>
+                }
+              </section>
+            } @else if (goal.isSuccess) {
+              <p>No active study goal yet.</p>
+            }
+            @if (help.data?.selection; as selection) {
+              <section aria-label="You can help with">
+                <h2>You can help with</h2>
+                @for (area of selection.subjects; track area.subject_id) {
+                  <p>
+                    {{ area.label }}
+                    @if (area.topic_note) {
+                      · {{ area.topic_note }}
+                    }
+                  </p>
+                }
+              </section>
+            }
+            @if (profile.isError || goal.isError || help.isError || status.isError) {
+              <p role="alert">Some profile information could not be loaded.</p>
+              <button tuiButton type="button" (click)="retryOverview()">
+                Retry profile information
+              </button>
+            }
+            @if (status.data; as state) {
+              <peerly-profile-visibility
+                [actor]="actor"
+                [status]="state"
+                [checking]="checking"
+                (expired)="checkSession()"
+              />
+            }
+            @if (actor.capabilities.can_use_student_features) {
+              <app-own-feedback-summary
+                [actorId]="actor.account_id"
+                (sessionFailure)="checkSession()"
+              />
+            }
+          }
+          <a tuiButton routerLink="/profile/edit">Edit profile</a>
+          <a tuiLink routerLink="/profile/goal">Edit study goal</a>
+          <a tuiLink routerLink="/profile/help">Edit help areas</a>
+          <a tuiLink routerLink="/profile/blocks">Blocked people</a>
+          <a tuiLink routerLink="/profile/notifications">Notifications</a>
+          <a tuiLink routerLink="/help/contact">Help and support</a>
+          <a tuiLink routerLink="/terms">Terms of Use</a>
+          <a tuiLink routerLink="/privacy">Privacy Policy</a>
+          <a tuiLink routerLink="/account/delete">Delete account</a>
+          <button tuiLink type="button" [disabled]="checking" (click)="signOut()">Sign out</button>
+          @if (signingOut.isError) {
+            <p role="alert">
+              Sign-out could not be confirmed. Check your sign-in before trying again.
+            </p>
+            <button tuiLink type="button" (click)="checkSession()">Check sign-in</button>
+          }
+        }
+      }
+      @if (mode !== undefined) {
+        <a tuiLink routerLink="/profile">Back to profile</a>
+      }
+    }
+  } @else if (session.isPending) {
+    <p role="status">Checking sign-in…</p>
+  } @else {
+    <p>Your sign-in could not be confirmed.</p>
+    <button tuiButton type="button" (click)="checkSession()">Check sign-in</button
+    ><a tuiLink routerLink="/onboarding">Sign in</a>
+  }
+</main>

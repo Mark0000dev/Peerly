@@ -1,0 +1,149 @@
+<section aria-labelledby="study-setup-heading">
+  <h2 id="study-setup-heading">Your study setup</h2>
+  @if (status.isPending || profile.isPending) {
+    <tui-loader [loading]="true" textContent="Checking your saved setup…" role="status" />
+  }
+  @if (status.isError || profile.isError) {
+    <p role="alert">We couldn’t refresh your saved setup. Your draft is still here.</p>
+    <button tuiButton type="button" [disabled]="busy" (click)="reload()">Retry setup check</button>
+  }
+  @if (profile.data; as current) {
+    <form tuiForm="m" [formGroup]="taskForm" (ngSubmit)="saveTask()">
+      <fieldset
+        class="task-fields"
+        [disabled]="busy || profile.isFetching || profile.isError || savingTask.isError"
+      >
+        <legend>What would you like to do first?</legend>
+        <div class="choices">
+          <label
+            ><input
+              tuiRadio
+              type="radio"
+              name="first-task"
+              [formControl]="task"
+              value="find_help"
+            />Find help</label
+          >
+          <label
+            ><input
+              tuiRadio
+              type="radio"
+              name="first-task"
+              [formControl]="task"
+              value="offer_help"
+            />Offer help</label
+          >
+        </div>
+      </fieldset>
+      <p>This chooses your first task. You can still find help and help other students.</p>
+      <button
+        tuiButton
+        type="submit"
+        [disabled]="
+          taskForm.pristine || busy || profile.isFetching || profile.isError || savingTask.isError
+        "
+      >
+        Save task
+      </button>
+    </form>
+    @if (savingTask.isPending) {
+      <p role="status">Saving your first task…</p>
+    }
+    @if (taskUncertain) {
+      <p role="alert">We couldn’t confirm that save. Your choice is still here.</p>
+      <button tuiButton type="button" (click)="saveTask()">Retry same task save</button>
+    } @else if (savingTask.isError) {
+      <p role="alert">
+        We couldn’t save your first task. Reload the saved choice before editing again.
+      </p>
+    }
+    @if (savingTask.isError) {
+      <button tuiLink type="button" (click)="reloadTask()">Reload saved first task</button>
+    }
+  }
+  @if (status.data; as saved) {
+    @if (saved.setup_requirements.length > 0) {
+      <p>Complete your saved setup to continue:</p>
+      <ul>
+        @for (required of saved.setup_requirements; track required) {
+          <li>{{ requirements[required] }}</li>
+        }
+      </ul>
+    }
+    @if (saved.registered && saved.setup_complete) {
+      <p role="status">Your setup is saved.</p>
+      @if (saved.capabilities.can_discover) {
+        @if (profile.data?.profile; as basic) {
+          <a tuiLink routerLink="/discover" [queryParams]="{ mode: basic.task }"
+            >Continue to Discover</a
+          >
+        }
+      }
+      <peerly-profile-visibility [actor]="actor()" [status]="saved" (expired)="expired.emit()" />
+    } @else {
+      @if (!saved.registered) {
+        @if (preparing.isPending) {
+          <p role="status">Preparing your registration details…</p>
+        }
+        @if (preparing.isError) {
+          <p role="alert">We couldn’t prepare your registration details.</p>
+          <button tuiLink type="button" (click)="prepareContext()">
+            Retry registration details
+          </button>
+        }
+        @if (preparing.data; as context) {
+          <p>
+            {{ context.notice_text }}
+            <a tuiLink routerLink="/terms" [queryParams]="{ version: context.terms.version }"
+              >Terms of Use</a
+            >
+            and
+            <a tuiLink routerLink="/privacy" [queryParams]="{ version: context.privacy.version }"
+              >Privacy Policy</a
+            >.
+          </p>
+        }
+      }
+      @if (saved.registered && actor().registration === null) {
+        <p>Your registration is recorded. Refresh your sign-in details to finish setup.</p>
+        <button tuiLink type="button" (click)="expired.emit()">Refresh sign-in details</button>
+      }
+      <button tuiButton type="button" [disabled]="!canFinish" (click)="finish()">
+        {{
+          completing.isPending
+            ? 'Saving setup…'
+            : completionUncertain
+              ? 'Retry same completion'
+              : saved.registered
+                ? 'Finish setup'
+                : 'Continue'
+        }}
+      </button>
+      @if (taskForm.dirty) {
+        <p>Save your first-task choice before continuing.</p>
+      }
+      @if (completionUncertain) {
+        <p role="alert">
+          We couldn’t confirm completion. Retry the same action or check your saved setup.
+        </p>
+      } @else if (contextUnavailable) {
+        <p role="alert">
+          These registration details are no longer available. Refresh them to continue.
+        </p>
+        <button tuiLink type="button" (click)="refreshContext()">
+          Refresh registration details
+        </button>
+      } @else if (completing.isError) {
+        <p role="alert">We couldn’t finish setup. Review your saved requirements and try again.</p>
+      }
+      @if (completing.isError) {
+        <button tuiLink type="button" (click)="reload()">Check saved setup</button>
+      }
+    }
+  }
+  <nav aria-label="Edit study setup">
+    <button tuiLink type="button" (click)="edit.emit('profile')">Your profile</button>
+    <button tuiLink type="button" (click)="edit.emit('goal')">Your study goal</button>
+    <button tuiLink type="button" (click)="edit.emit('help')">Your help areas</button>
+  </nav>
+</section>

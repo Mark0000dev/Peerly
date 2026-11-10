@@ -1,0 +1,42 @@
+:host {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  max-inline-size: 28rem;
+  margin-inline: auto;
+  padding: max(1.5rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(1.5rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+}
+
+.account,
+footer {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.art {
+  justify-self: center;
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+h1 {
+  margin: 0;
+  font: var(--tui-typography-heading-h4);
+}
+
+p {
+  margin: 0;
+}
+
+form {
+  display: grid;
+  gap: 1rem;
+}

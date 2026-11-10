@@ -1,0 +1,45 @@
+:host {
+  display: contents;
+}
+
+section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+form {
+  min-inline-size: 0;
+}
+
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.composer-layout {
+  contain: size;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  flex: 1;
+  min-block-size: 0;
+  min-inline-size: 0;
+  gap: 1rem;
+}
+
+.composer-layout > section {
+  min-block-size: 0;
+  overflow: auto;
+  align-content: start;
+}
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding-block-end: env(safe-area-inset-bottom);
+}

@@ -1,0 +1,147 @@
+<section aria-label="Shared goals">
+  <h3>Shared goals</h3>
+  @if (!opened()) {
+    <button tuiButton type="button" size="s" (click)="open()" aria-label="View shared goals">
+      View goals
+    </button>
+  } @else {
+    <p>
+      The original accepted context remains unchanged. Sharing adds a separate goal context, not a
+      human message.
+    </p>
+    @if (shares.isPending || goal.isPending) {
+      <p role="status">Loading shared goals…</p>
+    }
+    @if (shares.isError || goal.isError || operation.isError) {
+      <p role="alert">{{ errorText }}</p>
+      <button
+        tuiButton
+        type="button"
+        [disabled]="operation.isPending"
+        (click)="refresh()"
+        aria-label="Refresh shared goals"
+      >
+        Refresh
+      </button>
+    }
+    @if (operation.isPending) {
+      <p role="status">Sharing goal…</p>
+    }
+    @if (uncertain) {
+      <button
+        tuiButton
+        type="button"
+        [disabled]="operation.isPending"
+        (click)="retryShare()"
+        aria-label="Retry same goal share"
+      >
+        Retry share
+      </button>
+    }
+    @if (operation.isSuccess) {
+      <p role="status">Goal share stored. Original context unchanged.</p>
+    }
+    @if (shares.data; as page) {
+      @if (page.latest; as entry) {
+        <section aria-label="Latest shared goal">
+          <h4>{{ entry.source.subject.label }}</h4>
+          <p>{{ entry.source.topic }}</p>
+          <p>{{ entry.source.context }}</p>
+          <p>
+            {{
+              entry.owner_id === actor().account_id ? 'Your shared goal' : 'Partner’s shared goal'
+            }}
+            · context version {{ entry.context_version }}
+          </p>
+          <p>
+            {{
+              entry.can_complete
+                ? 'Current goal · completion permitted for its owner'
+                : 'Read-only goal context'
+            }}
+          </p>
+        </section>
+      } @else {
+        <p>No newer goal has been shared.</p>
+      }
+      @for (entry of page.history; track entry.share_id) {
+        <section aria-label="Historical shared goal">
+          <h4>{{ entry.source.subject.label }}</h4>
+          <p>{{ entry.source.topic }}</p>
+          <p>{{ entry.source.context }}</p>
+          <p>Retained context version {{ entry.context_version }}</p>
+        </section>
+      }
+      @if (page.next_cursor !== null) {
+        <a
+          tuiLink
+          routerLink="/chats"
+          [queryParams]="{
+            conversation: conversationId(),
+            cursor: listCursor,
+            history_cursor: historyCursor,
+            share_cursor: page.next_cursor,
+          }"
+          >Earlier shared goals</a
+        >
+      }
+      @if (cursor !== null) {
+        <a
+          tuiLink
+          routerLink="/chats"
+          [queryParams]="{
+            conversation: conversationId(),
+            cursor: listCursor,
+            history_cursor: historyCursor,
+          }"
+          >Latest shared goals</a
+        >
+      }
+    }
+    @if (goal.data; as own) {
+      @if (own.goal; as current) {
+        <section aria-label="Your current goal">
+          <h4>Your current goal · {{ current.subject.label }}</h4>
+          <p>{{ current.topic }}</p>
+          <p>{{ current.context }}</p>
+          @if (current.completed_at === null) {
+            <button
+              tuiButton
+              type="button"
+              [disabled]="locked"
+              (click)="reviewGoal()"
+              aria-label="Review current goal for sharing"
+            >
+              Review goal
+            </button>
+            @if (review() !== null) {
+              @if (reviewCurrent) {
+                <p>
+                  Share this goal version as a separate context? The original request stays
+                  unchanged.
+                </p>
+                <button
+                  tuiButton
+                  type="button"
+                  [disabled]="locked"
+                  (click)="share()"
+                  aria-label="Share reviewed goal"
+                >
+                  Share goal
+                </button>
+              } @else {
+                <p role="status">
+                  The reviewed source changed. Review the current goal again before sharing.
+                </p>
+              }
+            }
+          } @else {
+            <p>This goal is completed. It cannot be shared as your current goal.</p>
+          }
+        </section>
+      } @else {
+        <p>You have no current goal to share.</p>
+      }
+    }
+  }
+</section>

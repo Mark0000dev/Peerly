@@ -1,0 +1,274 @@
+@for (actor of composerActors; track actor.account_id) {
+  <app-request-composer
+    [actor]="actor"
+    [recipientId]="composerRecipient"
+    [recipientName]="composerName"
+    [mode]="mode"
+    [open]="composerOpen"
+    (closed)="closeComposer()"
+    (expired)="composerExpired()"
+    (sent)="sentRequest($event)"
+    (reconciliation)="reconcileComposer($event)"
+  />
+}
+<main>
+  <peerly-student-navigation />
+  <header>
+    <a tuiButton appearance="flat" size="s" routerLink="/">Peerly</a>
+    <h1>{{ view === 'passed' ? 'Passed profiles' : 'Discover' }}</h1>
+  </header>
+  @if (session.isPending || session.isFetching) {
+    <p role="status">Checking your account…</p>
+  } @else if (session.isError) {
+    <section role="alert">
+      <h2>We couldn’t check your account</h2>
+      <button tuiButton type="button" (click)="retrySession()">Try again</button>
+    </section>
+  } @else if (actorId === null) {
+    <section>
+      <h2>Sign in with your verified APU account</h2>
+      <a tuiButton routerLink="/onboarding">Continue to setup</a>
+    </section>
+  } @else {
+    <nav aria-label="Discovery mode">
+      @for (item of modes; track item.id) {
+        <button
+          tuiButton
+          size="s"
+          type="button"
+          [appearance]="mode === item.id ? 'primary' : 'flat'"
+          [disabled]="locked"
+          [attr.aria-pressed]="mode === item.id"
+          (click)="changeMode($index)"
+        >
+          {{ item.label }}
+        </button>
+      }
+    </nav>
+
+    <div class="context">
+      @if (deck.data?.context) {
+        <p>
+          {{
+            mode === 'offer_help' ? 'Using your saved help areas' : 'Using your saved active goal'
+          }}
+        </p>
+      }
+      <a tuiButton appearance="flat" size="s" routerLink="/onboarding">Edit setup</a>
+      <button
+        tuiButton
+        appearance="flat"
+        size="s"
+        type="button"
+        [attr.aria-expanded]="menu()"
+        (click)="menu.set(!menu())"
+      >
+        Deck options
+      </button>
+    </div>
+    @if (menu()) {
+      <nav aria-label="Deck options">
+        <button
+          tuiButton
+          appearance="flat"
+          type="button"
+          [disabled]="locked"
+          (click)="changeView(view === 'passed' ? 'candidates' : 'passed')"
+        >
+          {{ view === 'passed' ? 'Back to Discover' : 'Review passed profiles' }}
+        </button>
+      </nav>
+    }
+    @if (view === 'passed') {
+      <p>
+        Only you can see these passes. They apply to this saved discovery context. Reconsidering
+        never notifies anyone.
+      </p>
+      <button
+        tuiButton
+        appearance="flat"
+        type="button"
+        [disabled]="locked"
+        (click)="changeView('candidates')"
+      >
+        Back to Discover
+      </button>
+    }
+    @if (decision.isError || deck.isError) {
+      <section role="alert">
+        <h2>{{ uncertain ? 'Decision not yet confirmed' : 'People could not be refreshed' }}</h2>
+        <p>{{ errorText }}</p>
+        @if (uncertain) {
+          <button tuiButton type="button" [disabled]="decision.isPending" (click)="retryDecision()">
+            Retry same decision
+          </button>
+        }
+        <button
+          tuiButton
+          appearance="secondary"
+          type="button"
+          [disabled]="decision.isPending"
+          (click)="refresh()"
+        >
+          Refresh current people
+        </button>
+      </section>
+    }
+    @if (decision.isPending) {
+      <p role="status">Saving your private decision…</p>
+    }
+    @if (deck.isPending || deck.isFetching) {
+      <p role="status">Loading people…</p>
+    } @else if (deck.isSuccess) {
+      @if (deck.data.undo_pass; as undo) {
+        <div role="status" class="undo">
+          <span>Your latest pass can be undone until your next committed decision.</span>
+          <button
+            tuiButton
+            appearance="secondary"
+            type="button"
+            [disabled]="!canDecide"
+            (click)="decide(undo, false, true)"
+          >
+            Undo pass
+          </button>
+        </div>
+      }
+      @for (person of currentCard; track person.id) {
+        @if (view === 'passed') {
+          <ul aria-label="Passed people">
+            @for (item of deck.data.people; track item.id) {
+              <li>
+                <h2>{{ item.display_name }}</h2>
+                <p>{{ relevanceText(item.relevance) }}</p>
+                <a tuiButton appearance="flat" size="s" [routerLink]="['/people', item.id]"
+                  >View {{ item.display_name }}’s profile</a
+                >
+                <button
+                  tuiButton
+                  appearance="flat"
+                  size="s"
+                  type="button"
+                  [disabled]="!canDecide"
+                  (click)="decide(item.own_pass, false)"
+                >
+                  Review again
+                </button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <article tuiCardLarge="compact" tuiAppearance="neutral" aria-labelledby="candidate-name">
+            <span tuiBadge appearance="sp-relevance" size="xl">{{
+              reasonLabels[person.relevance.reason]
+            }}</span>
+            <p>{{ relevanceText(person.relevance) }}</p>
+            <app-discovery-photo
+              [actorId]="actorId"
+              [personId]="person.id"
+              [version]="person.photo.version"
+              [name]="person.display_name"
+              (failure)="reauthorize($event)"
+              (refresh)="refresh()"
+            />
+            <h2 id="candidate-name" tabindex="-1" tuiAutoFocus>{{ person.display_name }}</h2>
+            <p>APU email confirmed · access only</p>
+            @if (person.about !== null) {
+              <p>{{ person.about }}</p>
+            }
+            @if (person.relevance.reciprocal_subject_label !== null) {
+              <p>
+                You could also help with their {{ person.relevance.reciprocal_subject_label }} goal.
+              </p>
+            }
+            <a tuiButton appearance="flat" [routerLink]="['/people', person.id]">View profile</a>
+          </article>
+          <div class="actions">
+            <button
+              tuiButton
+              type="button"
+              aria-label="Review request"
+              [disabled]="!canDecide"
+              (click)="openComposer()"
+            >
+              Review
+            </button>
+            <button
+              tuiButton
+              appearance="secondary-grayscale"
+              type="button"
+              [disabled]="!canDecide"
+              (click)="decide(person.own_pass, true)"
+            >
+              Pass
+            </button>
+          </div>
+        }
+        @if (view === 'candidates' && deck.data.people.length > 1) {
+          <nav aria-label="People on this page">
+            @for (item of deck.data.people; track item.id) {
+              <button
+                tuiButton
+                appearance="flat"
+                size="s"
+                type="button"
+                [attr.aria-current]="item.id === person.id ? 'true' : null"
+                (click)="select(item.id)"
+              >
+                {{ item.display_name }}
+              </button>
+            }
+          </nav>
+        }
+      } @empty {
+        <section tuiCardLarge="compact" tuiAppearance="neutral">
+          @switch (deck.data.empty_reason) {
+            @case ('context_required') {
+              <h2>
+                {{
+                  mode === 'offer_help' ? 'What can you help with?' : 'Choose your learning goal'
+                }}
+              </h2>
+              <p>
+                {{
+                  mode === 'offer_help'
+                    ? 'Save a help area before exploring this mode.'
+                    : 'Save an active goal with a listed knowledge area for this mode. Study together also requires your explicit shared-learning choice.'
+                }}
+              </p>
+              <a tuiButton routerLink="/onboarding">Edit setup</a>
+            }
+            @case ('no_relevant_people') {
+              <h2>No relevant people yet</h2>
+              <p>
+                No eligible people match your saved context right now. Your mode and saved goal have
+                not been changed.
+              </p>
+              <a tuiButton routerLink="/onboarding">Edit setup</a>
+            }
+            @case ('exhausted') {
+              <h2>You have seen everyone for now</h2>
+              <p>New people can appear as students update their goals and help areas.</p>
+              <button tuiButton type="button" [disabled]="locked" (click)="changeView('passed')">
+                Review passed profiles
+              </button>
+            }
+            @case ('no_available_passed_people') {
+              <h2>No available passed profiles</h2>
+              <p>Eligible people you pass in this context appear here. They’re never told.</p>
+            }
+            @default {
+              <h2>No people on this page</h2>
+              <button tuiButton type="button" (click)="refresh()">Refresh current people</button>
+            }
+          }
+        </section>
+      }
+      @if (deck.data.next_cursor !== null) {
+        <button tuiButton appearance="secondary" type="button" [disabled]="locked" (click)="next()">
+          Next page
+        </button>
+      }
+    }
+  }
+</main>

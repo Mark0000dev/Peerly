@@ -1,0 +1,36 @@
+<main>
+  <peerly-brand />
+  <h1>Deletion status</h1>
+  @if (status.isPending || status.isFetching) {
+    <p role="status">Checking your deletion request…</p>
+  } @else if (confirmed) {
+    <h2>Deletion confirmed</h2>
+    <p>
+      The account for this request is deleted. Its sessions have ended. Other people see “Deleted
+      account” in those conversations.
+    </p>
+    <a tuiButton routerLink="/">Back to Peerly</a>
+  } @else if (status.isSuccess) {
+    <h2>Deletion hasn’t been confirmed</h2>
+    <p>
+      If you confirmed deletion and the connection dropped, it may still finish. Check again before
+      making another request.
+    </p>
+    <button tuiButton type="button" (click)="check()">Check again</button>
+    <a tuiLink routerLink="/account/delete">Return to account deletion</a>
+  } @else {
+    <h2>We can’t confirm deletion</h2>
+    @if (unavailable) {
+      <p>
+        This browser can’t check that deletion request. The account may still have been deleted.
+      </p>
+    } @else {
+      <p>We couldn’t reach a confirmed result. Check again before making another request.</p>
+    }
+    <button tuiButton type="button" (click)="check()">Check again</button>
+  }
+  @if (reference; as id) {
+    <p>Reference: {{ id }}</p>
+  }
+  <a tuiLink routerLink="/help">Help</a>
+</main>

@@ -1,0 +1,134 @@
+<section aria-labelledby="help-subjects-heading">
+  <h2 id="help-subjects-heading">You can help with</h2>
+  <p>
+    Choose knowledge areas you can help with, from a course, work or independent learning. Taking
+    the same module isn’t required.
+  </p>
+  @if ((help.isPending || help.isFetching) && !draftPresent) {
+    <tui-loader [loading]="true" textContent="Loading your help areas…" role="status" />
+  } @else if (help.isError && !draftPresent) {
+    <p role="alert">We couldn’t load your help areas.</p>
+    <button tuiButton type="button" (click)="reload()">Try again</button>
+  } @else {
+    @if (help.isFetching) {
+      <p role="status">Refreshing your saved areas. Your draft is still here.</p>
+    }
+    @if (help.isError) {
+      <p role="alert">We couldn’t refresh your saved areas. Your draft is still here.</p>
+      <button tuiLink type="button" [disabled]="checking()" (click)="reload()">
+        Reload saved areas
+      </button>
+    }
+    <form #helpForm="ngForm" [formGroup]="form" (ngSubmit)="save()">
+      @for (
+        item of rows.controls;
+        track item.controls.subject.value.subject_id;
+        let index = $index
+      ) {
+        <section [attr.aria-label]="item.controls.subject.value.label">
+          <h3>{{ item.controls.subject.value.label }}</h3>
+          <tui-textfield>
+            <label tuiLabel [for]="'help-note-' + index">Note</label>
+            <input
+              tuiInput
+              [id]="'help-note-' + index"
+              [attr.aria-label]="'Note for ' + item.controls.subject.value.label + ' · optional'"
+              [formControl]="item.controls.note"
+              [readOnly]="locked"
+              aria-describedby="help-note-hint"
+              [attr.aria-invalid]="item.controls.note.touched && item.controls.note.invalid"
+            />
+          </tui-textfield>
+          @if (helpForm.submitted && item.controls.note.invalid) {
+            <p role="alert">Keep each topic note within 80 characters.</p>
+          }
+          <button tuiLink type="button" [disabled]="locked" (click)="remove(index)">
+            Remove {{ item.controls.subject.value.label }}
+          </button>
+        </section>
+      } @empty {
+        <p>Add something you can help with. Helping is always optional.</p>
+      }
+      <p id="help-note-hint">
+        Add topics or optional context, such as a module code. Up to 80 characters.
+      </p>
+      <p>{{ rows.length }} of 5 areas. Changes apply after you save.</p>
+      @if (rows.length < 5) {
+        <button
+          tuiButton
+          type="button"
+          appearance="secondary"
+          [disabled]="locked"
+          (click)="openPicker()"
+        >
+          Add an area
+        </button>
+      } @else {
+        <p>You can help with up to 5 areas. Remove one to add another.</p>
+      }
+      <button
+        tuiButton
+        type="submit"
+        [disabled]="
+          checking() || saving.isPending || conflict || !help.isSuccess || help.isFetching
+        "
+        [attr.aria-label]="
+          saving.isPending ? 'Saving…' : uncertain ? 'Retry same save' : 'Save help areas'
+        "
+      >
+        {{ saving.isPending ? 'Saving…' : uncertain ? 'Retry' : 'Save' }}
+      </button>
+    </form>
+    @if (message; as error) {
+      <p role="alert">{{ error }}</p>
+    }
+    @if (saving.isSuccess && !conflict) {
+      <p role="status">Help areas saved.</p>
+    }
+    @if (saving.isError || remoteChanged) {
+      <button tuiLink type="button" (click)="reload()">Reload saved areas</button>
+    }
+  }
+</section>
+
+<ng-template
+  [tuiDialog]="adding()"
+  [tuiDialogOptions]="{ label: 'Add an area', size: 'm' }"
+  (tuiDialogChange)="adding.set($event)"
+>
+  <section aria-label="Choose a knowledge area">
+    <tui-textfield>
+      <label tuiLabel for="help-subject-search">Search areas</label>
+      <input tuiInput id="help-subject-search" [formControl]="searchText" (input)="search()" />
+    </tui-textfield>
+    @if (catalogue.isPending || catalogue.isFetching) {
+      <tui-loader [loading]="true" textContent="Searching areas…" role="status" />
+    } @else if (catalogue.isError) {
+      <p role="alert">We couldn’t load areas.</p>
+      <button tuiButton type="button" (click)="retryCatalogue()">Retry areas</button>
+    } @else {
+      @for (subject of catalogue.data.items; track subject.id) {
+        <button
+          tuiButton
+          type="button"
+          appearance="flat"
+          [disabled]="selected(subject)"
+          [iconEnd]="selected(subject) ? '@tui.check' : null"
+          [attr.aria-label]="selected(subject) ? subject.name + ', Already added' : null"
+          (click)="choose(subject)"
+        >
+          <span class="subject-option"
+            ><span>{{ subject.name }}</span
+            ><small>{{ subject.aliases.join(', ') }}</small></span
+          >
+        </button>
+      } @empty {
+        <p>No areas found. Try another name or alias.</p>
+      }
+      @if (catalogue.data.next_cursor) {
+        <button tuiLink type="button" (click)="more()">Next areas</button>
+      }
+    }
+    <button tuiLink type="button" (click)="adding.set(false)">Cancel</button>
+  </section>
+</ng-template>

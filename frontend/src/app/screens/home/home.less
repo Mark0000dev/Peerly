@@ -1,0 +1,155 @@
+:host {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.site-header,
+section,
+footer {
+  max-inline-size: 76rem;
+  margin-inline: auto;
+  padding: 2rem max(1rem, env(safe-area-inset-left)) 2rem max(1rem, env(safe-area-inset-right));
+}
+
+.site-header,
+nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.site-header {
+  justify-content: space-between;
+  padding-block-start: max(1rem, env(safe-area-inset-top));
+}
+
+.site-header nav {
+  display: none;
+}
+
+.hero,
+.safety {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 2rem;
+}
+
+.hero {
+  padding-block: 3rem;
+  background: var(--tui-background-base-alt);
+}
+
+.hero-art,
+.safety img {
+  max-inline-size: 100%;
+  block-size: auto;
+  justify-self: center;
+}
+
+h1 {
+  font: var(--tui-typography-heading-h2);
+  margin-block: 0.75rem 1.5rem;
+}
+
+h2 {
+  font: var(--tui-typography-heading-h4);
+  margin-block: 0.75rem 1.5rem;
+}
+
+h3 {
+  font: var(--tui-typography-heading-h6);
+  margin: 0;
+}
+
+.lead {
+  font: var(--tui-typography-body-l);
+  max-inline-size: 38rem;
+  margin-block-end: 1.5rem;
+}
+
+.note {
+  font: var(--tui-typography-body-s);
+  max-inline-size: 36rem;
+}
+
+.eyebrow {
+  font: var(--tui-typography-ui-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cards {
+  display: grid;
+  gap: 1.25rem;
+}
+
+article {
+  min-inline-size: 0;
+  align-content: start;
+}
+
+article p {
+  margin: 0;
+}
+
+.step {
+  inline-size: fit-content;
+  padding: 0.25rem 0.5rem;
+}
+
+li {
+  margin-block: 1rem;
+}
+
+.closing {
+  display: grid;
+  gap: 1rem;
+  margin-inline: 0;
+  padding: 1rem;
+  border-radius: var(--tui-radius-xl);
+}
+
+.closing h2 {
+  margin: 0;
+}
+
+.closing a {
+  justify-self: start;
+}
+
+footer {
+  padding-block-end: max(2rem, env(safe-area-inset-bottom));
+}
+
+@media (width >= 48rem) {
+  .site-header nav {
+    display: flex;
+  }
+
+  section {
+    padding-block: 4rem;
+  }
+
+  .cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .hero,
+  .safety {
+    grid-template-columns: 3fr 2fr;
+  }
+
+  .hero-art {
+    inline-size: 100%;
+  }
+
+  h1 {
+    font: var(--tui-typography-heading-h1);
+  }
+
+  .closing {
+    margin-inline: auto;
+  }
+}

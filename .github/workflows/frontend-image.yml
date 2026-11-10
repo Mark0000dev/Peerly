@@ -1,0 +1,239 @@
+name: Frontend staging image
+
+on:
+  push:
+    branches:
+      - feature/peerly-staging-frontend
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize the same commit even when push and manual dispatch overlap.
+concurrency:
+  group: frontend-image-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build, restricted nginx smoke and publish
+    if: github.ref == 'refs/heads/feature/peerly-staging-frontend'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+      image: ${{ steps.publish.outputs.image }}
+    env:
+      IMAGE_REPOSITORY: ghcr.io/mark0000dev/peerly-frontend
+      SMOKE_CONTAINER: peerly-frontend-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Initialize temporary authentication and receipt paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "DOCKER_CONFIG=$RUNNER_TEMP/peerly-frontend-auth-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "RECEIPT_DIRECTORY=$RUNNER_TEMP/peerly-frontend-receipts" >> "$GITHUB_ENV"
+
+      - name: Check out exact triggering commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Build production image from the frontend context
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RECEIPT_DIRECTORY"
+          docker build --file frontend/Dockerfile \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --tag "$IMAGE_REPOSITORY:staging-$GITHUB_SHA" frontend
+
+      - name: Smoke the exact image as nonroot with a read-only filesystem
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import time
+          import urllib.error
+          import urllib.request
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          image = os.environ["IMAGE_REPOSITORY"] + ":staging-" + os.environ["GITHUB_SHA"]
+          container = os.environ["SMOKE_CONTAINER"]
+          subprocess.run([
+              "docker", "run", "--detach", "--name", container,
+              "--user", "101:101", "--read-only",
+              "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m,uid=101,gid=101",
+              "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+              "--pids-limit", "128", "--memory", "256m", "--cpus", "1",
+              "--publish", "127.0.0.1::8080", image,
+          ], check=True)
+          details = json.loads(subprocess.check_output(["docker", "inspect", container]))[0]
+          if details["Config"]["User"] != "101:101" or not details["HostConfig"]["ReadonlyRootfs"]:
+              raise RuntimeError("Smoke must use the actual nonroot/read-only image contract")
+          port = details["NetworkSettings"]["Ports"]["8080/tcp"][0]["HostPort"]
+          base = "http://127.0.0.1:" + port
+
+          def fetch(path):
+              try:
+                  with urllib.request.urlopen(base + path, timeout=3) as response:
+                      return response.status, response.read(), response.headers
+              except urllib.error.HTTPError as error:
+                  return error.code, error.read(), error.headers
+
+          deadline = time.monotonic() + 45
+          while True:
+              try:
+                  status, body, _ = fetch("/healthz")
+                  if status == 200 and body == b"ok\n":
+                      break
+              except (urllib.error.URLError, TimeoutError):
+                  pass
+              if time.monotonic() >= deadline:
+                  raise RuntimeError("nginx did not serve the exact health receipt within 45 seconds")
+              time.sleep(1)
+
+          def document(name):
+              return subprocess.check_output([
+                  "docker", "exec", container, "cat", "/usr/share/nginx/html/" + name,
+              ])
+
+          root = document("index.html")
+          csr = document("index.csr.html")
+          if root == csr:
+              raise RuntimeError("Expected distinct prerendered landing and client app documents")
+          checks = []
+          for path, expected in (("/", root), ("/profile", csr), ("/index.csr.html", csr)):
+              status, body, headers = fetch(path)
+              if status != 200 or body != expected or headers.get_content_type() != "text/html":
+                  raise RuntimeError("Wrong static document or SPA fallback: " + path)
+              checks.append({"path": path, "status": status, "exact_document": True})
+          for path in ("/assets/__peerly_missing__.js", "/__peerly_missing__.css", "/api/v1/me"):
+              status, body, _ = fetch(path)
+              if status != 404 or body in (root, csr):
+                  raise RuntimeError("Missing assets/API must not fall back to the application: " + path)
+              checks.append({"path": path, "status": status})
+
+          class Scripts(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.paths = []
+
+              def handle_starttag(self, tag, attrs):
+                  if tag == "script":
+                      self.paths.extend(value for key, value in attrs if key == "src" and value)
+
+          scripts = Scripts()
+          scripts.feed(csr.decode("utf-8"))
+          if not scripts.paths:
+              raise RuntimeError("Client document has no production JavaScript assets")
+          for source in scripts.paths:
+              parsed = urlsplit(source)
+              if parsed.scheme or parsed.netloc or source.startswith("//"):
+                  raise RuntimeError("Production scripts must be served by the same origin")
+              path = "/" + source.lstrip("/")
+              status, body, headers = fetch(path)
+              if status != 200 or not body or body in (root, csr):
+                  raise RuntimeError("Production JavaScript asset is unavailable: " + path)
+              if headers.get_content_type() not in ("application/javascript", "text/javascript"):
+                  raise RuntimeError("Production script has the wrong media type: " + path)
+              checks.append({"path": path, "status": status})
+          subprocess.run(["docker", "exec", container, "nginx", "-t"], check=True)
+          receipt = {"image": image, "source_sha": os.environ["GITHUB_SHA"],
+                     "image_id": details["Image"], "user": "101:101", "read_only": True,
+                     "health": {"path": "/healthz", "status": 200, "body": "ok\n"},
+                     "checks": checks}
+          Path(os.environ["RECEIPT_DIRECTORY"], "smoke.json").write_text(
+              json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Publish the smoked commit image and record the registry digest
+        id: publish
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$DOCKER_CONFIG"
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          import subprocess
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          repository = "mark0000dev/peerly-frontend"
+          sha = os.environ["GITHUB_SHA"]
+          if re.fullmatch(r"[0-9a-f]{40}", sha) is None:
+              raise RuntimeError("Publishing requires the exact full commit SHA")
+          tag = "staging-" + sha
+          image = os.environ["IMAGE_REPOSITORY"] + ":" + tag
+          credential = os.environ["GITHUB_TOKEN"]
+          subprocess.run(["docker", "login", "ghcr.io", "--username", os.environ["GITHUB_ACTOR"],
+                          "--password-stdin"], input=credential + "\n", text=True, check=True)
+          subprocess.run(["docker", "push", image], check=True)
+          basic = base64.b64encode((os.environ["GITHUB_ACTOR"] + ":" + credential).encode()).decode()
+          query = urllib.parse.urlencode({"service": "ghcr.io", "scope": "repository:" + repository + ":pull,push"})
+          request = urllib.request.Request("https://ghcr.io/token?" + query,
+                                           headers={"Authorization": "Basic " + basic})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              token = json.load(response)["token"]
+          manifest_url = "https://ghcr.io/v2/" + repository + "/manifests/" + tag
+          headers = {"Authorization": "Bearer " + token,
+                     "Accept": "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"}
+          with urllib.request.urlopen(urllib.request.Request(manifest_url, headers=headers), timeout=30) as response:
+              digest = response.headers.get("Docker-Content-Digest", "")
+              manifest = json.load(response)
+          if re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
+              raise RuntimeError("Registry did not return an actual immutable digest")
+          directory = Path(os.environ["RECEIPT_DIRECTORY"])
+          smoke = json.loads((directory / "smoke.json").read_text(encoding="utf-8"))
+          if manifest.get("config", {}).get("digest") != smoke["image_id"]:
+              raise RuntimeError("Published manifest does not reference the smoked image configuration")
+          reference = os.environ["IMAGE_REPOSITORY"] + "@" + digest
+          receipt = {"source_sha": sha, "tag": image, "digest": digest, "image": reference,
+                     "smoked_image_id": smoke["image_id"]}
+          (directory / "published.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("digest=" + digest + "\nimage=" + reference + "\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("Frontend image published after nonroot/read-only nginx smoke.\n\n"
+                            "Commit: `" + sha + "`\n\nTag: `" + image + "`\n\n"
+                            "Digest reference: `" + reference + "`\n\n"
+                            "Internal diagnostic staging only; ResizeObserver remains open.\n")
+          PY
+
+      - name: Retain source, smoke and digest receipts
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: frontend-image-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ env.RECEIPT_DIRECTORY }}/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Container diagnostics and ephemeral cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'rm -rf -- "$DOCKER_CONFIG"' EXIT
+          container_id=$(docker ps --all --quiet --filter "name=^/$SMOKE_CONTAINER$")
+          if [ -n "$container_id" ]; then
+            docker logs "$container_id"
+            docker rm --force "$container_id"
+          fi
