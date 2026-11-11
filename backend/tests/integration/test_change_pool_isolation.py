@@ -1,6 +1,9 @@
 """Controlled exhausted transport pool; not500 live authorized SSE connections."""
 
 import asyncio
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
 from http import HTTPStatus
 
 import pytest
@@ -11,6 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from sqlalchemy.pool import AsyncAdaptedQueuePool
 from starlette.types import Message, Scope
 
+from studymate.application.changes.observations import (
+    StreamEnd,
+    StreamFrame,
+    StreamObservation,
+    StreamSend,
+)
 from studymate.application.changes.reads import ReadChanges
 from studymate.application.check_readiness import CheckReadiness
 from studymate.bootstrap import create_change_read_engine, create_changes_worker_engine
@@ -18,6 +27,7 @@ from studymate.infrastructure.changes.reads import SqlChangeReadUnitOfWork
 from studymate.infrastructure.persistence.database import SqlDatabaseProbe
 from studymate.presentation.browser import SESSION_COOKIE
 from studymate.presentation.changes.router import ChangeHttpServices, changes_router
+from studymate.presentation.changes.stream import ChangeStreamPolicy
 from studymate.presentation.health import health_router
 from tests.integration.requests.fixture import HASHER
 from tests.integration.test_message_commands import chat
@@ -27,6 +37,72 @@ BURST_SIZE = 500
 CORE_READS = 12
 STREAM_READ_CONNECTIONS = 2
 CORE_LATENCY_BUDGET_SECONDS = 2.0
+BURST_SEND_TIMEOUT_SECONDS = 0.1
+PRODUCTION_SEND_TIMEOUT_SECONDS = 5.0
+
+
+@dataclass(slots=True)
+class BurstStreamObservations:
+    opened_count: int = 0
+    closed_reasons: list[StreamEnd] = field(default_factory=list)
+    sends: list[tuple[float, StreamSend]] = field(default_factory=list)
+    delivered_frames: list[tuple[StreamFrame, datetime | None]] = field(default_factory=list)
+
+    def stream(self) -> StreamObservation:
+        return self
+
+    def opened(self) -> None:
+        self.opened_count += 1
+
+    def closed(self, reason: StreamEnd) -> None:
+        self.closed_reasons.append(reason)
+
+    def frame(self, kind: StreamFrame, published_at: datetime | None = None) -> None:
+        self.delivered_frames.append((kind, published_at))
+
+    def sent(self, seconds: float, *, outcome: StreamSend) -> None:
+        self.sends.append((seconds, outcome))
+
+
+def assert_burst_isolated(
+    starts: list[int],
+    core_durations: list[float],
+    observations: BurstStreamObservations,
+    pool: AsyncAdaptedQueuePool,
+    stalled: asyncio.Event,
+) -> None:
+    assert ChangeStreamPolicy().send_timeout_seconds == PRODUCTION_SEND_TIMEOUT_SECONDS
+    assert len(starts) == BURST_SIZE
+    assert 0 < starts.count(HTTPStatus.OK) <= BURST_SIZE
+    assert set(starts) <= {HTTPStatus.OK, HTTPStatus.SERVICE_UNAVAILABLE}
+    assert len(core_durations) == CORE_READS
+    assert max(core_durations) < CORE_LATENCY_BUDGET_SECONDS
+    admitted = starts.count(HTTPStatus.OK)
+    assert stalled.is_set()
+    assert observations.opened_count == admitted
+    assert observations.closed_reasons == [StreamEnd.BACKPRESSURE] * admitted
+    assert len(observations.sends) == admitted
+    assert all(outcome == StreamSend.TIMEOUT for _, outcome in observations.sends)
+    assert not observations.delivered_frames
+    assert pool.size() == STREAM_READ_CONNECTIONS
+    assert pool.checkedout() == 0
+    assert pool.overflow() == 0
+
+
+def record_burst_properties(
+    record: Callable[[str, object], None],
+    observations: BurstStreamObservations,
+    starts: list[int],
+    core_durations: list[float],
+    admission_seconds: float | None,
+) -> None:
+    record("headers_seen", len(starts))
+    record("admitted_streams", starts.count(HTTPStatus.OK))
+    record("backpressure_closed", observations.closed_reasons.count(StreamEnd.BACKPRESSURE))
+    record("cancelled_streams", observations.closed_reasons.count(StreamEnd.CANCELLED))
+    record("admission_seconds", admission_seconds)
+    record("core_completed", len(core_durations))
+    record("core_max_seconds", max(core_durations) if core_durations else None)
 
 
 async def test_exhausted_change_pool_sheds_burst_without_consuming_core_or_worker_connections(
@@ -97,6 +173,7 @@ async def test_exhausted_change_pool_sheds_burst_without_consuming_core_or_worke
 async def test_burst_of500_hot_account_stream_attempts_keeps_positive_bounded_admission(
     identity_engine: AsyncEngine,
     database_url: str,
+    record_property: Callable[[str, object], None],
 ) -> None:
     """500 ASGI clients share two real accounts, not500 independent student identities."""
     owned = await chat(identity_engine)
@@ -108,11 +185,18 @@ async def test_burst_of500_hot_account_stream_attempts_keeps_positive_bounded_ad
         SqlChangeReadUnitOfWork(async_sessionmaker(transport, expire_on_commit=False)), HASHER
     )
     app = FastAPI()
-    app.include_router(changes_router(ChangeHttpServices(reader)))
+    observations = BurstStreamObservations()
+    # Exercise the real bounded-send path with an explicit short test policy.
+    # Keep the admission watchdog independent of production-length send expiry;
+    # production stays5s, and every admitted stream must end via a real timeout.
+    policy = ChangeStreamPolicy(send_timeout_seconds=BURST_SEND_TIMEOUT_SECONDS)
+    app.include_router(changes_router(ChangeHttpServices(reader, policy, observations)))
     starts: list[int] = []
     core_durations: list[float] = []
     never = asyncio.Event()
+    stalled = asyncio.Event()
     loop = asyncio.get_running_loop()
+    admission_finished_at: float | None = None
 
     async def attempt_stream(index: int) -> None:
         actor = owned.sender if index % 2 else owned.recipient
@@ -136,34 +220,42 @@ async def test_burst_of500_hot_account_stream_attempts_keeps_positive_bounded_ad
             return {"type": "http.disconnect"}
 
         async def send(message: Message) -> None:
-            nonlocal status
+            nonlocal status, admission_finished_at
             if message["type"] == "http.response.start":
                 status = message["status"]
                 starts.append(status)
+                if len(starts) == BURST_SIZE:
+                    admission_finished_at = loop.time()
             elif message["type"] == "http.response.body" and status == HTTPStatus.OK:
                 # A slow network send must hold no SQL lease while its deadline elapses.
+                stalled.set()
                 await never.wait()
 
         await app(scope, receive, send)
 
     async def core_read() -> None:
+        # A real admitted send must already be stalled when core probes begin.
+        await stalled.wait()
         started = loop.time()
         assert await SqlDatabaseProbe(owned.api.sessions).is_available()
         core_durations.append(loop.time() - started)
 
+    burst_started = loop.time()
     try:
         async with app.router.lifespan_context(app), asyncio.timeout(10):
             await asyncio.gather(
                 *(attempt_stream(index) for index in range(BURST_SIZE)),
                 *(core_read() for _ in range(CORE_READS)),
             )
-        assert len(starts) == BURST_SIZE
-        assert 0 < starts.count(HTTPStatus.OK) <= BURST_SIZE
-        assert set(starts) <= {HTTPStatus.OK, HTTPStatus.SERVICE_UNAVAILABLE}
-        assert len(core_durations) == CORE_READS
-        assert max(core_durations) < CORE_LATENCY_BUDGET_SECONDS
         assert isinstance(transport.pool, AsyncAdaptedQueuePool)
-        assert transport.pool.checkedout() == 0
-        assert transport.pool.overflow() == 0
+        assert_burst_isolated(starts, core_durations, observations, transport.pool, stalled)
     finally:
+        record_burst_properties(
+            record_property,
+            observations,
+            starts,
+            core_durations,
+            admission_finished_at - burst_started if admission_finished_at is not None else None,
+        )
+        record_property("send_timeout_seconds", policy.send_timeout_seconds)
         await transport.dispose()
