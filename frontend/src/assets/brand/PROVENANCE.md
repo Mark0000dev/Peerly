@@ -17,3 +17,14 @@ Source: owner-provided design-v2 `peerly-design-package-2026-11-07.zip`, `design
 Mascots are byte-identical original supplied SVGs. Their embedded declarative CSS animations stay inside each image document; the supplied `prefers-reduced-motion: reduce` rule disables all mascot animation when reduced motion is requested. No exported page/runtime CSS, global animation overrides, scripts or new rendering wrapper is used. Hashes above identify these shipped SVGs.
 
 Self-hosted fonts come from pinned Fontsource Inter 5.3.0 and M PLUS Rounded 1c 5.3.0 packages. Their redistributed OFL licenses are included as `Inter-OFL.txt` and `M-PLUS-Rounded-1c-OFL.txt`.
+
+## Reduced-motion image selection
+
+The six `mascot-*-still.svg` files preserve the previously approved static vector
+derivatives from the accepted frontend snapshot. Native HTML picture/source media
+selection uses them only when prefers-reduced-motion is reduce; normal mode keeps
+the exact original animated SVGs. This avoids relying on a reduced-motion media
+override reaching an SVG image's separate rendering document. No JavaScript media
+store, animation wrapper/component, Taiga override, global CSS or altered vector
+geometry is introduced. Existing ordinary decorative img elements remain inside
+semantic picture sources, retaining their sizes and alt behavior.

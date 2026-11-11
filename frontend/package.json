@@ -29,7 +29,8 @@
     "test:fullstack": "node tooling/fullstack-matrix.mjs",
     "test:public": "STUDYMATE_STATIC_BUILD=1 node tooling/browser-gate.mjs test",
     "postinstall": "node tooling/font-watcher-patch.mjs before && patch-package --error-on-fail && node tooling/font-watcher-patch.mjs after",
-    "diagnose:font-watcher": "node tooling/font-watcher-repro.mjs"
+    "diagnose:font-watcher": "node tooling/font-watcher-repro.mjs",
+    "test:mascot-motion": "node testing/mascot-motion.mjs"
   },
   "private": true,
   "packageManager": "npm@10.8.2",

@@ -15,7 +15,13 @@
   } @else if (session.isPending || (session.isFetching && !retainingEditor)) {
     <tui-loader [loading]="true" textContent="Checking your sign-in…" role="status" />
   } @else if (session.isError && !retainingEditor) {
-    <img class="art" src="assets/brand/mascot-oops.svg" width="160" height="140" alt="" />
+    <picture class="art">
+      <source
+        media="(prefers-reduced-motion: reduce)"
+        srcset="assets/brand/mascot-oops-still.svg"
+      />
+      <img src="assets/brand/mascot-oops.svg" width="160" height="140" alt="" />
+    </picture>
     <h1>We couldn’t check your sign-in</h1>
     <p role="alert">Please try again. Your account hasn’t been changed by this check.</p>
     <button tuiButton type="button" (click)="checkStatus()">Try again</button>
@@ -36,7 +42,13 @@
       <p>Your account currently has restricted access.</p>
       <a tuiButton routerLink="/help">Help</a>
     } @else if (actor.membership_status === 'verified') {
-      <img class="art" src="assets/brand/mascot-hello.svg" width="160" height="140" alt="" />
+      <picture class="art">
+        <source
+          media="(prefers-reduced-motion: reduce)"
+          srcset="assets/brand/mascot-hello-still.svg"
+        />
+        <img src="assets/brand/mascot-hello.svg" width="160" height="140" alt="" />
+      </picture>
       <h1>Your APU email is confirmed</h1>
       <p>You’re signed in to Peerly.</p>
       <a tuiLink routerLink="/profile">Profile and settings</a>
@@ -122,7 +134,13 @@
         </p>
         <a tuiButton routerLink="/help">Get help</a>
       } @else {
-        <img class="art" src="assets/brand/mascot-letter.svg" width="160" height="140" alt="" />
+        <picture class="art">
+          <source
+            media="(prefers-reduced-motion: reduce)"
+            srcset="assets/brand/mascot-letter-still.svg"
+          />
+          <img src="assets/brand/mascot-letter.svg" width="160" height="140" alt="" />
+        </picture>
         <h1>Check your APU email</h1>
         <p>
           Enter the 6-digit code for <strong>{{ current.email }}</strong
@@ -192,7 +210,13 @@
     <button tuiLink type="button" (click)="checkStatus()">Check status</button
     ><button tuiLink type="button" (click)="signOut()">Sign out</button>
   } @else {
-    <img class="art" src="assets/brand/mascot-hello.svg" width="160" height="140" alt="" />
+    <picture class="art">
+      <source
+        media="(prefers-reduced-motion: reduce)"
+        srcset="assets/brand/mascot-hello-still.svg"
+      />
+      <img src="assets/brand/mascot-hello.svg" width="160" height="140" alt="" />
+    </picture>
     <h1>Find someone to study with</h1>
     <p>Get help, share what you know, or work through a topic together. For APU students.</p>
     <article tuiCardLarge appearance="floating" aria-label="Example of a connection">

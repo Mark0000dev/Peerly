@@ -42,10 +42,17 @@ nav {
 }
 
 .hero-art,
-.safety img {
+.safety-art {
   max-inline-size: 100%;
   block-size: auto;
   justify-self: center;
+}
+
+.hero-art img,
+.safety-art img {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
 }
 
 h1 {
@@ -141,7 +148,8 @@ footer {
     grid-template-columns: 3fr 2fr;
   }
 
-  .hero-art {
+  .hero-art,
+  .hero-art img {
     inline-size: 100%;
   }
 
