@@ -14,16 +14,15 @@ groups:
         See OPS02 runbook.
       dashboard_uid: peerly-technical-v1
   - alert: PeerlyRestErrorRatio
-    expr: '(sum by (deployment_environment_name) (rate(http_server_requests{http_response_status_code=~"5..",http_route!="/api/v1/events"}[5m]))
+    expr: '(sum by (deployment_environment_name) (rate(http_server_requests{job="peerly-app-metrics",http_response_status_code=~"5..",http_route!="/api/v1/events",http_route!~"^/api/(health|ready)$"}[5m]))
 
-      / sum by (deployment_environment_name) (rate(http_server_requests{http_route!="/api/v1/events"}[5m])) > 0.05)
+      / sum by (deployment_environment_name) (rate(http_server_requests{job="peerly-app-metrics",http_route!="/api/v1/events",http_route!~"^/api/(health|ready)$"}[5m]))
+      > 0.05)
 
       and on (deployment_environment_name)
 
-      sum by (deployment_environment_name) (increase(http_server_requests{http_route!="/api/v1/events"}[5m])) >=
-      100
-
-      '
+      sum by (deployment_environment_name) (increase(http_server_requests{job="peerly-app-metrics",http_route!="/api/v1/events",http_route!~"^/api/(health|ready)$"}[5m]))
+      >= 100'
     for: 10m
     labels:
       severity: warning
@@ -34,15 +33,13 @@ groups:
         See OPS02 runbook.
       dashboard_uid: peerly-technical-v1
   - alert: PeerlyRestP95Slow
-    expr: 'histogram_quantile(0.95, sum by (le,deployment_environment_name) (rate(http_server_request_duration_bucket{http_route!="/api/v1/events"}[5m])))
+    expr: 'histogram_quantile(0.95, sum by (le,deployment_environment_name) (rate(http_server_request_duration_bucket{job="peerly-app-metrics",http_route!="/api/v1/events",http_route!~"^/api/(health|ready)$"}[5m])))
       > 1
 
       and on (deployment_environment_name)
 
-      sum by (deployment_environment_name) (increase(http_server_request_duration_count{http_route!="/api/v1/events"}[5m]))
-      >= 100
-
-      '
+      sum by (deployment_environment_name) (increase(http_server_request_duration_count{job="peerly-app-metrics",http_route!="/api/v1/events",http_route!~"^/api/(health|ready)$"}[5m]))
+      >= 100'
     for: 10m
     labels:
       severity: warning
@@ -53,7 +50,7 @@ groups:
         See OPS02 runbook.
       dashboard_uid: peerly-technical-v1
   - alert: PeerlyEmailAttemptsFailing
-    expr: sum by (deployment_environment_name) (increase(worker_email_steps{outcome=~"failed|retry|storage_unavailable|unexpected_error"}[10m]))
+    expr: sum by (deployment_environment_name) (increase(worker_email_steps{job="peerly-app-metrics",outcome=~"failed|retry|storage_unavailable|unexpected_error"}[10m]))
       >= 3
     for: 5m
     labels:
@@ -65,7 +62,7 @@ groups:
         acceptance, not inbox delivery. Never export codes or recipient addresses.
       dashboard_uid: peerly-technical-v1
   - alert: PeerlyEmailWorkerNotObserved
-    expr: absent(worker_email_steps{service_name="studymate-email-worker"}) or sum(increase(worker_email_steps{service_name="studymate-email-worker"}[5m]))
+    expr: absent(worker_email_steps{job="peerly-app-metrics",service_name="studymate-email-worker"}) or sum(increase(worker_email_steps{job="peerly-app-metrics",service_name="studymate-email-worker"}[5m]))
       == 0
     for: 2m
     labels:
@@ -77,7 +74,8 @@ groups:
         worker process and last safe logs.
       dashboard_uid: peerly-technical-v1
   - alert: PeerlyAiQueueOld
-    expr: worker_ai_queue_oldest > 300
+    expr: (worker_ai_queue_oldest{job="peerly-app-metrics"} > 300) and on (job,instance,service_name,service_version,deployment_environment_name)
+      (worker_ai_queue_sample_fresh{job="peerly-app-metrics",service_name="studymate-ai-worker"} == 1)
     for: 5m
     labels:
       severity: warning
@@ -88,7 +86,8 @@ groups:
         inspect prompts in telemetry.
       dashboard_uid: peerly-technical-v1
   - alert: PeerlyAiCircuitOpen
-    expr: worker_ai_circuit_open > 0
+    expr: (worker_ai_circuit_open{job="peerly-app-metrics"} > 0) and on (job,instance,service_name,service_version,deployment_environment_name)
+      (worker_ai_queue_sample_fresh{job="peerly-app-metrics",service_name="studymate-ai-worker"} == 1)
     for: 2m
     labels:
       severity: warning
@@ -99,7 +98,7 @@ groups:
         this alert.
       dashboard_uid: peerly-technical-v1
   - alert: PeerlyTelemetryExportFailed
-    expr: sum by (deployment_environment_name) (increase({__name__=~"otelcol_exporter_send_failed_(spans|log_records)"}[5m]))
+    expr: sum by (deployment_environment_name) (increase({job="peerly-collector",__name__=~"otelcol_exporter_send_failed_(spans|log_records)"}[5m]))
       > 0
     for: 2m
     labels:
@@ -111,7 +110,8 @@ groups:
         be dropped; never report zero-loss guarantees.
       dashboard_uid: peerly-technical-v1
   - alert: PeerlyTelemetryQueueNearFull
-    expr: otelcol_exporter_queue_size / otelcol_exporter_queue_capacity > 0.8
+    expr: otelcol_exporter_queue_size{job="peerly-collector"} / otelcol_exporter_queue_capacity{job="peerly-collector"}
+      > 0.8
     for: 2m
     labels:
       severity: warning
@@ -121,8 +121,56 @@ groups:
       description: Restore export connectivity and inspect disk headroom. Do not clear queues or shorten retention
         to silence this alert.
       dashboard_uid: peerly-technical-v1
+  - alert: PeerlyAiQueueSampleStale
+    expr: worker_ai_queue_sample_fresh{job="peerly-app-metrics",service_name="studymate-ai-worker"} == 0
+    for: 2m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: AI queue sample is stale or has never succeeded
+      description: Queue/slot/circuit values are hidden while freshness is zero. Inspect the bounded sampler and
+        worker SQL/export health; no zero-queue inference.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyAiQueueSampleMissing
+    expr: absent(worker_ai_queue_sample_fresh{job="peerly-app-metrics",service_name="studymate-ai-worker"})
+    for: 2m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: AI queue sample freshness telemetry is missing
+      description: Check actual worker image, exporter and approved private transport. Missing freshness does not
+        prove an empty queue.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyCollectorRootHeadroomLow
+    expr: sum without (state) (system_filesystem_usage{job="peerly-app-metrics",service_name="peerly-collector-capacity",mountpoint="/",state="free"})
+      / sum without (state) (system_filesystem_usage{job="peerly-app-metrics",service_name="peerly-collector-capacity",mountpoint="/"})
+      < 0.15
+    for: 5m
+    labels:
+      severity: critical
+      owner: peerly-team
+    annotations:
+      summary: Collector overlay backing filesystem has less than 15% free
+      description: This is namespace filesystem capacity for the Docker backing disk, not host CPU/RAM. Restore
+        approved disk headroom; do not delete retained history.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyCollectorRootAbsoluteHeadroomLow
+    expr: system_filesystem_usage{job="peerly-app-metrics",service_name="peerly-collector-capacity",mountpoint="/",state="free"}
+      < 1073741824
+    for: 2m
+    labels:
+      severity: critical
+      owner: peerly-team
+    annotations:
+      summary: Collector overlay backing filesystem has less than 1 GiB free
+      description: Inspect Docker backing-disk headroom using owner procedures. No host root/proc/socket mounts
+        are required by this collector.
+      dashboard_uid: peerly-technical-v1
   - alert: PeerlyTempoDiskHeadroomLow
-    expr: node_filesystem_avail_bytes{peerly_storage="tempo"} / node_filesystem_size_bytes{peerly_storage="tempo"}
+    expr: sum without (state) (system_filesystem_usage{job="peerly-app-metrics",service_name="peerly-collector-capacity",mountpoint="/var/tempo-capacity",state="free"})
+      / sum without (state) (system_filesystem_usage{job="peerly-app-metrics",service_name="peerly-collector-capacity",mountpoint="/var/tempo-capacity"})
       < 0.15
     for: 5m
     labels:
@@ -130,17 +178,129 @@ groups:
       owner: peerly-team
     annotations:
       summary: Tempo backing filesystem has less than 15% free capacity
-      description: Expand approved storage or perform verified archive/retrieval procedure. Automatic trace expiry
-        is disabled. Full disk can reject new traces; hot storage is finite.
+      description: Readonly statfs of the actual Tempo data backing filesystem. Restore S3 flush or expand approved
+        bounded WAL capacity; never delete unflushed WAL or retained blocks.
       dashboard_uid: peerly-technical-v1
-  - alert: PeerlyTempoCapacityTelemetryMissing
-    expr: absent(node_filesystem_size_bytes{peerly_storage="tempo"})
-    for: 10m
+  - alert: PeerlyCapacityTelemetryMissing
+    expr: absent(system_filesystem_usage{job="peerly-app-metrics",service_name="peerly-collector-capacity",mountpoint="/",state="free"})
+      or absent(system_filesystem_usage{job="peerly-app-metrics",service_name="peerly-collector-capacity",mountpoint="/var/tempo-capacity",state="free"})
+    for: 5m
     labels:
       severity: warning
       owner: peerly-team
     annotations:
-      summary: Tempo storage capacity monitoring has not been wired
-      description: Parent must relabel the real approved filesystem exporter target. Do not interpret this bundle
-        as monitoring-ready without that capacity signal.
+      summary: Collector namespace filesystem capacity telemetry is missing
+      description: Check the filesystem-only receiver and readonly Tempo capacity mount. Only root overlay and actual
+        Tempo backing filesystem are exposed; no host capacity claim.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyExternalQueueSampleMissing
+    expr: absent(worker_external_queue_sample_fresh{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"})
+    for: 2m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: External delivery queue freshness is missing
+      description: Check the actual external worker image, sampler and private exporter. Missing data is unknown,
+        not an empty outbox.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyExternalQueueSampleStale
+    expr: worker_external_queue_sample_fresh{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      == 0
+    for: 2m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: External delivery queue sample is stale or failed
+      description: A failed budgeted read invalidates counts immediately. Queue/source/blocked charts are hidden
+        until a fresh successful snapshot; retained exact counts can exceed the read budget.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyExternalDeliveryBacklog
+    expr: (worker_external_queue_oldest_due{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      > 300) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_queue_sample_fresh{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      == 1)
+    for: 5m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: Oldest due external delivery exceeds five minutes
+      description: Check the named sink, persisted retries and provider credentials/connectivity. This is due pending/retry
+        age, not a delivery receipt or leased/succeeded work.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyExternalDeliveryDead
+    expr: (worker_external_queue_depth{job="peerly-app-metrics",service_name="peerly-external-delivery-worker",state="dead"}
+      > 0) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_queue_sample_fresh{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      == 1)
+    for: 2m
+    labels:
+      severity: critical
+      owner: peerly-team
+    annotations:
+      summary: External delivery has terminal rows
+      description: Inspect the source and retained attempt metadata. Do not delete records, reseed historical Telegram
+        notifications or claim provider acceptance.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyExternalDeliveryBlocked
+    expr: (worker_external_queue_blocked{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      > 0) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_queue_sample_fresh{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      == 1)
+    for: 2m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: External delivery sink is blocked
+      description: Use the finite failure reason and parent credential/destination procedure; no technical alert
+        is enqueued by the application.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyExternalSourceBacklog
+    expr: (worker_external_sources_oldest{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      > 300) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_queue_sample_fresh{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      == 1)
+    for: 5m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: Unmaterialized source capture exceeds five minutes
+      description: Source captures precede delivery rows. Inspect routing/materialization even when the delivery
+        queue is empty. Preserve canonical history.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyExternalCycleMissing
+    expr: absent(worker_external_cycle_age{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"})
+      or absent(worker_external_cycles{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"})
+    for: 2m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: External worker completed-step telemetry is missing
+      description: Unknown before the first completed cycle. Check worker/exporter availability; this signal is
+        not a standalone process heartbeat or provider delivery success.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyExternalCycleStale
+    expr: worker_external_cycle_age{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"} > 30
+    for: 2m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: External worker has not completed a cycle for thirty seconds
+      description: Cycle age measures the last completed worker step. Check bounded provider/database work and worker
+        liveness without inspecting payloads.
+      dashboard_uid: peerly-technical-v1
+  - alert: PeerlyExternalStorageUnavailable
+    expr: (worker_external_storage_available{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      == 0) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_cycle_age{job="peerly-app-metrics",service_name="peerly-external-delivery-worker"}
+      <= 30)
+    for: 2m
+    labels:
+      severity: warning
+      owner: peerly-team
+    annotations:
+      summary: External worker last current cycle could not use storage
+      description: Storage unavailable is a completed-cycle observation. It is not proof of lost source events or
+        provider failure.
       dashboard_uid: peerly-technical-v1

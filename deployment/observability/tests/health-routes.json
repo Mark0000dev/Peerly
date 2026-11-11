@@ -1,0 +1,13 @@
+{
+  "accepted": [
+    "/api/health",
+    "/api/ready"
+  ],
+  "rejected": [
+    "/api/health?token=PRIVATE_HEALTH_CANARY",
+    "/api/ready/private",
+    "/healthz",
+    "/readyz",
+    "/unknown/PRIVATE_HEALTH_CANARY"
+  ]
+}

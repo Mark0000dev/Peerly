@@ -1,0 +1,38 @@
+# Merge after the base monitoring/S3 manifests; expose only authenticated TLS reads.
+services:
+  read-gateway:
+    image: nginxinc/nginx-unprivileged:stable-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
+    user: '101:101'
+    entrypoint: [nginx]
+    command: [-c, /etc/nginx/peerly-gateway.conf, -g, 'daemon off;']
+    volumes:
+      - ./gateway/staging.conf:/etc/nginx/peerly-gateway.conf:ro
+      - ${PEERLY_READ_HTPASSWD_FILE:?Set protected reader htpasswd file}:/etc/nginx/read.htpasswd:ro
+    networks: [telemetry, proxy]
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: ${PEERLY_PROXY_NETWORK:?Set the existing ingress network}
+      traefik.http.routers.peerly-observe-read.rule: Host(`${PEERLY_HOST:?Set staging hostname}`) && PathPrefix(`/peerly-observe/`)
+      traefik.http.routers.peerly-observe-read.entrypoints: ${PEERLY_HTTPS_ENTRYPOINT:?Set actual HTTPS entrypoint}
+      traefik.http.routers.peerly-observe-read.tls: 'true'
+      traefik.http.routers.peerly-observe-read.priority: '250'
+      traefik.http.routers.peerly-observe-read.middlewares: peerly-observe-read-auth
+      traefik.http.routers.peerly-observe-read.service: peerly-observe-read
+      traefik.http.middlewares.peerly-observe-read-auth.basicauth.users: ${PEERLY_READ_BASIC_USERS:?Set private reader bcrypt user entry}
+      traefik.http.middlewares.peerly-observe-read-auth.basicauth.removeheader: 'false'
+      traefik.http.services.peerly-observe-read.loadbalancer.server.port: '8080'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=16m,uid=101,gid=101']
+    mem_limit: 32m
+    cpus: 0.1
+    pids_limit: 32
+    restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: 2m, max-file: '2'}
+networks:
+  proxy:
+    external: true
+    name: ${PEERLY_PROXY_NETWORK}

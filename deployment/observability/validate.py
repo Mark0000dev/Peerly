@@ -9,8 +9,10 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import os
 import pathlib
+import re
 import shutil
 import socket
 import subprocess
@@ -21,7 +23,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from collections.abc import Callable
-from typing import override
+from typing import Literal, override
 
 BASE = pathlib.Path(__file__).resolve().parent
 ROOT = BASE.parents[1]
@@ -174,15 +176,65 @@ def wait_for(check: Callable[[], bool], name: str, seconds: int = 60) -> None:
     raise RuntimeError(f"Bounded readiness/proof deadline exceeded: {name}")
 
 
-def resource() -> dict[str, object]:
+def resource(service: str = "studymate-api") -> dict[str, object]:
     return {
         "attributes": [
-            {"key": "service.name", "value": {"stringValue": "studymate-api"}},
+            {"key": "service.name", "value": {"stringValue": service}},
             {"key": "service.version", "value": {"stringValue": "ops02-test"}},
             {"key": "deployment.environment.name", "value": {"stringValue": "test"}},
             {"key": "private.raw", "value": {"stringValue": CANARY}},
         ]
     }
+
+
+WAL_BYTES = 256 * 1024 * 1024
+RESOURCE_LABELS = {"deployment_environment_name", "service_name", "service_version", "job"}
+
+
+def series(payload: bytes, name: str) -> list[tuple[dict[str, str], float]]:
+    result = []
+    for line in payload.decode().splitlines():
+        if not line.startswith(name + "{"):
+            continue
+        head, raw_value = line.rsplit(" ", 1)
+        encoded_labels = head[len(name) + 1 : -1]
+        labels = {
+            match[1]: text(parse_json('"' + match[2] + '"'))
+            for match in re.finditer(
+                r'([A-Za-z_][A-Za-z0-9_]*)="((?:\\.|[^"\\])*)"', encoded_labels
+            )
+        }
+        value = float(raw_value)
+        require(math.isfinite(value) and value >= 0, "Nonfinite or negative observation")
+        result.append((labels, value))
+    require(bool(result), "Missing expected metric " + name)
+    return result
+
+
+def synthetic_metric(
+    name: str,
+    kind: Literal["gauge", "sum", "histogram"],
+    now: int,
+    labels: dict[str, str] | None = None,
+) -> dict[str, object]:
+    attributes = [
+        {"key": key, "value": {"stringValue": value}}
+        for key, value in {"private.raw": CANARY, **(labels or {})}.items()
+    ]
+    point: dict[str, object] = {"attributes": attributes, "timeUnixNano": str(now)}
+    if kind == "histogram":
+        point.update(
+            {"count": "1", "sum": 0.01, "bucketCounts": ["1", "0"], "explicitBounds": [0.1]}
+        )
+    else:
+        point["asInt"] = "1"
+    data: dict[str, object] = {"dataPoints": [point]}
+    if kind != "gauge":
+        data["aggregationTemporality"] = 2
+        point["startTimeUnixNano"] = str(now - 1000000000)
+    if kind == "sum":
+        data["isMonotonic"] = True
+    return {"name": name, kind: data}
 
 
 class Proof:
@@ -192,6 +244,8 @@ class Proof:
         self.prefix = "peerly-ops02-" + uuid.uuid4().hex[:10]
         self.network = self.prefix + "-net"
         self.owned: list[str] = []
+        self.wal_volume = self.prefix + "-wal"
+        self.wal_created = False
         self.report: dict[str, object] = {
             "scope": "local synthetic native config/transport only",
             "checks": [],
@@ -350,12 +404,13 @@ class Proof:
         dashboard = obj(parse_json((BASE / "grafana/peerly-technical.json").read_text()))
         rules = [
             {
-                "record": f"ops02_dashboard_panel_{integer(obj(panel)['id'])}",
-                "expr": text(obj(array(obj(panel)["targets"])[0])["expr"])
+                "record": f"ops02_dashboard_panel_{integer(obj(panel)['id'])}_{index}",
+                "expr": text(obj(target)["expr"])
                 .replace("$__rate_interval", "1m")
                 .replace("$environment", "test"),
             }
             for panel in array(dashboard["panels"])
+            for index, target in enumerate(array(obj(panel)["targets"]))
         ]
         (self.output / "dashboard-expressions.json").write_text(
             json.dumps({"groups": [{"name": "dashboard-syntax", "rules": rules}]})
@@ -421,6 +476,26 @@ class Proof:
         )
 
     def start_fixtures(self) -> None:
+        run(
+            [
+                "docker",
+                "volume",
+                "create",
+                "--driver",
+                "local",
+                "--opt",
+                "type=tmpfs",
+                "--opt",
+                "device=tmpfs",
+                "--opt",
+                "o=size=256m,uid=10001,gid=10001,mode=0700,nosuid,nodev",
+                self.wal_volume,
+            ],
+            self.output,
+            "bounded-wal-volume-create",
+        )
+        self.wal_created = True
+
         def start(name: str, extra: list[str], image: str, command: list[str]) -> str:
             actual = self.prefix + "-" + name
             run(
@@ -457,8 +532,8 @@ class Proof:
                 "--memory",
                 "512m",
                 *self.mount_config,
-                "--tmpfs",
-                "/var/tempo:rw,nosuid,nodev,size=256m,uid=10001,gid=10001,mode=0700",
+                "--mount",
+                f"type=volume,src={self.wal_volume},dst=/var/tempo,volume-nocopy",
                 "--tmpfs",
                 "/tmp:rw,noexec,nosuid,size=16m",  # noqa: S108 - private container tmpfs.
                 "--publish",
@@ -474,6 +549,8 @@ class Proof:
                 "256m",
                 *self.mount_config,
                 *self.container_environment,
+                "--mount",
+                f"type=volume,src={self.wal_volume},dst=/var/tempo-capacity,readonly,volume-nocopy",
                 "--tmpfs",
                 "/var/lib/otelcol:rw,nosuid,nodev,size=128m,uid=10001,gid=10001,mode=0700",
                 "--publish",
@@ -504,6 +581,8 @@ class Proof:
             require(binding["HostIp"] == "127.0.0.1", "Port escaped loopback")
             return int(text(binding["HostPort"]))
 
+        self.collector = collector
+        self.tempo = tempo
         self.sink_url = f"http://127.0.0.1:{port(sink, 8080)}"
         self.tempo_url = f"http://127.0.0.1:{port(tempo, 3200)}"
         self.otlp_url = f"http://127.0.0.1:{port(collector, 4318)}"
@@ -590,6 +669,148 @@ class Proof:
             fetch(self.self_metrics_url + "/metrics")
         )
 
+    def post_metrics(self, service: str, metrics: list[dict[str, object]]) -> None:
+        fetch(
+            self.otlp_url + "/v1/metrics",
+            {
+                "resourceMetrics": [
+                    {
+                        "resource": resource(service),
+                        "scopeMetrics": [{"scope": {"name": "studymate"}, "metrics": metrics}],
+                    }
+                ]
+            },
+        )
+
+    def prove_ops_metrics(self) -> None:
+        metrics = [
+            synthetic_metric(
+                "db.query.duration", "histogram", self.now, {"pool": "core", "operation": "select"}
+            ),
+            synthetic_metric("db.pool.checked_out", "gauge", self.now, {"pool": "core"}),
+            synthetic_metric("db.pool.configured_size", "gauge", self.now, {"pool": "core"}),
+            synthetic_metric("db.pool.checked_out", "gauge", self.now, {"pool": "private_pool"}),
+            synthetic_metric(
+                "db.query.duration", "histogram", self.now, {"operation": "private_operation"}
+            ),
+            synthetic_metric("sse.connections.active", "gauge", self.now),
+            synthetic_metric("sse.connections.closed", "sum", self.now, {"reason": "complete"}),
+            synthetic_metric("sse.frames", "sum", self.now, {"kind": "change"}),
+            synthetic_metric("sse.resets", "sum", self.now),
+            synthetic_metric("sse.delivery.lag", "histogram", self.now),
+            synthetic_metric("sse.send.duration", "histogram", self.now, {"outcome": "success"}),
+            synthetic_metric(
+                "system.filesystem.usage",
+                "gauge",
+                self.now,
+                {"mountpoint": "/private-fake", "state": "used"},
+            ),
+        ]
+        self.post_metrics("studymate-api", metrics)
+        self.post_metrics(
+            "studymate-ai-worker",
+            [
+                synthetic_metric(name, "gauge", self.now)
+                for name in (
+                    "worker.ai.queue.depth",
+                    "worker.ai.queue.oldest",
+                    "worker.ai.slot.occupied",
+                    "worker.ai.circuit.open",
+                    "worker.ai.queue.sample.fresh",
+                    "worker.ai.queue.sample.age",
+                )
+            ],
+        )
+        expected = {
+            "db_query_duration_bucket": {"pool", "operation", "le"},
+            "db_pool_checked_out": {"pool"},
+            "db_pool_configured_size": {"pool"},
+            "sse_connections_active": set(),
+            "sse_connections_closed": {"reason"},
+            "sse_frames": {"kind"},
+            "sse_resets": set(),
+            "sse_delivery_lag_bucket": {"le"},
+            "sse_send_duration_bucket": {"outcome", "le"},
+            "worker_ai_queue_sample_fresh": set(),
+            "worker_ai_queue_sample_age": set(),
+            "worker_ai_queue_depth": set(),
+            "worker_ai_queue_oldest": set(),
+            "worker_ai_slot_occupied": set(),
+            "worker_ai_circuit_open": set(),
+        }
+        wait_for(
+            lambda: b"worker_ai_queue_sample_fresh{" in fetch(self.metrics_url + "/metrics"),
+            "OPS03 metric translation",
+        )
+        payload = fetch(self.metrics_url + "/metrics")
+        for name, dimensions in expected.items():
+            for labels, _value in series(payload, name):
+                require(
+                    set(labels) <= RESOURCE_LABELS | dimensions, "Unbounded OPS03 metric dimensions"
+                )
+        for forbidden in (CANARY, "private_pool", "private_operation", "/private-fake"):
+            require(forbidden.encode() not in payload, "Private/unknown metric dimension escaped")
+        db = series(payload, "db_query_duration_bucket")
+        require(
+            any(
+                labels.get("pool") == "core" and labels.get("operation") == "select"
+                for labels, _ in db
+            ),
+            "Valid DB dimensions disappeared",
+        )
+        (self.output / "ops03-metrics.prom").write_bytes(payload)
+
+    def prove_capacity(self) -> None:
+        wait_for(
+            lambda: b"system_filesystem_usage{" in fetch(self.metrics_url + "/metrics"),
+            "native namespace filesystem metrics",
+        )
+        payload = fetch(self.metrics_url + "/metrics")
+        totals: dict[str, float] = {}
+        for labels, value in series(payload, "system_filesystem_usage"):
+            require(
+                set(labels) <= RESOURCE_LABELS | {"mountpoint", "state"},
+                "Filesystem identity labels escaped",
+            )
+            require(
+                labels.get("service_name") == "peerly-collector-capacity",
+                "Filesystem service origin was not forced",
+            )
+            mount = labels.get("mountpoint", "")
+            require(
+                mount in {"/", "/var/tempo-capacity"},
+                "Filesystem mount escaped namespace allowlist",
+            )
+            require(labels.get("state") in {"free", "reserved", "used"}, "Unknown filesystem state")
+            totals[mount] = totals.get(mount, 0) + value
+        require(
+            set(totals) == {"/", "/var/tempo-capacity"}, "Missing root or readonly WAL capacity"
+        )
+        require(totals["/"] > 0, "Root namespace capacity unavailable")
+        require(
+            totals["/var/tempo-capacity"] == WAL_BYTES, "WAL capacity is not the bounded fixture"
+        )
+        for name, destination, writable in (
+            (self.collector, "/var/tempo-capacity", False),
+            (self.tempo, "/var/tempo", True),
+        ):
+            inspected = obj(
+                array(parse_json(run(["docker", "inspect", name], self.output, name + "-mounts")))[
+                    0
+                ]
+            )
+            mounts = [
+                obj(item)
+                for item in array(inspected["Mounts"])
+                if obj(item)["Destination"] == destination
+            ]
+            require(len(mounts) == 1, "Missing isolated WAL mount")
+            require(
+                mounts[0]["RW"] is writable and mounts[0]["Name"] == self.wal_volume,
+                "WAL sharing or readonly boundary differs",
+            )
+        (self.output / "namespace-capacity.prom").write_bytes(payload)
+
     def prove_traces(self) -> None:
         span = {
             "traceId": TRACE,
@@ -608,13 +829,25 @@ class Proof:
             "status": {"code": 2, "message": CANARY},
             "events": [{"name": CANARY, "timeUnixNano": str(self.now)}],
         }
+        db_span = {
+            **span,
+            "spanId": "fedcba0987654321",
+            "name": "db.query",
+            "kind": 3,
+            "attributes": [
+                {"key": "db.system", "value": {"stringValue": "postgresql"}},
+                {"key": "db.pool.name", "value": {"stringValue": "core"}},
+                {"key": "query.operation", "value": {"stringValue": "select"}},
+                {"key": "db.statement", "value": {"stringValue": CANARY}},
+            ],
+        }
         fetch(
             self.otlp_url + "/v1/traces",
             {
                 "resourceSpans": [
                     {
                         "resource": resource(),
-                        "scopeSpans": [{"scope": {"name": "studymate"}, "spans": [span]}],
+                        "scopeSpans": [{"scope": {"name": "studymate"}, "spans": [span, db_span]}],
                     }
                 ]
             },
@@ -625,6 +858,11 @@ class Proof:
         )
         trace = fetch(self.tempo_url + "/api/traces/" + TRACE)
         require(CANARY.encode() not in trace, "Private trace content escaped")
+        require(
+            b"db.query" in trace and b"query.operation" in trace,
+            "DB query span identity disappeared",
+        )
+        require(b"db.statement" not in trace, "SQL statement attribute escaped")
         (self.output / "tempo-trace.json").write_bytes(trace)
 
     def prove_logs(self) -> None:
@@ -689,6 +927,8 @@ class Proof:
             "native Prometheus rule behavior/config and dashboard expressions",
             "nonroot read-only startup",
             "actual metric names/cardinality allowlist",
+            "OPS03 DB/SSE and AI sample freshness translation/privacy",
+            "native namespace-only root and shared readonly bounded WAL capacity",
             "actual source JSON/RFC5424 sanitization",
             "OTLP HTTP 503/retry/recovery",
             "actual Tempo trace ingestion/query/redaction",
@@ -720,7 +960,13 @@ class Proof:
             check=True,
             timeout=20,
         )
-        self.report["cleanup"] = "Owned containers/network removed; images retained"
+        if self.wal_created:
+            run(
+                ["docker", "volume", "rm", self.wal_volume],
+                self.output,
+                "bounded-wal-volume-remove",
+            )
+        self.report["cleanup"] = "Owned containers/network/WAL volume removed; images retained"
         self.report["seconds"] = time.monotonic() - self.started
         self.report["source_drift"] = [
             name
@@ -737,6 +983,8 @@ class Proof:
             self.prometheus_configuration()
             self.start_fixtures()
             self.prove_metrics()
+            self.prove_ops_metrics()
+            self.prove_capacity()
             self.prove_traces()
             self.prove_logs()
             self.record_success()

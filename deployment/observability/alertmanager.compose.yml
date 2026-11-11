@@ -1,0 +1,32 @@
+# Standalone on the monitoring host, independent of the application VPS.
+# Do not restart or overwrite the shared legacy instance.
+services:
+  peerly-alertmanager:
+    image: prom/alertmanager:v0.35.0@sha256:e638797febd034838eca8b98cdbd46f951e9bf7f178777aa8669167406a9946c
+    user: '65534:65534'
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/var/lib/alertmanager
+      - --cluster.listen-address=
+      - --web.listen-address=0.0.0.0:9093
+      - --log.level=warn
+    volumes:
+      - ${PEERLY_ALERTMANAGER_CONFIG_FILE:?Render the Peerly-only receiver config}:/etc/alertmanager/alertmanager.yml:ro
+      - ${PEERLY_TELEGRAM_TOKEN_FILE:?Set the protected bot token file}:/etc/alertmanager/telegram-token:ro
+      - ${PEERLY_ALERTMANAGER_DATA_DIR:?Precreate persistent UID65534 state directory}:/var/lib/alertmanager
+    networks: [monitoring]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=8m,uid=65534,gid=65534']
+    mem_limit: 64m
+    cpus: 0.1
+    pids_limit: 32
+    restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: 2m, max-file: '2'}
+networks:
+  monitoring:
+    external: true
+    name: ${PEERLY_MONITORING_NETWORK:?Set the existing Prometheus/Grafana network}

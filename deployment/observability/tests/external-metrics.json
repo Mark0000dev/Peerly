@@ -1,0 +1,183 @@
+{
+  "service": "peerly-external-delivery-worker",
+  "private_canary": "PRIVATE_EXTERNAL_CANARY",
+  "accepted": [
+    {
+      "name": "worker.external.cycles",
+      "kind": "sum",
+      "value": 12,
+      "attributes": {
+        "storage": "available"
+      }
+    },
+    {
+      "name": "worker.external.storage.available",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {}
+    },
+    {
+      "name": "worker.external.cycle.age",
+      "kind": "gauge",
+      "value": 2,
+      "attributes": {}
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 3,
+      "attributes": {
+        "sink": "umami",
+        "state": "pending"
+      }
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 2,
+      "attributes": {
+        "sink": "telegram_support",
+        "state": "retry"
+      }
+    },
+    {
+      "name": "worker.external.queue.oldest_due",
+      "kind": "gauge",
+      "value": 600,
+      "attributes": {
+        "sink": "umami"
+      }
+    },
+    {
+      "name": "worker.external.queue.blocked",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {
+        "sink": "umami",
+        "reason": "credentials_unavailable"
+      }
+    },
+    {
+      "name": "worker.external.queue.sample.fresh",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {}
+    },
+    {
+      "name": "worker.external.queue.sample.age",
+      "kind": "gauge",
+      "value": 3,
+      "attributes": {}
+    },
+    {
+      "name": "worker.external.sources.pending",
+      "kind": "gauge",
+      "value": 5,
+      "attributes": {}
+    },
+    {
+      "name": "worker.external.sources.oldest",
+      "kind": "gauge",
+      "value": 700,
+      "attributes": {}
+    },
+    {
+      "name": "db.pool.checked_out",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {
+        "pool": "worker_external"
+      }
+    },
+    {
+      "name": "db.pool.configured_size",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {
+        "pool": "worker_external"
+      }
+    },
+    {
+      "name": "db.query.duration",
+      "kind": "histogram",
+      "value": 0.25,
+      "attributes": {
+        "pool": "worker_external",
+        "operation": "select",
+        "outcome": "success"
+      }
+    }
+  ],
+  "rejected": [
+    {
+      "name": "worker.external.unknown",
+      "kind": "gauge",
+      "value": 901,
+      "attributes": {}
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 902,
+      "attributes": {
+        "sink": "telegram_dev",
+        "state": "pending"
+      }
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 903,
+      "attributes": {
+        "sink": "umami",
+        "state": "leased"
+      }
+    },
+    {
+      "name": "worker.external.queue.blocked",
+      "kind": "gauge",
+      "value": 904,
+      "attributes": {
+        "sink": "umami",
+        "reason": "PRIVATE_EXTERNAL_CANARY"
+      }
+    },
+    {
+      "name": "worker.external.cycles",
+      "kind": "sum",
+      "value": 905,
+      "attributes": {
+        "storage": "PRIVATE_EXTERNAL_CANARY"
+      }
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 906,
+      "attributes": {
+        "sink": "PRIVATE_EXTERNAL_CANARY",
+        "state": "pending"
+      }
+    },
+    {
+      "name": "worker.external.sources.pending",
+      "kind": "gauge",
+      "value": 907,
+      "attributes": {},
+      "service": "studymate-api"
+    },
+    {
+      "name": "worker.external.sources.pending",
+      "kind": "gauge",
+      "value": 908,
+      "attributes": {},
+      "service": "peerly-developer-alert-worker"
+    }
+  ],
+  "diagnostic": {
+    "event": "ai_runtime_failure",
+    "ai_runtime_phase": "physical_cleanup",
+    "ai_runtime_code": "physical_stop_uncertain",
+    "ai_runtime_failure_role": "cleanup"
+  }
+}

@@ -1,5 +1,40 @@
 # OPS02 private technical observability bundle
 
+## Parent integration — 11 November 2026
+
+The staging layout now uses `gateway/staging.compose.yml` after the base and S3
+overlays. It exposes authenticated GET/HEAD metric and Tempo query paths under
+`/peerly-observe/` on the existing staging TLS host. The collector ingestion port
+remains private. `gateway/monitoring.compose.yml` runs separately alongside the
+existing Loki and forwards only authenticated POST requests at
+`/peerly-ingest/staging/logs/v1/logs`. Reader and log-writer credentials are
+independent; both ingress and the narrow nginx gateway verify authentication.
+
+`alertmanager.compose.yml` is a standalone deployment on the **monitoring host**,
+on its existing Prometheus/Grafana network. This keeps notifications independent
+of the application VPS. Its unique service name is `peerly-alertmanager`; it
+does not replace the old shared `alertmanager` service or expose public ports.
+Render `alertmanager/alertmanager.yml.template` with the confirmed integer Peerly
+Dev chat ID and mount the bot token as a protected UID65534-readable file. Only
+`owner="peerly-team"` notifications reach that group; unrelated alerts use an
+empty receiver. Native CI verifies both routes without any provider access.
+
+Merge the scoped scrape jobs and alert groups into the existing Prometheus,
+preserving other projects. Each TLS scrape job explicitly uses30s/15s interval/
+timeout rather than inheriting another project's shorter global interval. The
+reader password file contains the plain private service password, never its
+server-side htpasswd entry. On single-file bind mounts, preserve the file inode
+when replacing validated content, then send SIGHUP; retain rollback copies.
+Prometheus and Grafana access the new Alertmanager directly at
+`http://peerly-alertmanager:9093` on their existing private Docker network.
+
+Actual remote acceptance and remaining application activation are recorded in
+`docs/planning/observability-progress.md`. Native source tests alone do not prove
+that application exporters, external-delivery consumers or historical archives
+are active. The existing Loki hot retention still requires a verified archive
+path before admitting external users; S3-backed Tempo blocks are primary storage,
+not an independent backup.
+
 Deployable configuration, not an inventory, remote deployment or monitoring-ready
 claim. Application telemetry is currently optional; this task does not enable it.
 Parent owns real endpoints/auth, network/proxy integration, storage/backup budget,
@@ -78,7 +113,7 @@ not a Loki server or proof of existing remote compatibility.
 
 Existing Prometheus normally pulls the private8889 exporter plus collector8888
 and Tempo3200. `prometheus/prometheus.yml.template` is a merge template requiring
-real targets, CA and token file paths. It does not replace existing global jobs,
+the actual staging gateway TLS host:port, optional private CA and dedicated reader password file. It does not replace existing global jobs,
 Alertmanager routing or credentials. `collector/remote-write.yaml` is an optional
 second native `--config` only when the **actual** receiver URL/auth/support is
 confirmed; provide `PROMETHEUS_REMOTE_WRITE_URL`/`PROMETHEUS_AUTHORIZATION` and
@@ -123,10 +158,9 @@ Import `grafana/peerly-technical.json` into existing private Grafana and choose 
 actual Prometheus datasource. `datasources.yml.template` has unresolved explicit
 UID/URL inputs, not guessed live IDs; parent adds real auth/TLS/access policy.
 No new Grafana is deployed. Drilldown templates correlate trace_id from log body
-to Tempo. JSON/schema checks are not visual/datasource acceptance. DB-pool gauges,
-SSE connection/lag metrics, exporter SDK log-drop counters, backup verification
-and outbox age (except actual AI oldest gauge) are not implemented in the app;
-there are no fabricated panels/alerts for them.
+to Tempo. JSON/schema checks are not visual/datasource acceptance. Actual DB-pool,
+SSE and external outbox instruments are now admitted; details and honest semantics
+are below. Exporter log-drop/backup verification signals are not invented.
 
 ## Resources, retention, capacity and alerts
 
@@ -154,11 +188,9 @@ silently enable TTL, delete blocks or clear queues to recover space.
 5xx>5%/p95>1s with≥100 observations and10m hold (SSE excluded); repeated email
 attempt failures; missing/stopped email step observations; AI queue age/circuit;
 collector send failures/queue saturation; **Tempo filesystem below15% free** and
-missing capacity signal. Thresholds are provisional, not an SLO guarantee. Parent
-must wire its approved existing filesystem exporter to the actual data mount and
-label only that filesystem `peerly_storage="tempo"`; no privileged exporter is
-installed here. `PeerlyTempoCapacityTelemetryMissing` deliberately reports absent
-wiring. Missing optional AI metrics are unknown, not evidence of a running worker.
+missing capacity signal. Thresholds are provisional, not an SLO guarantee. The namespace-only filesystem receiver exposes only collector root overlay and
+readonly `/var/tempo-capacity`; `PeerlyCapacityTelemetryMissing` reports missing
+native samples. No privileged host exporter, Docker socket or host CPU/RAM claim. Missing optional AI metrics are unknown, not evidence of a running worker.
 
 Runbook: telemetry down→check private link/process/storage; export failure→check
 Tempo/Loki status/auth and queue without discarding data; REST regression→route
@@ -266,9 +298,82 @@ UID10001 ownership; this bundle performs no privileged filesystem operation.
 Project-quota-only deployments need a separate parent-verified enforcement path,
 not a fake budget environment variable. Ongoing exhaustion is covered by the
 existing actual-filesystem15% headroom/missing-capacity alerts; parent must label
-the real staging WAL filesystem `peerly_storage="tempo"` and import `prometheus/tempo-s3-alerts.yml` for the provisional256MiB absolute headroom alert (adjust together with the runtime minimum). Parent adds approved disk-growth forecasting. Do not relabel the full monitoring host as this mount.
+the actual native `/var/tempo-capacity` filesystem metric and import `prometheus/tempo-s3-alerts.yml` for the provisional256MiB absolute headroom alert (adjust together with the runtime minimum). Parent adds approved disk-growth forecasting. Do not relabel the full monitoring host as this mount.
 
 Official pinned source field references:
 [Tempo S3 Config](https://github.com/grafana/tempo/blob/v3.1.1/tempodb/backend/s3/config.go),
 [actual live-store WAL/resource fields](https://github.com/grafana/tempo/blob/v3.1.1/modules/livestore/config.go),
 [native config/env expansion and verify-before-start](https://github.com/grafana/tempo/blob/v3.1.1/cmd/tempo/main.go).
+
+## External delivery compatibility and private reader transport
+
+Source contracts: infrastructure/observability/{external_delivery,delivery_queue}.py
+and DatabasePool.EXTERNAL_DELIVERY, confirmed by Noether/Nash. Service is exactly
+peerly-external-delivery-worker, pool worker_external (base1, no overflow).
+
+| Actual instrument | Allowed point dimensions | Meaning |
+| --- | --- | --- |
+| worker.external.cycles | storage=available/unavailable | Completed loop step, NOT provider success |
+| worker.external.storage.available | none | Last completed-step storage observation; unknown initially |
+| worker.external.cycle.age | none | Seconds since completed step, NOT process heartbeat |
+| worker.external.queue.depth | sink,state=pending/retry/dead | Exact retained-state counts, excludes leased/succeeded |
+| worker.external.queue.oldest_due | sink | Seconds since oldest due pending/retry |
+| worker.external.queue.blocked | sink,reason | One-hot actual finite FailureCode |
+| worker.external.queue.sample.fresh/age | none | Current snapshot validity / seconds since last success |
+| worker.external.sources.pending/oldest | none | Unmaterialized capture count / oldest age |
+
+Only umami and telegram_support sinks exist. Nine reasons: transient, rate_limited,
+credentials_unavailable, destination_unavailable, invalid_response, timeout,
+lease_expired, cancelled, permanent. Unknown service/metric/sink/state/reason is
+rejected; private extra point/resource attributes are stripped. No telegram_dev
+application sink or application technical-alert producer was added.
+
+Sampler:5s cadence,15s TTL,250ms total budget (75ms SQL/25ms lock). Failed reads
+immediately invalidate snapshots; last-success age remains and is absent before
+any success. Exact counts are not constant-cost with retained history. All queue,
+blocked and source graphs/alerts require sample.fresh==1, never a zero default.
+Source backlog is independent of materialized deliveries and remains visible if
+routing stalls with zero delivery depth. Cycle/storage liveness is separate and
+its30s stale threshold is provisional; exporter2min expiry still bounds visibility
+if the entire SDK stops. Nothing here proves a provider accepted/read a message.
+
+Prometheus jobs all retain their fixed scrape jobs (honor_labels:false). They use
+HTTPS to the actual runtime `STAGING_OBSERVABILITY_TLS_TARGET`, with exact paths
+`/peerly-observe/metrics/application`, `/collector`, `/tempo`. All authenticate as
+peerly-read using a separate protected PLAIN reader password_file; never copy a
+server htpasswd or separate log-writer password into it.
+No credential value belongs in source. Reader/log-writer are two independent roles;
+dedicated Alertmanager is monitoring-host private peerly-alertmanager:9093 and does
+not need a public stage alert-write role. Parent renders target/CA/password-file
+inputs, mounts them privately and owns gateway/Alertmanager activation. With a
+publicly trusted certificate, parent may omit the custom ca_file stanza instead
+of fabricating a CA file. Templates are not a live TLS/auth acceptance receipt.
+
+Syslog provenance: PEERLY_RELEASE applies only to core/external services. AI uses
+separately supplied PEERLY_AI_RELEASE from its actual running image provenance;
+empty/unknown omits service.version. It never inherits a fabricated core release.
+Actual finite ordinary diagnostic event ai_runtime_failure admits ONLY additional
+ai_runtime_phase receipt_recheck/heartbeat/revoke/physical_cleanup/retire,
+ai_runtime_code storage_unavailable/ownership_lost/receipt_rejected/
+physical_stop_uncertain/credential_uncertain/cancelled/unexpected and
+ai_runtime_failure_role primary/cleanup. Invalid/incomplete or wrong-service
+diagnostic packets are rejected. Raw exception names/messages, SQL/DSNs/URLs,
+provider tokens and private content remain outside the whitelist. Parent activates
+actual source images; this packet is not an app-generated technical alert.
+
+Focused local compatibility acceptance PASS17.51s is retained at
+`.peerly-ops/aquinas/ops-external-compat-20261111-6_f9uikb/attempt3/` beside the repo.
+It proves native metric filters, the actual typed source diagnostic, three service
+identities, AI version omission/override,20 rule fixtures and36 dashboard expression
+syntax checks using Prometheus2.42. Warn-level runtime logs are empty, cleanup done.
+Initial driver tmpfs failure and genuine mixed-service resource alias failure are
+preserved. Existing FS/Tempo/S3/syslog-retry receipts remain separate: no full-probe
+repeat. Local BasicAuth/TLS config parsing is not actual remote TLS/auth or provider
+acceptance; parent owns activation and runtime credentials.
+
+Native focused acceptance exposed a prior mixed-service syslog resource grouping
+defect. The receiver now copies attributes.appname to resource.service.name BEFORE
+conversion/grouping; each service owns its resource identity before log transforms.
+This prevents core/external packets inheriting AI version policy and stops a forged
+core ai_runtime_failure from becoming an accepted AI packet. Native negative/raw
+evidence is retained; finite body fields/privacy policy remain unchanged.
