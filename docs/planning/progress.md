@@ -1,8 +1,126 @@
 # Implementation progress
 
-Updated:10November2026 (deployed identity-recreation hotfix; new full CI pending). Follow the [autonomous workflow](autonomous-workflow.md) and [approved product decisions](product-decisions-v1.md).
+Updated:11November2026 (local head57 plus administrative tooling; publication/staging remain parent-owned). Follow the [autonomous workflow](autonomous-workflow.md) and [approved product decisions](product-decisions-v1.md).
+
+## Environment recovery — 11 November 2026
+
+Repository is available at the transferred Desktop path (the current filesystem
+resolves it to the prior physical path). Python3.12.3, Ruff0.17.4, mypy2.4.1 and
+Docker27.4.1 executables are available; this does not validate database/container
+readiness. Original temporary acceptance logs and frozen snapshots are absent.
+Historical55/superseding4/56/57 results below remain historical recorded receipts,
+not newly reconstructed evidence. Current source hashes were recovered separately;
+no suites were repeated merely to replace lost logs. Current source contains57,
+the mounted audit search, external queue sampler and required worker_external pool
+enum. Publication/deployment status still requires parent receipts.
+
+The mandatory final visual pass across every design-v2 screen/state, animated
+mascots and mobile sizes remains a completion requirement; frontend owns it.
+Backend/infra acceptance does not substitute for that phase.
+
+## Current bounded runtime diagnostic boundary — 11 November
+
+AI failure diagnostics are locally accepted:108 unit/controlled-runtime cases
+passed2.33s, strict5 files and all4architecture contracts. Primary receipt/heartbeat
+failure metadata is retained separately from cleanup failure without changing
+exception propagation, lifecycle calls, retry policy, ownership/fencing,15s health
+freshness or resource limits. Safe logging admits only5phases/7codes/primary-vs-
+cleanup, never exception text/SQL/credentials/private content. See
+[diagnostic receipt](ai-runtime-diagnostics.md). Collector compatibility is a
+separate Aquinas-owned candidate; no claim of deployed signal delivery or restart.
+Parent confirmed old terminal StorageUnavailable translation, not its unknown
+underlying4-way cause. No live model/auth or production SQL operation occurred.
+Canonical backend candidate is frozen for parent selective publication; remaining
+operator expansion is deferred until that coherent CI/build/deploy boundary.
+
+## Current administrative tooling boundary — 11 November
+
+Operator grant/revoke CLI is locally accepted:14unit cases passed1.39s and16actual
+PostgreSQL cases passed77.81s in separate bounded runs; no behavior failures or
+retries. Strict Ruff/format/mypy pass for the3new source/test files. The tool adds
+no migration, API, role kind or runtime/bootstrap change. Existing immutable
+operator_access_revisions retain actual changed_by/time/state; initial bootstrap
+never fabricates an already-active operator inspection, HTTP context or session.
+Plan/apply use exact database/target/administrator and expected-version CAS;
+concurrent contenders have one winner; rollback preserves all old history.
+Grant rejects unavailable/non-Google accounts; revoke can target a banned/deleted
+account. Private input and fixed safe errors are enforced by normal tooling gates.
+See [operator access CLI](operator-access-cli.md). No real grants were performed.
+The single test batch used an owned disposable PostgreSQL16.15 container/network,
+not staging or another agent's database. Unit/PG logs and XML are at
+`/tmp/peerly-operator-access-unit.*` and `-pg.*`; strict log is `-static.log`.
 
 ## Current state
+
+**Latest local accepted backend: head0057_operator_audit_search, API112paths/125operations.**
+The coordinated154-case batch passed25.27s (146unit+8actualPG), strict25files and
+all4architecture contracts, without behavior retries. It includes exact historical
+inspection filtering/keyset/correlation/current-authority/canonical audit, real
+queue/source backlog counts, pool/lock timeout→unknown→recovery, callback privacy
+and root sampler cancellation/drain before engine/SDK disposal. No whole-backend,
+coverage, production-provider or external migration acceptance is claimed.
+
+Actual export `/tmp/peerly-audit-queue-head57-openapi.json`, SHA256
+`23dc322e533cea8e4ac71ec450bb8320d356591934bcedc7039ddea890fcde76`.
+All previous111 path objects remain identical. New GET/operator/audits uses actual
+original grant metadata and a new SEARCH_AUDITS canonical journal entry with only
+returned audit refs. Requested-kind/id filters mean real requested target, not a
+search family's physical resource_kind. Exact operator/action/time/request-action-
+trace filters and opaque anchored keyset pagination carry no commit-snapshot claim.
+Five deliberate time/action/correlation indexes support these concrete queries.
+
+External queue sampler shares the existing worker pool1 with250ms total budget,
+75ms SQL/25ms lock limits,5s cadence and15s TTL. Exact counts can become unavailable
+as retained history grows; no fixed-cost/count-capacity promise. Immediate expected
+failure invalidates count/age-of-due/blocked/source series; last success time remains
+for age, and successful sampling recovers. SDK callbacks never query SQL. No extra
+engine, alert producer or delivery sink was added. Technical alerts go through
+scoped Prometheus/Alertmanager to existing Peerly Dev, per the owner decision.
+
+Parent holds immutable BE08/head55, superseding4-path publication supplement
+(three historical tests plus required worker_external pool enum), and head56
+chat-media snapshots. New57 source is a separate dependent candidate. No agent
+published/deployed, changed real stage/credentials/limits, sent messages or ran AI.
+External stage/CI state comes from parent's actual receipts, not local head57.
+
+## Earlier chat-media acceptance (head56 history)
+
+**Latest local accepted backend: head0056_operator_chat_media, API111paths/124operations.**
+The bounded217-case post-fix batch passed118.66s (176unit+41actualPG); strict21files
+plus two corrected test files and4architecture contracts pass. The initial run's
+21passes/one stale expected-label failure is preserved. Only two copied test
+expectations changed before the passing batch (image-vs-upload wording and exact
+chat filename); product code and20s/10MB bounds were unchanged. No whole-backend,
+coverage, production provider or external migration acceptance is claimed.
+
+Actual export `/tmp/peerly-chat-media-head56-openapi.json`, SHA256
+`50c381e97422d6af6b1663dea952cff59571ef2d287ca5cf5e6e99e04724c0d0`.
+All previous110 path objects remain identical; one actual privileged binary GET
+and explicit typed chat audit metadata/action/resource are additive. Separate
+chat owner/image/attempt FK proof cannot reuse profile-photo FKs. Original and
+display reads retain final role/session/source recheck after object I/O, no SQL
+across storage waits, mandatory canonical audit before bytes and secure attachment
+headers. No Discovery/current-READY filter anonymises privileged retained sources.
+
+Parent has frozen BE08 head55 (79paths) and its three-test historical-guard
+supplement; use those exact artifacts for a55 publication, not later working56
+bootstrap/ORM. No agent published/deployed or changed real stage, credentials,
+limits, messages or AI execution. Current external stage/CI state is determined
+by parent's actual receipts, not inferred from local head56. Frontend receives
+only the tested actual export and explicit fresh-PG READY after accepted bounds.
+
+The remaining operator/operations list in epic-be-07-operator-completion.md is a
+concrete outstanding scope list, not a claim that the whole application is done.
+
+## Next planning boundary
+
+The remaining concrete operator/operations scope is tracked in
+`epic-be-07-operator-completion.md`. Audit search and queue metrics above are locally
+accepted; remaining graph/action/message lookups, grant provisioning, selected
+moderation/triage contracts and external activation are not inferred complete.
+Keep actual public contract stable during the frontend's next explicit lease.
+
+## Earlier operator integration boundary (history)
 
 **10November current development:** the owner has reopened BE07 operator completion
 following the urgent manual staging operation. Parent applied exactly four explicit
@@ -74,6 +192,103 @@ one task after event-loop closure. This is not a deployed-container PID proof.
 The actual deployed AI container remains the previous image and PID32 limits;
 SDK thread/resource headroom and same-namespace runtime proof are parent-owned
 prerequisites before deployment. No flag-only or actual exported-signal claim.
+
+## OPS03 database/SSE and bounded AI resource setting — local acceptance
+
+One coordinated batch passed109tests in14.54s (104unit+5actualPostgreSQL), covering
+public per-engine AST-only query spans/error/privacy, cancellation/pool reuse,
+cache-only callbacks, lifecycle unregister after dispose, root engine ownership,
+actual SSE SQL-release/revocation/disconnect/backpressure, successful-send-only
+frame/lag semantics and bounded AI process-policy/receipt propagation. Strict
+Ruff/format/mypy19files and4architecture contracts pass. No repeated full suite,
+coverage threshold claim, live inference or deployment was performed.
+
+Actual OpenAPI remains107paths/120operations with byte-identical SHA256
+`c6432e2c45196ab999231274eeffdf0a1d7371676b0f31139aeef039ed4d88dc`.
+No DDL or student authorization/cursor/timeout change. `db.pool.configured_size`
+means configured QueuePool BASE, not total capacity or open sockets. Public events
+cannot measure queue wait; no fake pool-wait/overflow metric is emitted. All metrics
+and source/privacy/lifetime semantics are in [OPS03](ops03-observability-progress.md).
+
+AI runtime setting `RUNTIME__MAX_PROCESSES` defaults32, permits explicit32..40 and
+is propagated to the actual child policy and matching acceptance contract. Default
+policy digest remains unchanged. This neither changes live limits nor activates a
+new receipt: actual cgroup/child limit/same-container proof is parent-owned, along
+with allowing the optional key in the deployment bootstrap. Existing worker remains
+as previously deployed until that controlled revision. Revision0055 remains reserved
+for reviewed BE08 capture/outbox/intake only; no migration was written here.
+
+## Provision bootstrap strict gate enforcement
+
+Nash's frozen helper adds only the optional RUNTIME__MAX_PROCESSES key and preserves
+no-default forwarding and same-PID exec semantics; typed tests now live in normal
+`backend/tests/unit/test_provision_bootstrap.py`. Nash reports10focused cases passed.
+Main added `../deployment/backend/provision_bootstrap.py` to both Makefile Ruff
+commands using explicit backend config and to default strict mypy.files. Ordinary
+backend test discovery includes the moved unit file; no caller PYTHONPATH is needed.
+`/tmp/peerly-provision-helper-gates.log` records dry-run gate configuration assertions
+plus explicit strict Ruff/format/mypy2PASS. No functional test repetition or live
+helper/image change. Nash exact two-file receipt is
+`/tmp/peerly-ai-bootstrap-bound-iotvz1lk/manifest.json`.
+
+## BE08 approved client quality observation clarification
+
+Owner approved a sixth closed `quality.observed` variant in the pending intake
+contract: reason overflow/invalid/expired/rejected/exhausted/unavailable and count
+1..65535, with only common schema1 identity/time/screen fields. It is an untrusted
+client claim about discarded or unconfirmed records, never proof of permanent loss.
+Retained retry entries are not counted as lost; an exhausted request may already
+have been accepted if its ACK was lost. actor_changed remains local discard with
+old authority and is never submitted under a new actor. Quality payload/event ID
+freeze once in flight; new counts form a separate aggregate/new ID. A bounded
+reserved slot does not guarantee remote reporting after session loss and must not
+create quality-failure recursion. Plato/Aquinas received the exact typed agreement;
+no public DTO/route/schema has yet been mounted or exported for BE08.
+
+## BE08 — local source acceptance, no external activation
+
+Main composed the actual six-kind authenticated observation intake and two audited
+operator source GETs, immutable approved-public-assets configuration, separate
+external-delivery worker/settings/entrypoint, exact destination registration before
+lease and explicit TLS transport lifecycle. Revision0055 creates8actual tables and
+3reference-only capture triggers; no ProductEvent columns/history seed or technical
+Telegram sink exists. Model/DDL retained FK/shape invariants are tested on PostgreSQL.
+
+Coordinated acceptance:77unit cases passed before the first PG setup exposed two
+redundant frame FKs with the same convention name. The bounded fix removed only
+the scalar FK, retaining the NOTNULL composite observation/kind/release FK. Strict
+fix2passed; remaining121cases passed37.86s, including14actualPG cases. This is198
+unique passing cases across two runs (184unit+14PG), **not one198-case green run**.
+Logs `/tmp/peerly-be08-combined-targeted.log` and
+`/tmp/peerly-be08-postfix-targeted.log` preserve the failed setup and passing fix.
+Strict73files passed before the two-file FK fix; those2files then passed strict
+Ruff/format/mypy. All4architecture contracts pass after the fix. No full suite,
+coverage gate or live-provider/deployment acceptance is inferred.
+
+Actual tested export is110paths/123operations,
+`/tmp/peerly-be08-head55-openapi.json`, SHA256
+`ea6ab8afb0becec28448fb9349124528d784e9065c376ad2ad6bb88f4fbae31b`.
+All old107 path objects remain identical. New paths are POST telemetry/events,
+GET operator/delivery-sources and GET operator/delivery-sources/{source_id}; existing
+operator enum additions are intentional. Stage remains whatever parent last
+promoted; agents did not migrate it, register targets or send provider requests.
+[First boot and remaining validation](be08-firstboot.md) describes exact activation,
+asset-map, retention/rollback, duplicate-risk and unavailable native-visitor claims.
+
+## BE08 historical downgrade fixture compatibility follow-up
+
+Source inspection after the198-case receipt identified old full-chain downgrade
+assertions that expected an earlier retention guard. One actual pending case
+reproduced the55-first refusal in2.51s. The bounded test-only fix retains explicit
+36/41/42/48/49 revision guard checks and all history/business assertions; full-chain
+downgrade now expects actual55 capture retention. The genuine old-profile-report
+fixture starts at54 before capture exists, then exercises48→head without purging
+retained facts. Seven affected actualPG cases passed15.84s; strict3files pass. No
+product code, migration guard or threshold was weakened; no full suite was rerun.
+Frozen three-file supplement: `/tmp/peerly-be08-history-guard-fix-9f1bp0m6/manifest.json`,
+SHA256 `89077d8082bbe3f2e56e53bebcfaae16e5a31ff1f73a0c10cadf88140b3e6810`.
+Parent must merge this with the79-path BE08 snapshot before publication. Revision56
+chat-media source preparation remains unmounted/outside active migration paths.
 
 ## Prior deployed identity hotfix receipt
 

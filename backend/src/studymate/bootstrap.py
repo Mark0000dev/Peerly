@@ -2,6 +2,7 @@ import asyncio
 import ssl
 from collections.abc import AsyncIterator, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import httpx2 as httpx
@@ -32,11 +33,18 @@ from studymate.application.chat_images.reads import (
 from studymate.application.chat_images.start import StartChatImage
 from studymate.application.chat_images.worker import ProcessNextChatImage
 from studymate.application.check_readiness import CheckReadiness
+from studymate.application.client_observations.intake import AcceptClientObservations
 from studymate.application.discovery.deck import ReadDiscoveryDeck
 from studymate.application.discovery.passes import ChangePrivatePass
 from studymate.application.discovery.photos import ReadDiscoveryPhoto
 from studymate.application.discovery.profiles import ReadDiscoveryProfile
 from studymate.application.errors import StorageUnavailableError
+from studymate.application.external_delivery.inspection import (
+    ReadDeliverySource,
+    SearchDeliverySources,
+)
+from studymate.application.external_delivery.routing import MaterializeDeliverySources
+from studymate.application.external_delivery.worker import DeliverNextExternalEvent
 from studymate.application.feedback.assessments import SaveFeedback
 from studymate.application.feedback.outcomes import SaveStudyOutcome
 from studymate.application.feedback.prompts import OfferStudyPromptOnVisit
@@ -92,10 +100,12 @@ from studymate.application.notification_preferences.preferences import (
 )
 from studymate.application.operator.accounts import ReadOperatorAccount, SearchOperatorAccounts
 from studymate.application.operator.ai_jobs import ReadOperatorAiJob, ReadOperatorAiJobs
+from studymate.application.operator.audit_search import SearchOperatorAudits
 from studymate.application.operator.chat_image_uploads import (
     ReadOperatorChatImageHistory,
     ReadOperatorChatImageUploads,
 )
+from studymate.application.operator.chat_media import ReadOperatorChatMedia
 from studymate.application.operator.connection_requests import (
     ReadOperatorRequestHistory,
     ReadOperatorRequests,
@@ -170,12 +180,15 @@ from studymate.config import (
     AuthenticationConfiguration,
     ChangesWorkerSettings,
     EmailWorkerSettings,
+    ExternalDeliveryWorkerSettings,
     MediaConfiguration,
     MediaWorkerSettings,
     ObservabilityConfiguration,
     RequestsWorkerSettings,
     Settings,
 )
+from studymate.domain.external_delivery.delivery import DestinationRef
+from studymate.domain.external_delivery.sources import Sink
 from studymate.infrastructure.ai.persistence import SqlAiUnitOfWork
 from studymate.infrastructure.changes.loop import ChangeMaintenance, run_change_loop
 from studymate.infrastructure.changes.publication import SqlChangePublicationUnitOfWork
@@ -187,7 +200,28 @@ from studymate.infrastructure.chat_images.finalize import SqlChatImageFinalizeUn
 from studymate.infrastructure.chat_images.reads import SqlImageReadUnitOfWork
 from studymate.infrastructure.chat_images.start import SqlChatImageStartUnitOfWork
 from studymate.infrastructure.chat_images.worker import SqlChatImageWorkerUnitOfWork
+from studymate.infrastructure.client_observations.assets import (
+    ApprovedPublicAssets,
+    PublicReleaseAssets,
+)
+from studymate.infrastructure.client_observations.persistence import SqlObservationIntakeUnitOfWork
 from studymate.infrastructure.email.smtp import SmtpConfiguration, SmtpEmailSender
+from studymate.infrastructure.external_delivery.cursors import FernetSourceCursorCodec
+from studymate.infrastructure.external_delivery.destinations import (
+    DestinationRegistration,
+    register_destinations,
+)
+from studymate.infrastructure.external_delivery.http_adapters import (
+    ExternalHttpSender,
+    TelegramConfig,
+    UmamiConfig,
+    target_fingerprint,
+)
+from studymate.infrastructure.external_delivery.http_adapters.configuration import DestinationConfig
+from studymate.infrastructure.external_delivery.inspection import SqlSourceInspectionUnitOfWork
+from studymate.infrastructure.external_delivery.materialization import SqlMaterializationUnitOfWork
+from studymate.infrastructure.external_delivery.queue import SqlExternalDeliveryQueue
+from studymate.infrastructure.external_delivery.runtime import ExternalDeliveryWorker
 from studymate.infrastructure.feedback.summary_transactions import SqlFeedbackSummaryUnitOfWork
 from studymate.infrastructure.feedback.transactions import FeedbackRecorders, SqlFeedbackUnitOfWork
 from studymate.infrastructure.identity.google import GoogleConfiguration, GoogleOidcProvider
@@ -209,7 +243,13 @@ from studymate.infrastructure.messaging.goal_shares import SqlGoalShareUnitOfWor
 from studymate.infrastructure.messaging.history import SqlMessageHistoryUnitOfWork
 from studymate.infrastructure.notification_preferences.persistence import SqlPreferenceUnitOfWork
 from studymate.infrastructure.observability.changes import ObservedChangeStep
+from studymate.infrastructure.observability.database import DatabasePool, DatabaseTelemetry
+from studymate.infrastructure.observability.delivery_queue import (
+    DeliveryQueueSignals,
+    SqlDeliveryQueueReader,
+)
 from studymate.infrastructure.observability.email import ObservedVerificationDelivery
+from studymate.infrastructure.observability.external_delivery import ExternalDeliverySignals
 from studymate.infrastructure.observability.http import JsonHttpObserver
 from studymate.infrastructure.observability.media import ObservedMediaStep
 from studymate.infrastructure.observability.requests import ObservedRequestExpiry
@@ -218,11 +258,17 @@ from studymate.infrastructure.observability.runtime import (
     TelemetryRuntime,
     build_telemetry,
 )
+from studymate.infrastructure.observability.streams import StreamSignals
 from studymate.infrastructure.observability.tracing import OtelHttpTracing
 from studymate.infrastructure.operator.ai_cursors import FernetOperatorAiCursorCodec
 from studymate.infrastructure.operator.ai_transactions import SqlOperatorAiUnitOfWork
+from studymate.infrastructure.operator.audit_search_cursors import FernetOperatorAuditCursorCodec
+from studymate.infrastructure.operator.audit_search_transactions import (
+    SqlOperatorAuditSearchUnitOfWork,
+)
 from studymate.infrastructure.operator.chat_image_cursors import FernetOperatorChatImageCursorCodec
 from studymate.infrastructure.operator.chat_image_transactions import SqlOperatorChatImageUnitOfWork
+from studymate.infrastructure.operator.chat_media_transactions import SqlOperatorChatMediaUnitOfWork
 from studymate.infrastructure.operator.conversation_index_cursors import (
     FernetOperatorConversationCursorCodec,
 )
@@ -334,9 +380,17 @@ from studymate.presentation.browser import BrowserConfiguration
 from studymate.presentation.catalogue import CatalogueServices, catalogue_router
 from studymate.presentation.changes.router import ChangeHttpServices, changes_router
 from studymate.presentation.chat_images.router import ChatImageHttpServices, chat_image_router
+from studymate.presentation.client_observations.router import (
+    ClientObservationHttpServices,
+    client_observations_router,
+)
 from studymate.presentation.command_body_limit import JsonCommandBodyLimit
 from studymate.presentation.conversations import ConversationsHttpServices, conversations_router
 from studymate.presentation.discovery import DiscoveryServices, discovery_router
+from studymate.presentation.external_delivery.router import (
+    ExternalDeliveryHttpServices,
+    external_delivery_router,
+)
 from studymate.presentation.feedback.router import FeedbackHttpServices, feedback_router
 from studymate.presentation.feedback.summaries import (
     FeedbackSummaryHttpServices,
@@ -359,9 +413,17 @@ from studymate.presentation.notification_preferences.router import (
 )
 from studymate.presentation.onboarding import OnboardingServices, onboarding_router
 from studymate.presentation.operator.ai_router import OperatorAiHttpServices, operator_ai_router
+from studymate.presentation.operator.audit_search_router import (
+    OperatorAuditSearchHttpServices,
+    operator_audit_search_router,
+)
 from studymate.presentation.operator.chat_image_router import (
     OperatorChatImageHttpServices,
     operator_chat_image_router,
+)
+from studymate.presentation.operator.chat_media_router import (
+    OperatorChatMediaHttpServices,
+    operator_chat_media_router,
 )
 from studymate.presentation.operator.conversation_index_router import (
     OperatorConversationIndexHttpServices,
@@ -445,6 +507,12 @@ async def apply_bootstrap_reference_data(
         return await ApplyBootstrapData(SqlBootstrapDataUnitOfWork(sessions))(batch)
 
 
+def _install_problem_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(RequestValidationError, validation_problem)
+    app.add_exception_handler(StorageUnavailableError, storage_problem)
+    app.add_exception_handler(Exception, unexpected_problem)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     configuration = settings if settings is not None else Settings()
     telemetry = _telemetry(configuration.observability)
@@ -472,6 +540,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         follow_redirects=False,
     )
 
+    stream_signals = (
+        StreamSignals(telemetry.meter_provider.get_meter("studymate.sse")) if telemetry else None
+    )
     media_storage = MediaStorageHandle()
 
     @asynccontextmanager
@@ -485,6 +556,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if change_engine is not None:
                 resources.push_async_callback(change_engine.dispose)
             resources.push_async_callback(http.aclose)
+            database = _database_telemetry(telemetry)
+            if database is not None:
+                database.attach(engine, DatabasePool.CORE)
+                if ai_engine is not None:
+                    database.attach(ai_engine, DatabasePool.AI_ADMISSION)
+                if change_engine is not None:
+                    database.attach(change_engine, DatabasePool.CHANGE_READ)
+                resources.callback(database.close)
+            if stream_signals is not None:
+                resources.callback(stream_signals.close)
             if configuration.media is not None:
                 media_storage.bind(
                     await resources.enter_async_context(_open_media_storage(configuration.media))
@@ -501,9 +582,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         telemetry={"tracing": False, "metrics": False, "logs": False, "auto_configure": False},
         responses={500: {"model": ProblemResponse}},
     )
-    app.add_exception_handler(RequestValidationError, validation_problem)
-    app.add_exception_handler(StorageUnavailableError, storage_problem)
-    app.add_exception_handler(Exception, unexpected_problem)
+    _install_problem_handlers(app)
     app.add_middleware(JsonCommandBodyLimit)
     app.add_middleware(
         RequestCorrelation,
@@ -518,6 +597,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ):
         auth_services = _authentication_services(configuration.authentication, sessions, http)
         app.include_router(identity_router(auth_services))
+        app.include_router(_observation_router(configuration, sessions, auth_services))
         app.include_router(
             changes_router(
                 ChangeHttpServices(
@@ -528,7 +608,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             )
                         ),
                         Sha256SessionHasher(),
-                    )
+                    ),
+                    observations=stream_signals,
                 )
             )
         )
@@ -558,6 +639,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         )
     return app
+
+
+def _observation_router(
+    configuration: Settings,
+    sessions: async_sessionmaker[AsyncSession],
+    auth: AuthenticationServices,
+) -> APIRouter:
+    authentication = configuration.authentication
+    if authentication is None:
+        raise ValueError("Observation routing requires configured authentication")
+    assets = ApprovedPublicAssets(
+        tuple(
+            PublicReleaseAssets(release.release_id, release.asset_ids)
+            for release in configuration.public_asset_releases
+        )
+    )
+    return client_observations_router(
+        ClientObservationHttpServices(
+            AcceptClientObservations(
+                SqlObservationIntakeUnitOfWork(sessions),
+                Sha256SessionHasher(),
+                HmacIntentFingerprinter(bytes.fromhex(authentication.code_key.get_secret_value())),
+                assets,
+            ),
+            auth.signer,
+            auth.browser,
+        )
+    )
 
 
 def create_ai_admission_engine(
@@ -608,6 +717,15 @@ def create_changes_worker_engine(
         max_overflow=0,
         pool_timeout=2,
         connect_args=connect_args,
+    )
+
+
+def _database_telemetry(telemetry: TelemetryRuntime | None) -> DatabaseTelemetry | None:
+    if telemetry is None:
+        return None
+    return DatabaseTelemetry(
+        telemetry.tracer_provider.get_tracer("studymate.database"),
+        telemetry.meter_provider.get_meter("studymate.database"),
     )
 
 
@@ -687,6 +805,9 @@ async def run_email_worker(configuration: EmailWorkerSettings, stop: asyncio.Eve
         pool_timeout=2,
         connect_args={"timeout": 5},
     )
+    database = _database_telemetry(telemetry)
+    if database is not None:
+        database.attach(engine, DatabasePool.EMAIL)
     try:
         smtp = configuration.smtp
         tls_context = await asyncio.to_thread(ssl.create_default_context)
@@ -725,6 +846,8 @@ async def run_email_worker(configuration: EmailWorkerSettings, stop: asyncio.Eve
         try:
             await engine.dispose()
         finally:
+            if database is not None:
+                database.close()
             if telemetry is not None:
                 await telemetry.shutdown()
 
@@ -787,6 +910,9 @@ async def run_media_worker(configuration: MediaWorkerSettings, stop: asyncio.Eve
         connect_args={"timeout": 5},
     )
     processor = BoundedImageProcessor()
+    database = _database_telemetry(telemetry)
+    if database is not None:
+        database.attach(engine, DatabasePool.MEDIA)
     try:
         async with _open_media_storage(configuration.media) as storage:
             sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
@@ -816,6 +942,8 @@ async def run_media_worker(configuration: MediaWorkerSettings, stop: asyncio.Eve
             try:
                 await engine.dispose()
             finally:
+                if database is not None:
+                    database.close()
                 if telemetry is not None:
                     await telemetry.shutdown()
 
@@ -1032,6 +1160,9 @@ async def run_requests_worker(configuration: RequestsWorkerSettings, stop: async
         pool_timeout=2,
         connect_args={"timeout": 5},
     )
+    database = _database_telemetry(telemetry)
+    if database is not None:
+        database.attach(engine, DatabasePool.EXPIRY)
     try:
         sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
         step = ExpireRequests(SqlRequestExpiryUnitOfWork(sessions, record_request_outcome))
@@ -1049,6 +1180,8 @@ async def run_requests_worker(configuration: RequestsWorkerSettings, stop: async
         try:
             await engine.dispose()
         finally:
+            if database is not None:
+                database.close()
             if telemetry is not None:
                 await telemetry.shutdown()
 
@@ -1266,6 +1399,7 @@ def _operator_routers(
     chat_images = SqlOperatorChatImageUnitOfWork(sessions, record_operator_audit)
     feedback = SqlOperatorFeedbackUnitOfWork(sessions, record_operator_audit)
     conversation_index = SqlOperatorConversationIndexUnitOfWork(sessions, record_operator_audit)
+    delivery_sources = SqlSourceInspectionUnitOfWork(sessions, record_operator_audit)
     support_inbox = SqlOperatorSupportInboxUnitOfWork(sessions, record_operator_audit)
     support_cursor = FernetOperatorSupportInboxCursorCodec.from_key(key)
     return (
@@ -1280,6 +1414,24 @@ def _operator_routers(
             OperatorConversationIndexHttpServices(
                 ReadOperatorConversations(
                     conversation_index, hasher, FernetOperatorConversationCursorCodec.from_key(key)
+                )
+            )
+        ),
+        external_delivery_router(
+            ExternalDeliveryHttpServices(
+                SearchDeliverySources(
+                    delivery_sources, hasher, fingerprinter, FernetSourceCursorCodec.from_key(key)
+                ),
+                ReadDeliverySource(delivery_sources, hasher),
+            )
+        ),
+        operator_audit_search_router(
+            OperatorAuditSearchHttpServices(
+                SearchOperatorAudits(
+                    SqlOperatorAuditSearchUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    fingerprinter,
+                    FernetOperatorAuditCursorCodec.from_key(key),
                 )
             )
         ),
@@ -1384,6 +1536,13 @@ def _operator_routers(
                 ),
             )
         ),
+        operator_chat_media_router(
+            OperatorChatMediaHttpServices(
+                ReadOperatorChatMedia(
+                    SqlOperatorChatMediaUnitOfWork(sessions, record_operator_audit), hasher, storage
+                )
+            )
+        ),
         operator_profile_media_router(
             OperatorProfileMediaHttpServices(ReadOperatorProfileMedia(media, hasher, storage))
         ),
@@ -1401,6 +1560,9 @@ def _operator_routers(
 async def run_changes_worker(configuration: ChangesWorkerSettings, stop: asyncio.Event) -> None:
     telemetry = _telemetry(configuration.observability, "peerly-changes-worker")
     engine = create_changes_worker_engine(configuration.database_url.get_secret_value())
+    database = _database_telemetry(telemetry)
+    if database is not None:
+        database.attach(engine, DatabasePool.CHANGES)
     try:
         sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
         tracer = telemetry.tracing.tracer if telemetry is not None else None
@@ -1424,6 +1586,8 @@ async def run_changes_worker(configuration: ChangesWorkerSettings, stop: asyncio
         try:
             await engine.dispose()
         finally:
+            if database is not None:
+                database.close()
             if telemetry is not None:
                 await telemetry.shutdown()
 
@@ -1444,10 +1608,14 @@ async def run_ai_worker(configuration: AiWorkerSettings, stop: asyncio.Event) ->
         pool_timeout=2,
         connect_args={"timeout": 5},
     )
+    database = _database_telemetry(telemetry)
+    if database is not None:
+        database.attach(engine, DatabasePool.AI)
     try:
         async with _open_media_storage(configuration.media) as storage:
             inputs = configuration.runtime
             runtime_configuration = AiRuntimeConfiguration(
+                max_processes=inputs.max_processes,
                 executable=inputs.executable,
                 expected_version=inputs.expected_version,
                 expected_sha256=inputs.expected_sha256,
@@ -1475,6 +1643,8 @@ async def run_ai_worker(configuration: AiWorkerSettings, stop: asyncio.Event) ->
         try:
             await engine.dispose()
         finally:
+            if database is not None:
+                database.close()
             if telemetry is not None:
                 await telemetry.shutdown()
 
@@ -1519,3 +1689,108 @@ def _student_support_routers(
             )
         ),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _ConfiguredExternalDestinations:
+    destinations: tuple[DestinationRef, ...]
+
+    def destination(self, sink: Sink) -> DestinationRef | None:
+        return next((item for item in self.destinations if item.sink == sink), None)
+
+
+def _external_destination_configs(
+    settings: ExternalDeliveryWorkerSettings,
+) -> tuple[DestinationConfig, ...]:
+    configurations: list[DestinationConfig] = []
+    if settings.umami is not None:
+        configuration = settings.umami
+        configurations.append(
+            UmamiConfig(
+                DestinationRef(Sink.UMAMI, configuration.revision),
+                configuration.origin,
+                configuration.website_id,
+            )
+        )
+    if settings.telegram_support is not None:
+        support = settings.telegram_support
+        configurations.append(
+            TelegramConfig(
+                DestinationRef(Sink.TELEGRAM_SUPPORT, support.revision),
+                support.chat_id,
+                support.operator_origin,
+                support.token.get_secret_value(),
+                support.topic_id,
+            )
+        )
+    return tuple(configurations)
+
+
+def _external_transport(tls_context: ssl.SSLContext) -> httpx.AsyncBaseTransport:
+    return httpx.AsyncHTTPTransport(
+        verify=tls_context,
+        trust_env=False,
+        retries=0,
+        limits=httpx.Limits(max_connections=1, max_keepalive_connections=1),
+    )
+
+
+async def run_external_delivery_worker(
+    configuration: ExternalDeliveryWorkerSettings,
+    stop: asyncio.Event,
+) -> None:
+    if stop.is_set():
+        return
+    telemetry = _telemetry(configuration.observability, "peerly-external-delivery-worker")
+    async with AsyncExitStack() as resources:
+        if telemetry is not None:
+            resources.push_async_callback(telemetry.shutdown)
+        engine = create_async_engine(
+            configuration.database_url.get_secret_value(),
+            pool_size=1,
+            max_overflow=0,
+            pool_timeout=2,
+            pool_pre_ping=True,
+            connect_args={"timeout": 5},
+        )
+        resources.push_async_callback(engine.dispose)
+        database = _database_telemetry(telemetry)
+        if database is not None:
+            database.attach(engine, DatabasePool.EXTERNAL_DELIVERY)
+            resources.callback(database.close)
+        signals = ExternalDeliverySignals(
+            telemetry.meter_provider.get_meter("studymate.external") if telemetry else None
+        )
+        resources.callback(signals.close)
+        tls_context = await asyncio.to_thread(ssl.create_default_context)
+        transport = await resources.enter_async_context(_external_transport(tls_context))
+        configurations = _external_destination_configs(configuration)
+        sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+        await register_destinations(
+            sessions,
+            tuple(
+                DestinationRegistration(value.destination, target_fingerprint(value))
+                for value in configurations
+            ),
+        )
+        worker = ExternalDeliveryWorker(
+            MaterializeDeliverySources(SqlMaterializationUnitOfWork(sessions)),
+            DeliverNextExternalEvent(
+                SqlExternalDeliveryQueue(sessions),
+                _ConfiguredExternalDestinations(
+                    tuple(value.destination for value in configurations)
+                ),
+                ExternalHttpSender(configurations, transport),
+            ),
+            signals,
+        )
+        if telemetry is None:
+            await worker.run(stop)
+        else:
+            queue_signals = DeliveryQueueSignals(
+                telemetry.meter_provider.get_meter("studymate.external")
+            )
+            resources.callback(queue_signals.close)
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(queue_signals.run(SqlDeliveryQueueReader(sessions), stop))
+                tasks.create_task(worker.run(stop))

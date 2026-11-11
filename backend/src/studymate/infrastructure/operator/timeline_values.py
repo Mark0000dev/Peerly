@@ -16,6 +16,7 @@ from studymate.domain.operator.audit import (
     OperatorResourceKind,
     OperatorResourceRef,
 )
+from studymate.domain.operator.chat_media import OperatorChatMediaKind, OperatorChatMediaRequest
 from studymate.domain.operator.profile_media import (
     OperatorProfileMediaKind,
     OperatorProfileMediaRequest,
@@ -259,13 +260,17 @@ def audit_value(
         OperatorAction.READ_ACCOUNT: OperatorResourceKind.ACCOUNT,
         OperatorAction.READ_CONVERSATION_MESSAGES: OperatorResourceKind.MESSAGE,
         OperatorAction.SEARCH_EVENTS: OperatorResourceKind.EVENT,
+        OperatorAction.SEARCH_AUDITS: OperatorResourceKind.AUDIT,
         OperatorAction.READ_EVENT: OperatorResourceKind.EVENT,
         OperatorAction.READ_AUDIT: OperatorResourceKind.AUDIT,
         OperatorAction.SEARCH_REPORTS: OperatorResourceKind.REPORT,
         OperatorAction.READ_REPORT: OperatorResourceKind.REPORT,
         OperatorAction.READ_MEDIA: OperatorResourceKind.PROFILE_MEDIA,
+        OperatorAction.READ_CHAT_MEDIA: OperatorResourceKind.CHAT_MEDIA,
         OperatorAction.READ_SUPPORT_CASE: OperatorResourceKind.SUPPORT_CASE,
         OperatorAction.SEARCH_SUPPORT_CASES: OperatorResourceKind.SUPPORT_CASE,
+        OperatorAction.SEARCH_DELIVERY_SOURCES: OperatorResourceKind.DELIVERY_SOURCE,
+        OperatorAction.READ_DELIVERY_SOURCE: OperatorResourceKind.DELIVERY_SOURCE,
     }[action]
     if (
         row.operator_id != grant.account_id
@@ -284,6 +289,16 @@ def audit_value(
         )
     elif row.requested_media_owner_id is not None or row.requested_media_attempt_id is not None:
         raise RuntimeError("Media inspection lost its actual requested kind")
+    chat_request = None
+    if row.requested_chat_kind is not None:
+        chat_request = OperatorChatMediaRequest(
+            required_id(row.requested_chat_owner_id),
+            required_id(row.requested_id),
+            required_id(row.requested_chat_attempt_id),
+            OperatorChatMediaKind(row.requested_chat_kind),
+        )
+    elif row.requested_chat_owner_id is not None or row.requested_chat_attempt_id is not None:
+        raise RuntimeError("Chat-media inspection lost its actual requested kind")
     audit = OperatorAudit(
         row.id,
         OperatorAccess(grant.account_id, grant.version, grant.active, grant.changed_at),
@@ -295,6 +310,8 @@ def audit_value(
         row.query_fingerprint,
         media_request,
         row.actual_source_upload_id,
+        chat_request,
+        row.actual_source_image_id,
     )
     return OperatorAuditDetail(
         audit, OperatorEventOrigin(row.http_request_id, row.action_id, row.trace_id, row.span_id)

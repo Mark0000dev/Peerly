@@ -71,6 +71,7 @@ async def recover_stopped_predecessor(
             stage="containment",
             model=runtime.configuration.model,
             account_binding_sha256=runtime.binding_digest,
+            max_processes=runtime.configuration.max_processes,
         ),
     )
     health, queue, cache = runtime.health, runtime.queue, runtime.cache

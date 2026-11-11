@@ -17,6 +17,11 @@ from typing import TextIO
 from uuid import UUID
 
 from studymate.application.ports.http_observer import HttpObservation
+from studymate.infrastructure.ai.runtime.diagnostics import (
+    AiRuntimeCode,
+    AiRuntimeDiagnostic,
+    AiRuntimePhase,
+)
 
 MAX_STACK_FRAMES = 20
 HTTP_STATUS_MIN = 100
@@ -31,6 +36,7 @@ class LogEvent(StrEnum):
     WORKER_STEP = "worker_step"
     WORKER_STOPPED = "worker_stopped"
     WORKER_STORAGE_UNAVAILABLE = "worker_storage_unavailable"
+    AI_RUNTIME_FAILURE = "ai_runtime_failure"
     RUNTIME_ERROR = "runtime_error"
     RUNTIME_LOG = "runtime_log"
 
@@ -59,6 +65,26 @@ def _hex(record: logging.LogRecord, name: str, length: int) -> str | None:
     return None
 
 
+def _ai_runtime_metadata(record: logging.LogRecord) -> dict[str, str]:
+    diagnostic: object = getattr(record, "ai_runtime_diagnostic", None)
+    if not isinstance(diagnostic, AiRuntimeDiagnostic):
+        return {}
+    phase: object = getattr(diagnostic, "phase", None)
+    code: object = getattr(diagnostic, "code", None)
+    primary: object = getattr(diagnostic, "primary", None)
+    if (
+        not isinstance(phase, AiRuntimePhase)
+        or not isinstance(code, AiRuntimeCode)
+        or type(primary) is not bool
+    ):
+        return {}
+    return {
+        "ai_runtime_phase": phase.value,
+        "ai_runtime_code": code.value,
+        "ai_runtime_failure_role": "primary" if primary is True else "cleanup",
+    }
+
+
 class SafeJsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         supplied: object = getattr(record, "event", None)
@@ -76,6 +102,7 @@ class SafeJsonFormatter(logging.Formatter):
             }.get(record.levelno, "INFO"),
             "event": event,
         }
+        content.update(_ai_runtime_metadata(record))
         if record.name.startswith("opentelemetry."):
             content["component"] = "telemetry"
         observation: object = getattr(record, "observation", None)

@@ -146,21 +146,27 @@ def test_all_actual_audit_actions_preserve_original_active_grant_and_hide_query_
     searching = action in {
         OperatorAction.SEARCH_ACCOUNTS,
         OperatorAction.SEARCH_EVENTS,
+        OperatorAction.SEARCH_AUDITS,
         OperatorAction.SEARCH_REPORTS,
         OperatorAction.SEARCH_SUPPORT_CASES,
+        OperatorAction.SEARCH_DELIVERY_SOURCES,
     }
     resource = {
         OperatorAction.SEARCH_ACCOUNTS: "account",
         OperatorAction.READ_ACCOUNT: "account",
         OperatorAction.READ_CONVERSATION_MESSAGES: "conversation",
         OperatorAction.SEARCH_EVENTS: "event",
+        OperatorAction.SEARCH_AUDITS: "audit",
         OperatorAction.READ_EVENT: "event",
         OperatorAction.READ_AUDIT: "audit",
         OperatorAction.SEARCH_REPORTS: "report",
         OperatorAction.READ_REPORT: "report",
         OperatorAction.READ_MEDIA: "profile_media",
+        OperatorAction.READ_CHAT_MEDIA: "chat_media",
         OperatorAction.READ_SUPPORT_CASE: "support_case",
         OperatorAction.SEARCH_SUPPORT_CASES: "support_case",
+        OperatorAction.SEARCH_DELIVERY_SOURCES: "delivery_source",
+        OperatorAction.READ_DELIVERY_SOURCE: "delivery_source",
     }[action]
     requested = None if searching else uuid4()
     returned: list[UUID] = (
@@ -186,6 +192,11 @@ def test_all_actual_audit_actions_preserve_original_active_grant_and_hide_query_
         row.requested_media_attempt_id = uuid4()
         row.requested_media_kind = "original"
         row.actual_source_upload_id = requested
+    if action == OperatorAction.READ_CHAT_MEDIA:
+        row.requested_chat_owner_id = uuid4()
+        row.requested_chat_attempt_id = uuid4()
+        row.requested_chat_kind = "original"
+        row.actual_source_image_id = requested
     actual = audit_value(row, grant)
     dto = audit_response(actual)
     assert dto.operator_id == actor_id

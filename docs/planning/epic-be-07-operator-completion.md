@@ -42,32 +42,41 @@ or extra business writes. The prior schema was96paths/109operations; the tested 
 1. **Locally completed:** the eight existing retained reads above are mounted.
 2. **Locally completed:** support inbox/search and raw paginated status history
    are mounted. Existing detail and status mutation remain unchanged.
-3. **Missing:** participant/conversation lookup and typed reverse resource edges,
-   exact message/operation/action lookup, paginated inspection-audit search. Event
+3. **Partly completed:** account-scoped conversation lookup is locally accepted.
+   Global paginated inspection-audit search is locally accepted at57 with actual
+   original-grant/correlation/requested-target semantics and canonical SEARCH_AUDITS.
+   Typed reverse resource edges and exact message/operation/action lookup remain. Event
    search/audit detail and account source links exist, but do not implement the
    planned `/resources/{type}/{id}/relations`, `/actions/{id}` or audit list.
    Define each finite source contract before implementing; no arbitrary SQL,
    eager universal graph, invented counts or content fulltext search.
-4. **Missing:** privileged retained chat-image binary inspection. Existing
-   operator chat-image metadata is not a binary grant; profile-media reader is
-   deliberately profile-only. Existing student image readers retain their guards.
+4. **Locally completed at head56:** privileged retained chat-image original/display
+   binary inspection with separate typed FK/audit proof, two-phase authority and
+   no SQL over object I/O. Existing student/profile readers retain their guards.
+   Targeted217PASS and actual API111/124 are recorded in the current progress ledger.
 5. **Missing:** internal report-triage admission/permission/selected-evidence,
    operator-only result integration and runtime acceptance. Queue enum/reserved
    capacity and report reads exist; they do not implement this fourth AI scenario.
    Schedule separately with an exact source contract; do not edit the accepted
    student native runtime as part of this epic.
-6. **Missing separate bounded contracts:** operator grant/revocation provisioning
-   tooling and retained lifecycle/relationship/preferences/outcome detail beyond
-   current projections. No default grant or role-management HTTP exists. No
+6. **Locally completed tooling,11November:** explicit administrative operator
+   grant/revocation CLI reuses immutable access revisions;14unit+16actualPG and
+   strict3file checks pass. Actual owner target/provisioning remain parent-owned.
+   Retained lifecycle/relationship/preferences/outcome detail beyond current
+   projections still needs separate bounded contracts. No default grant or
+   role-management HTTP exists. No
    speculative suspension, account reactivation or email reassignment is allowed.
 7. **Not implemented by current read APIs:** human report/photo-review workflow
    and required approval-after-replacement source facts. Ban/unban is implemented;
    a ban endpoint does not itself supply a photo review state machine. Clarify
    actual transitions/evidence before that later epic, never invent moderation
    case states by reusing support statuses.
-8. **Operational/integration, parent-owned:** durable support-triggered Telegram
-   notifications, telemetry/archive/dashboard navigation and actual operator role
-   provisioning. The one team announcement is not a support-notification worker.
+8. **Operational/integration, parent-owned activation:** the BE08 durable support
+   notification worker is locally implemented with controlled-provider evidence;
+   real recipient/provider activation, telemetry/archive/dashboard navigation and
+   actual operator role provisioning remain separate. Technical alerts use the
+   existing Peerly Dev destination through scoped Prometheus/Alertmanager only;
+   no application-generated technical alert producer or extra BE08 sink exists.
    External Grafana access never creates an application grant.
 
 This is a source-based remaining list, not a declaration that every possible

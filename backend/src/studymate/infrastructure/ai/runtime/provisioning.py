@@ -9,6 +9,7 @@ from studymate.infrastructure.ai.runtime.acceptance import (
     RuntimeAcceptanceError,
     validate_runtime_receipt,
 )
+from studymate.infrastructure.ai.runtime.policy import DEFAULT_MAX_PROCESSES, require_max_processes
 from studymate.infrastructure.ai.runtime.preflight import PinnedCli
 
 
@@ -20,6 +21,10 @@ class ProvisioningConfiguration:
     credential_directory: Path = field(repr=False)
     workspaces_root: Path
     acceptance_artifact: Path
+    max_processes: int = DEFAULT_MAX_PROCESSES
+
+    def __post_init__(self) -> None:
+        require_max_processes(self.max_processes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +65,9 @@ async def prepare_ai_provisioning(
         configuration.acceptance_artifact,
         cli,
         configuration.workspaces_root,
-        expectation=ReceiptExpectation(stage="containment"),
+        expectation=ReceiptExpectation(
+            stage="containment", max_processes=configuration.max_processes
+        ),
     )
     if receipt.stage != "containment":
         raise RuntimeAcceptanceError("provisioning_requires_containment_stage")

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from studymate.infrastructure.persistence.message_report_models import MessageReportContextRecord
 from studymate.infrastructure.persistence.product_event_models import ProductEventRecord
 from studymate.infrastructure.persistence.report_models import ProfileReportRecord
-from tests.integration.migrations import migrate
+from tests.integration.migrations import migrate, run_revision_step
 from tests.integration.safety.message_reports.fixture import prepared as image_context
 from tests.integration.safety_fixture import prepared as profile_context
 
@@ -32,7 +32,9 @@ async def test_existing_profile_report_is_classified_from_real_old_shape_without
     # source context first, then return it to the actual old schema before inserting
     # the historical report; never execute the head52 mapper against head48 tables.
     async with engine.begin() as connection:
-        await connection.run_sync(migrate, "head")
+        # The last complete student-business schema precedes external capture.
+        # Do not create retained capture facts then purge them to force an old fixture.
+        await connection.run_sync(migrate, "0054_identity_recreation")
     viewer, _, context = await profile_context(engine)
     async with engine.begin() as connection:
         await connection.run_sync(downgrade49)
@@ -87,6 +89,9 @@ async def test_real_downgrade_refuses_to_drop_retained_image_evidence(
     source = await image_context(identity_engine)
     report = await source.submit()(source.command()) if submitted else None
     with pytest.raises(RuntimeError, match="retained message image report evidence"):
+        async with identity_engine.begin() as connection:
+            await connection.run_sync(run_revision_step, "0049_message_image_reports", "downgrade")
+    with pytest.raises(RuntimeError, match="retained observations or external delivery facts"):
         async with identity_engine.begin() as connection:
             await connection.run_sync(downgrade49)
     async with source.chat.api.sessions() as session:

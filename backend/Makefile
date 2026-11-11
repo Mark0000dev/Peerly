@@ -1,8 +1,8 @@
-.PHONY: check lint typecheck architecture test test-unit test-integration run run-media-worker run-requests-worker run-changes-worker run-ai-worker
+.PHONY: check lint typecheck architecture test test-unit test-integration run run-media-worker run-requests-worker run-changes-worker run-ai-worker run-external-delivery-worker
 check: lint typecheck architecture test
 lint:
-	uv run ruff check --config pyproject.toml . ../deployment/backend/manual_stage_verification.py
-	uv run ruff format --check --config pyproject.toml . ../deployment/backend/manual_stage_verification.py
+	uv run ruff check --config pyproject.toml . ../deployment/backend/manual_stage_verification.py ../deployment/backend/provision_bootstrap.py ../deployment/backend/operator_access.py
+	uv run ruff format --check --config pyproject.toml . ../deployment/backend/manual_stage_verification.py ../deployment/backend/provision_bootstrap.py ../deployment/backend/operator_access.py
 typecheck:
 	uv run mypy
 architecture:
@@ -27,3 +27,6 @@ run-changes-worker:
 
 run-ai-worker:
 	uv run python -m studymate.ai_worker
+
+run-external-delivery-worker:
+	uv run python -m studymate.external_delivery_worker

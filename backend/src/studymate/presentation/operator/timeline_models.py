@@ -20,6 +20,7 @@ from studymate.domain.operator.audit import (
     OperatorAuditOutcome,
     OperatorResourceKind,
 )
+from studymate.domain.operator.chat_media import OperatorChatMediaKind
 from studymate.domain.operator.profile_media import OperatorProfileMediaKind
 from studymate.domain.operator.timeline import (
     MAX_EVENT_SOURCE_REFS,
@@ -138,6 +139,10 @@ class OperatorAuditDetailResponse(ClosedModel):
     requested_media_attempt_id: UUID | None
     requested_media_kind: OperatorProfileMediaKind | None
     actual_source_upload_id: UUID | None
+    requested_chat_owner_id: UUID | None
+    requested_chat_attempt_id: UUID | None
+    requested_chat_kind: OperatorChatMediaKind | None
+    actual_source_image_id: UUID | None
 
 
 def origin_response(value: OperatorEventOrigin) -> OperatorEventOriginResponse:
@@ -221,5 +226,13 @@ def audit_response(value: OperatorAuditDetail) -> OperatorAuditDetailResponse:
         else None,
         requested_media_kind=audit.media_request.kind if audit.media_request is not None else None,
         actual_source_upload_id=audit.actual_source_upload_id,
+        requested_chat_owner_id=audit.chat_media_request.account_id
+        if audit.chat_media_request
+        else None,
+        requested_chat_attempt_id=audit.chat_media_request.attempt_id
+        if audit.chat_media_request
+        else None,
+        requested_chat_kind=audit.chat_media_request.kind if audit.chat_media_request else None,
+        actual_source_image_id=audit.actual_source_image_id,
         origin=origin_response(value.origin),
     )

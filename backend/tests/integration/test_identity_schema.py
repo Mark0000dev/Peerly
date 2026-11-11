@@ -33,6 +33,14 @@ async def test_revision_upgrade_matches_models_and_can_be_reversed(engine: Async
         assert compare_metadata(MigrationContext.configure(connection), metadata) == []
         assert_check_constraints_match_metadata(connection, metadata)
         assert set(inspect(connection).get_table_names()) == {
+            "client_observation_batches",
+            "client_observations",
+            "client_observation_frames",
+            "external_delivery_destinations",
+            "external_delivery_sources",
+            "external_deliveries",
+            "external_delivery_attempts",
+            "external_delivery_schedule",
             "discovery_contexts",
             "discovery_decision_heads",
             "private_passes",

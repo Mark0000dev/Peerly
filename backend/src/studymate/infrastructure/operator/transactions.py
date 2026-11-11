@@ -247,13 +247,17 @@ class SqlOperatorTransaction(SqlIdentityTransaction):
             OperatorAction.READ_ACCOUNT: "account",
             OperatorAction.READ_CONVERSATION_MESSAGES: "conversation",
             OperatorAction.SEARCH_EVENTS: "event",
+            OperatorAction.SEARCH_AUDITS: "audit",
             OperatorAction.READ_EVENT: "event",
             OperatorAction.READ_AUDIT: "audit",
             OperatorAction.SEARCH_REPORTS: "report",
             OperatorAction.READ_REPORT: "report",
             OperatorAction.READ_MEDIA: "profile_media",
+            OperatorAction.READ_CHAT_MEDIA: "chat_media",
             OperatorAction.READ_SUPPORT_CASE: "support_case",
             OperatorAction.SEARCH_SUPPORT_CASES: "support_case",
+            OperatorAction.SEARCH_DELIVERY_SOURCES: "delivery_source",
+            OperatorAction.READ_DELIVERY_SOURCE: "delivery_source",
         }[audit.action]
         self.session.add(
             OperatorAuditRecord(
@@ -275,6 +279,16 @@ class SqlOperatorTransaction(SqlIdentityTransaction):
                 if audit.media_request is not None
                 else None,
                 actual_source_upload_id=audit.actual_source_upload_id,
+                requested_chat_owner_id=audit.chat_media_request.account_id
+                if audit.chat_media_request
+                else None,
+                requested_chat_attempt_id=audit.chat_media_request.attempt_id
+                if audit.chat_media_request
+                else None,
+                requested_chat_kind=audit.chat_media_request.kind.value
+                if audit.chat_media_request
+                else None,
+                actual_source_image_id=audit.actual_source_image_id,
                 outcome=audit.outcome.value,
                 query_fingerprint=audit.query_fingerprint,
                 occurred_at=audit.at,

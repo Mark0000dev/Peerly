@@ -8,6 +8,8 @@ transport. This launcher cannot attest those deployment controls.
 from dataclasses import dataclass
 from pathlib import Path
 
+from studymate.infrastructure.ai.runtime.policy import require_max_processes
+
 MEBIBYTE = 1024 * 1024
 FORBIDDEN_JOB_ROOTS = ("/usr", "/home", "/root", "/etc", "/proc", "/sys", "/dev", "/run")
 
@@ -43,6 +45,7 @@ class LinuxSandbox:
             )
         ):
             raise ValueError("Positive executor resource limits are required")
+        require_max_processes(self.processes)
 
     def command(self, invocation: tuple[str, ...], directory: Path) -> tuple[str, ...]:
         if (

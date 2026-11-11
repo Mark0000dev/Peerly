@@ -443,3 +443,67 @@ empty search and missing-resource inspection commits the real bounded metadata
 audit/canonical fact before response; role/session/final-commit failure exposes
 no data. All new reads require current explicit operator authority, not student
 activation, participant membership or a support-case permission grant.
+
+### Operator account conversation index (head54, local107-path contract)
+
+`GET /api/v1/operator/accounts/{account_id}/conversations` requires the current
+explicit operator grant/session and commits mandatory READ_ACCOUNT container audit.
+A known empty account returns an empty page; a missing account records NOT_FOUND
+before404. Rows contain `id`, `relationship_id`, `low_id`, `high_id`, `request_id`,
+`accepted_request_version` only. Both actual participants remain inspectable after
+visibility/deletion changes. No student profile grant, message content, attachment
+access, invented timestamp or message count is implied. UUID-descending50+1 keyset
+pagination binds opaque cursor to operator/grant/target; refresh is required to
+observe inserts above an already visited key. This is not a commit snapshot.
+
+### BE08 — locally accepted head55 contract
+
+POST `/api/v1/telemetry/events` admits at most20 closed schema1 observations/16KiB
+raw JSON with actual session, Origin, CSRF, idempotency and account-bound rate. The
+sixth `quality.observed` variant is a strict client claim with finite reason/count,
+not evidence of permanent loss. Actor changes discard local history, not reattribute
+it; submitted expected_actor_id is only a server-checked fence. Unknown public
+release/asset maps reject numeric frames; no URL/raw-stack fallback is accepted.
+
+GET `/api/v1/operator/delivery-sources` supports actual actor/kind filters and
+opaque grant/operator/query-bound cursor; GET `/{source_id}` returns actual typed
+source and at most2delivery states/16attempts. Both require current explicit
+operator authority and same-transaction canonical inspection audit. No provider
+secret/body or send/retry mutation is exposed. Only Umami+Telegram Support sinks
+exist. See planning/be08-firstboot.md for source truth and deployment limitations.
+
+### Operator retained chat attachments (local head56)
+
+GET `/api/v1/operator/accounts/{account_id}/chat-image-uploads/{image_id}/attempts/{attempt_id}/{kind}`
+accepts only original/display and no open query overrides. Exact retained image-owner
+and attempt joins supply authority source proof independently of student Discovery,
+READY/current image state or target lifecycle. A current explicit operator/session
+is checked before and after bounded object I/O; the final mandatory canonical audit
+commits before bytes are returned. Missing object/source is audited NOT_FOUND;
+storage/timeout/oversize never masquerades as a successful inspection. No SQL
+transaction remains open during object reads. Original is an octet-stream attachment;
+display is a JPEG attachment, both no-store/nosniff/CSP-sandbox with no storage URLs.
+
+Audit metadata uses distinct requested_chat_owner_id, requested_chat_attempt_id,
+requested_chat_kind and actual_source_image_id fields. Existing profile fields/FKs
+are not repurposed. Actual source image/owner and image/attempt tuples have retained
+RESTRICT FK proof; audit/canonical failures release no bytes. Retained chat inspection
+facts prevent unsafe56downgrade. Actual111/124 schema is exported after scoped tests;
+this is not an external deployment or full-suite acceptance claim.
+
+### Operator inspection journal search (local head57)
+
+GET `/api/v1/operator/audits` returns at most50 actual audit details plus opaque
+next_cursor and DB search_anchor_at. Filters are exact operator_id/action,
+requested_kind/requested_id (ID requires kind), http_request_id/action_id/trace_id,
+and aware half-open occurred_from/occurred_before. Requested filters apply only to
+actual nonnull requested target; a search row's physical family kind is not an
+invented requested resource. No freeform content/identity search is added here.
+
+Rows retain the original active grant/version even if that operator is later
+revoked/deleted. Caller authority is separately checked now and before commit.
+Each page commits mandatory SEARCH_AUDITS metadata audit of only visible audit IDs;
+failed audit returns no result. Descending occurred_at/UUID cursor binds actor,
+grant revision, normalized query fingerprint and DB-time anchor; late commits may
+require refresh and no commit-order/snapshot or human-view claim is made. Existing
+GET/audits/{audit_id} detail and all earlier111 path objects remain unchanged.

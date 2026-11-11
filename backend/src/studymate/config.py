@@ -1,7 +1,8 @@
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -142,6 +143,12 @@ class AiHttpConfiguration(BaseModel):
     retry_after_seconds: int = Field(default=1, ge=1, le=60)
 
 
+class PublicAssetReleaseConfiguration(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+    release_id: str = Field(pattern=r"^[0-9a-f]{40}$")
+    asset_ids: frozenset[Annotated[int, Field(strict=True, ge=0, le=4095)]] = Field(max_length=4096)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -156,6 +163,16 @@ class Settings(BaseSettings):
     media: MediaConfiguration | None = None
     observability: ObservabilityConfiguration | None = None
     ai: AiHttpConfiguration = Field(default_factory=AiHttpConfiguration)
+    public_asset_releases: tuple[PublicAssetReleaseConfiguration, ...] = ()
+
+    @field_validator("public_asset_releases")
+    @classmethod
+    def unique_public_releases(
+        cls, value: tuple[PublicAssetReleaseConfiguration, ...]
+    ) -> tuple[PublicAssetReleaseConfiguration, ...]:
+        if len({release.release_id for release in value}) != len(value):
+            raise ValueError("Approved public release maps cannot redefine a release")
+        return value
 
     @field_validator("database_url")
     @classmethod
@@ -279,6 +296,7 @@ class AiWorkerRuntimeConfiguration(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
+    max_processes: int = Field(default=32, ge=32, le=40)
     executable: Path
     expected_version: str = Field(min_length=1, max_length=100)
     expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -359,3 +377,68 @@ class AiWorkerSettings(BaseSettings):
     @classmethod
     def require_asyncpg(cls, value: SecretStr) -> SecretStr:
         return Settings.require_asyncpg(value)
+
+
+class UmamiDeliveryConfiguration(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+    revision: int = Field(ge=1)
+    origin: str
+    website_id: UUID
+
+    @field_validator("origin")
+    @classmethod
+    def https_origin(cls, value: str) -> str:
+        return MediaConfiguration.require_storage_origin(value)
+
+
+class SupportTelegramDeliveryConfiguration(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+    revision: int = Field(ge=1)
+    chat_id: int
+    operator_origin: str
+    token: SecretStr
+    topic_id: int | None = None
+
+    @field_validator("operator_origin")
+    @classmethod
+    def https_origin(cls, value: str) -> str:
+        return MediaConfiguration.require_storage_origin(value)
+
+    @field_validator("token")
+    @classmethod
+    def require_token(cls, value: SecretStr) -> SecretStr:
+        if re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]{1,256}", value.get_secret_value()) is None:
+            raise ValueError("An explicit Telegram bot token is required")
+        return value
+
+    @field_validator("chat_id", "topic_id")
+    @classmethod
+    def numeric_destination(cls, value: int | None) -> int | None:
+        if value is not None and (isinstance(value, bool) or not 0 < abs(value) < 2**52):
+            raise ValueError("An actual bounded Telegram destination identifier is required")
+        return value
+
+
+class ExternalDeliveryWorkerSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=None,
+        extra="forbid",
+        frozen=True,
+        env_nested_delimiter="__",
+        hide_input_in_errors=True,
+    )
+    database_url: SecretStr
+    umami: UmamiDeliveryConfiguration | None = None
+    telegram_support: SupportTelegramDeliveryConfiguration | None = None
+    observability: ObservabilityConfiguration | None = None
+
+    @field_validator("database_url")
+    @classmethod
+    def require_asyncpg(cls, value: SecretStr) -> SecretStr:
+        return Settings.require_asyncpg(value)
+
+    @model_validator(mode="after")
+    def require_destination(self) -> "ExternalDeliveryWorkerSettings":
+        if self.umami is None and self.telegram_support is None:
+            raise ValueError("External delivery needs at least one explicit destination")
+        return self

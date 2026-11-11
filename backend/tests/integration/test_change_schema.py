@@ -68,6 +68,11 @@ async def test_full_downgrade_preserves_delivery_markers_and_business_sources(
             await connection.run_sync(run_revision_step, "0036_change_delivery", "downgrade")
     with pytest.raises(RuntimeError, match="Refusing to drop retained academic revision events"):
         async with identity_engine.begin() as connection:
+            await connection.run_sync(
+                run_revision_step, "0042_academic_revision_events", "downgrade"
+            )
+    with pytest.raises(RuntimeError, match="retained observations or external delivery facts"):
+        async with identity_engine.begin() as connection:
             await connection.run_sync(downgrade)
     assert await head_positions(owned) == heads_before
     async with owned.api.sessions() as session:

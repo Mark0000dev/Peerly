@@ -1,0 +1,71 @@
+name: Backend image (build only)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - backend/**
+      - deployment/backend/**
+      - .github/workflows/backend-image.yml
+
+# No package write, registry credentials, publish or deployment jobs.
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-image-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Image prerequisite - backend quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16.15@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
+        env:
+          POSTGRES_USER: studymate
+          POSTGRES_PASSWORD: studymate
+          POSTGRES_DB: studymate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U studymate -d studymate_test"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://studymate:studymate@localhost:5432/studymate_test
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: '0.13.7'
+      - run: uv sync --locked
+        working-directory: backend
+      - run: make check
+        working-directory: backend
+      - run: uv run ruff check ../deployment/backend
+        working-directory: backend
+      - run: uv run ruff format --check ../deployment/backend
+        working-directory: backend
+      - run: uv run mypy --strict ../deployment/backend
+        working-directory: backend
+
+  image:
+    name: Build and isolated local smoke
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build immutable local image and smoke without providers
+        run: python3 deployment/backend/smoke.py --build --output /tmp/backend-image-smoke.json
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: backend-image-smoke
+          path: /tmp/backend-image-smoke.json
+          retention-days: 7

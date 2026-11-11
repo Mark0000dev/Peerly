@@ -8,6 +8,15 @@ from studymate.infrastructure.ai.runtime.preflight import PinnedCli
 
 INSPECTED_VERSION = "codex-cli 0.167.0"
 INSPECTED_SHA256 = "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda"
+DEFAULT_MAX_PROCESSES = 32
+MAX_PROCESSES = 40
+
+
+def require_max_processes(value: int) -> None:
+    if type(value) is not int or not DEFAULT_MAX_PROCESSES <= value <= MAX_PROCESSES:
+        raise ValueError("AI process bound must be an integer from32 through40")
+
+
 DISABLED_FEATURES = (
     "shell_tool",
     "shell_snapshot",
@@ -50,8 +59,10 @@ DISABLED_FEATURES = (
 class InspectionPolicy:
     job: Path
     auth: Path
+    max_processes: int = DEFAULT_MAX_PROCESSES
 
     def __post_init__(self) -> None:
+        require_max_processes(self.max_processes)
         if (
             not self.job.is_absolute()
             or self.job == Path("/")

@@ -289,6 +289,9 @@ async def test_real_full_chain_refuses_to_drop_retained_image_preparation(
         RuntimeError, match="Refusing to drop retained chat image transport cleanup metadata"
     ):
         async with identity_engine.begin() as connection:
+            await connection.run_sync(run_revision_step, "0048_chat_image_cleanup", "downgrade")
+    with pytest.raises(RuntimeError, match="retained observations or external delivery facts"):
+        async with identity_engine.begin() as connection:
             await connection.run_sync(downgrade)
     assert (
         await start(owned)(replace(submission(owned), client_message_id=image.client_message_id))

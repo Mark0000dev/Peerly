@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Header, Request, Response
 from starlette.responses import StreamingResponse
 
+from studymate.application.changes.observations import StreamObservations
 from studymate.application.changes.reads import InvalidChangeCursorError, ReadChanges
 from studymate.application.errors import StorageUnavailableError
 from studymate.application.identity.sessions import StudentActionDeniedError, UnauthenticatedError
@@ -15,6 +16,7 @@ from studymate.presentation.changes.frames import parse_change_cursor
 from studymate.presentation.changes.stream import (
     ChangeStreamingResponse,
     ChangeStreamPolicy,
+    ChangeStreamState,
     change_frames,
 )
 from studymate.presentation.problems import ProblemResponse, problem
@@ -24,6 +26,7 @@ from studymate.presentation.problems import ProblemResponse, problem
 class ChangeHttpServices:
     read: ReadChanges
     policy: ChangeStreamPolicy = field(default_factory=ChangeStreamPolicy)
+    observations: StreamObservations | None = None
 
 
 def changes_router(services: ChangeHttpServices) -> APIRouter:
@@ -68,8 +71,13 @@ def changes_router(services: ChangeHttpServices) -> APIRouter:
             response = problem(HTTPStatus.SERVICE_UNAVAILABLE, "storage_unavailable")
             response.headers["Retry-After"] = "1"
             return response
+        state = ChangeStreamState(
+            services.observations.stream() if services.observations is not None else None
+        )
         return ChangeStreamingResponse(
-            change_frames(services.read, credential, first, services.policy), services.policy
+            change_frames(services.read, credential, first, services.policy, state),
+            services.policy,
+            state,
         )
 
     return router

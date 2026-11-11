@@ -358,6 +358,23 @@ EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE.replace(
 )
 
 
+EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE.replace(
+    "'read_support_case','search_support_cases')",
+    "'read_support_case','search_support_cases','search_delivery_sources','read_delivery_source')",
+)
+
+
+EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE.replace(
+    "'search_delivery_sources','read_delivery_source')",
+    "'search_delivery_sources','read_delivery_source','read_chat_media')",
+)
+
+
+EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE.replace(
+    "'read_chat_media')", "'read_chat_media','search_audits')"
+)
+
+
 class ProductEventRecord(Base):
     __tablename__ = "product_events"
     __table_args__ = (

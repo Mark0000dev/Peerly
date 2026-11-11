@@ -10,6 +10,7 @@ from studymate.presentation.problems import problem
 
 COMMAND_BODY_BYTES = 8192
 SUPPORT_BODY_BYTES = 32768
+OBSERVATION_BODY_BYTES = 16384
 BODY_TIMEOUT_SECONDS = 5
 
 
@@ -59,6 +60,7 @@ class JsonCommandBodyLimit:
                     "/api/v1/requests",
                     "/api/v1/support-context",
                     "/api/v1/support-cases",
+                    "/api/v1/telemetry/events",
                 }
                 and not _operator_ban(scope)
                 and not _operator_support_status(scope)
@@ -98,6 +100,7 @@ class JsonCommandBodyLimit:
                 "/api/v1/me/support-cases",
                 "/api/v1/support-context",
                 "/api/v1/support-cases",
+                "/api/v1/telemetry/events",
                 "/api/v1/me/deletion",
                 "/api/v1/me/deletion-workflows",
                 "/api/v1/media/uploads",
@@ -115,11 +118,11 @@ class JsonCommandBodyLimit:
             if content_type != "application/json":
                 await self._reject(scope, receive, send, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
                 return
-        body_limit = (
-            SUPPORT_BODY_BYTES
-            if scope["path"] in {"/api/v1/support-cases", "/api/v1/me/support-cases"}
-            else COMMAND_BODY_BYTES
-        )
+        body_limit = {
+            "/api/v1/support-cases": SUPPORT_BODY_BYTES,
+            "/api/v1/me/support-cases": SUPPORT_BODY_BYTES,
+            "/api/v1/telemetry/events": OBSERVATION_BODY_BYTES,
+        }.get(scope["path"], COMMAND_BODY_BYTES)
         body = bytearray()
         try:
             async with asyncio.timeout(BODY_TIMEOUT_SECONDS):
@@ -195,6 +198,7 @@ class JsonCommandBodyLimit:
                 "/api/v1/requests",
                 "/api/v1/support-context",
                 "/api/v1/support-cases",
+                "/api/v1/telemetry/events",
                 "/api/v1/me/support-cases",
                 "/api/v1/me/notification-preference",
                 "/api/v1/me/deletion",

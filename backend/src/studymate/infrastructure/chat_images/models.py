@@ -27,6 +27,7 @@ FAILURE_SHAPE = (
 class ChatImageRecord(Base):
     __tablename__ = "chat_image_preparations"
     __table_args__ = (
+        UniqueConstraint("id", "account_id", name="uq_chat_images_id_owner"),
         UniqueConstraint(
             "id",
             "account_id",

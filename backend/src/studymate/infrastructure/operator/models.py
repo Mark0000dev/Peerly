@@ -12,6 +12,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -136,6 +137,51 @@ OPERATOR_INSPECTION_SHAPE = (
 )
 
 
+_BEFORE_DELIVERY_INSPECTION_SHAPE = OPERATOR_INSPECTION_SHAPE
+OPERATOR_INSPECTION_SHAPE = (
+    f"({_BEFORE_DELIVERY_INSPECTION_SHAPE}) OR (resource_kind='delivery_source' AND "
+    "requested_media_owner_id IS NULL AND requested_media_attempt_id IS NULL AND "
+    "requested_media_kind IS NULL AND actual_source_upload_id IS NULL AND ("
+    "(action='search_delivery_sources' AND requested_id IS NULL AND outcome='search' AND "
+    "query_fingerprint IS NOT NULL AND octet_length(query_fingerprint)=32 AND "
+    "cardinality(result_ids)<=50) OR (action='read_delivery_source' AND "
+    "requested_id IS NOT NULL AND query_fingerprint IS NULL AND "
+    "((outcome='read' AND result_ids=ARRAY[requested_id]) OR "
+    "(outcome='not_found' AND cardinality(result_ids)=0)))))"
+)
+
+
+_BEFORE_CHAT_INSPECTION_SHAPE = OPERATOR_INSPECTION_SHAPE
+CHAT_NULL = (
+    "requested_chat_owner_id IS NULL AND requested_chat_attempt_id IS NULL AND "
+    "requested_chat_kind IS NULL AND actual_source_image_id IS NULL"
+)
+OPERATOR_INSPECTION_SHAPE = (
+    f"(({_BEFORE_CHAT_INSPECTION_SHAPE}) AND {CHAT_NULL}) OR (action='read_chat_media' AND "
+    "resource_kind='chat_media' AND requested_id IS NOT NULL AND "
+    "requested_chat_owner_id IS NOT NULL AND requested_chat_attempt_id IS NOT NULL AND "
+    "requested_chat_kind IS NOT NULL AND requested_chat_kind IN ('original','display') AND "
+    "query_fingerprint IS NULL AND requested_media_owner_id IS NULL AND "
+    "requested_media_attempt_id IS NULL AND requested_media_kind IS NULL AND "
+    "actual_source_upload_id IS NULL AND ((outcome='read' AND "
+    "actual_source_image_id IS NOT NULL AND actual_source_image_id=requested_id AND "
+    "result_ids=ARRAY[requested_id]) OR (outcome='not_found' AND cardinality(result_ids)=0 "
+    "AND (actual_source_image_id IS NULL OR actual_source_image_id=requested_id))))"
+)
+
+
+_BEFORE_AUDIT_SEARCH_SHAPE = OPERATOR_INSPECTION_SHAPE
+OPERATOR_INSPECTION_SHAPE = (
+    f"({_BEFORE_AUDIT_SEARCH_SHAPE}) OR (action='search_audits' AND resource_kind='audit' AND "
+    "requested_id IS NULL AND outcome='search' AND query_fingerprint IS NOT NULL AND "
+    "octet_length(query_fingerprint)=32 AND cardinality(result_ids)<=50 AND "
+    "requested_media_owner_id IS NULL AND requested_media_attempt_id IS NULL AND "
+    "requested_media_kind IS NULL AND actual_source_upload_id IS NULL AND "
+    "requested_chat_owner_id IS NULL AND requested_chat_attempt_id IS NULL AND "
+    "requested_chat_kind IS NULL AND actual_source_image_id IS NULL)"
+)
+
+
 class OperatorAuditRecord(Base):
     __tablename__ = "operator_audits"
     __table_args__ = (
@@ -168,6 +214,18 @@ class OperatorAuditRecord(Base):
             name="fk_operator_audit_media_attempt_source",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["actual_source_image_id", "requested_chat_owner_id"],
+            ["chat_image_preparations.id", "chat_image_preparations.account_id"],
+            name="fk_operator_chat_media_owner_source",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["actual_source_image_id", "requested_chat_attempt_id"],
+            ["chat_image_attempts.image_id", "chat_image_attempts.id"],
+            name="fk_operator_chat_media_attempt_source",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("operator_access_active IS TRUE", name="active_grant_source"),
         CheckConstraint(ORIGIN_REQUEST_CHECK, name="origin_request_context"),
         CheckConstraint(ORIGIN_TRACE_CHECK, name="origin_trace_pair"),
@@ -176,6 +234,29 @@ class OperatorAuditRecord(Base):
             name="one_dimensional_result_ids",
         ),
         Index("ix_operator_audits_actor_time", "operator_id", "occurred_at", "id"),
+        Index("ix_operator_audits_time_id", "occurred_at", "id"),
+        Index("ix_operator_audits_action_time", "action", "occurred_at", "id"),
+        Index(
+            "ix_operator_audits_request_time",
+            "http_request_id",
+            "occurred_at",
+            "id",
+            postgresql_where=text("http_request_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_operator_audits_action_origin_time",
+            "action_id",
+            "occurred_at",
+            "id",
+            postgresql_where=text("action_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_operator_audits_trace_time",
+            "trace_id",
+            "occurred_at",
+            "id",
+            postgresql_where=text("trace_id IS NOT NULL"),
+        ),
         Index(
             "ix_operator_audits_resource_time", "resource_kind", "requested_id", "occurred_at", "id"
         ),
@@ -205,3 +286,8 @@ class OperatorAuditRecord(Base):
     requested_media_attempt_id: Mapped[UUID | None] = mapped_column()
     requested_media_kind: Mapped[str | None] = mapped_column(String(16))
     actual_source_upload_id: Mapped[UUID | None] = mapped_column()
+
+    requested_chat_owner_id: Mapped[UUID | None] = mapped_column()
+    requested_chat_attempt_id: Mapped[UUID | None] = mapped_column()
+    requested_chat_kind: Mapped[str | None] = mapped_column(String(16))
+    actual_source_image_id: Mapped[UUID | None] = mapped_column()

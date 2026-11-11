@@ -1,6 +1,7 @@
 """Actual worker composition from main-owned resources; no app/settings/entrypoint here."""
 
 import asyncio
+import logging
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,12 +13,18 @@ from opentelemetry.trace import Tracer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from studymate.application.ai.worker import ExecuteNextJob
+from studymate.application.errors import StorageUnavailableError
 from studymate.application.media.storage import MediaStorage
 from studymate.domain.ai.jobs import Versions
 from studymate.domain.ai.tasks import AiResult, AiTask, TriageReport
 from studymate.infrastructure.ai.credentials import DedicatedCredentialCache
 from studymate.infrastructure.ai.photos import RetainedDisplayReader
-from studymate.infrastructure.ai.process import CodexProcessExecutor, ProcessConfiguration
+from studymate.infrastructure.ai.process import (
+    CodexProcessExecutor,
+    CredentialStateUncertainError,
+    ProcessConfiguration,
+    TerminationUncertainError,
+)
 from studymate.infrastructure.ai.queue import SqlAiQueue
 from studymate.infrastructure.ai.runtime.acceptance import (
     ReceiptExpectation,
@@ -30,15 +37,60 @@ from studymate.infrastructure.ai.runtime.credential_codec import (
     Codex167CredentialCodec,
     credential_binding_digest,
 )
+from studymate.infrastructure.ai.runtime.diagnostics import (
+    AiRuntimeCode,
+    AiRuntimeDiagnostic,
+    AiRuntimePhase,
+)
 from studymate.infrastructure.ai.runtime.health import RuntimeOwnershipError, SqlRuntimeHealth
 from studymate.infrastructure.ai.runtime.launch import PinnedProcessPolicy
+from studymate.infrastructure.ai.runtime.policy import DEFAULT_MAX_PROCESSES, require_max_processes
 from studymate.infrastructure.ai.runtime.preflight import PinnedCli
 from studymate.infrastructure.ai.runtime.supervisor import AiWorkerSupervisor
 from studymate.infrastructure.ai.sandbox import LinuxSandbox
 from studymate.infrastructure.ai.telemetry import AiQueueSignals, ObservedAiQueue, ObservedAiStep
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine
+    from collections.abc import Awaitable, Callable, Coroutine
+
+
+def _record_failure(phase: AiRuntimePhase, error: BaseException, *, primary: bool) -> None:
+    categories: tuple[tuple[type[BaseException], AiRuntimeCode], ...] = (
+        (StorageUnavailableError, AiRuntimeCode.STORAGE_UNAVAILABLE),
+        (RuntimeOwnershipError, AiRuntimeCode.OWNERSHIP_LOST),
+        (RuntimeAcceptanceError, AiRuntimeCode.RECEIPT_REJECTED),
+        (TerminationUncertainError, AiRuntimeCode.PHYSICAL_STOP_UNCERTAIN),
+        (CredentialStateUncertainError, AiRuntimeCode.CREDENTIAL_UNCERTAIN),
+        (asyncio.CancelledError, AiRuntimeCode.CANCELLED),
+    )
+    code = next(
+        (code for kind, code in categories if isinstance(error, kind)), AiRuntimeCode.UNEXPECTED
+    )
+    logging.getLogger(__name__).error(
+        "ai_runtime_failure",
+        extra={
+            "event": "ai_runtime_failure",
+            "ai_runtime_diagnostic": AiRuntimeDiagnostic(phase, code, primary),
+        },
+    )
+
+
+async def _diagnosed[T](
+    phase: AiRuntimePhase,
+    operation: "Awaitable[T]",
+    *,
+    primary: bool = True,
+    quiesce: asyncio.Event | None = None,
+) -> T:
+    try:
+        return await operation
+    except BaseException as error:
+        # Normal shutdown cancellation must not masquerade as a primary failure.
+        if not (
+            isinstance(error, asyncio.CancelledError) and quiesce is not None and quiesce.is_set()
+        ):
+            _record_failure(phase, error, primary=primary)
+        raise
 
 
 async def _stop_sampling(task: asyncio.Task[None] | None) -> None:
@@ -62,8 +114,10 @@ class AiRuntimeConfiguration:
     bubblewrap: Path
     prlimit: Path
     acceptance_artifact: Path
+    max_processes: int = DEFAULT_MAX_PROCESSES
 
     def __post_init__(self) -> None:
+        require_max_processes(self.max_processes)
         Versions(self.model)
         for path in (self.credential_directory, self.workspaces_root, self.acceptance_artifact):
             if (
@@ -99,15 +153,21 @@ class AiWorkerRuntime:
             try:
                 await asyncio.wait_for(quiesce.wait(), RUNTIME_HEARTBEAT_SECONDS)
             except TimeoutError:
-                await validate_runtime_receipt(
-                    self.configuration.acceptance_artifact,
-                    self.cli,
-                    self.configuration.workspaces_root,
-                    expectation=ReceiptExpectation(
-                        model=self.configuration.model, account_binding_sha256=self.binding_digest
+                await _diagnosed(
+                    AiRuntimePhase.RECEIPT_RECHECK,
+                    validate_runtime_receipt(
+                        self.configuration.acceptance_artifact,
+                        self.cli,
+                        self.configuration.workspaces_root,
+                        expectation=ReceiptExpectation(
+                            model=self.configuration.model,
+                            account_binding_sha256=self.binding_digest,
+                            max_processes=self.configuration.max_processes,
+                        ),
                     ),
+                    quiesce=quiesce,
                 )
-                await self.health.heartbeat()
+                await _diagnosed(AiRuntimePhase.HEARTBEAT, self.health.heartbeat(), quiesce=quiesce)
 
     async def _await_receipt(self, stop: asyncio.Event) -> bool:
         # Preserve namespaces while parent installs proof, without reading credentials.
@@ -121,6 +181,7 @@ class AiWorkerRuntime:
                     expectation=ReceiptExpectation(
                         model=self.configuration.model,
                         account_binding_sha256=self.binding_digest,
+                        max_processes=self.configuration.max_processes,
                     ),
                 )
                 return True
@@ -151,7 +212,7 @@ class AiWorkerRuntime:
             done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             if stopping not in done:
                 if worker in done:
-                    await worker
+                    await _diagnosed(AiRuntimePhase.PHYSICAL_CLEANUP, worker)
                 elif heartbeat in done:
                     await heartbeat
                 elif sampling is not None:
@@ -165,10 +226,12 @@ class AiWorkerRuntime:
         heartbeat.cancel()
         await asyncio.gather(heartbeat, return_exceptions=True)
         # Stop new admissions before waiting for physical child/cache cleanup.
-        await self.health.revoke(clean=False)
-        await worker
-        await self.health.recover_current_stopped(self.queue)
-        await self.health.revoke(clean=True)
+        await _diagnosed(AiRuntimePhase.REVOKE, self.health.revoke(clean=False))
+        await _diagnosed(AiRuntimePhase.PHYSICAL_CLEANUP, worker)
+        await _diagnosed(
+            AiRuntimePhase.PHYSICAL_CLEANUP, self.health.recover_current_stopped(self.queue)
+        )
+        await _diagnosed(AiRuntimePhase.RETIRE, self.health.revoke(clean=True))
 
     async def run(self, stop: asyncio.Event) -> None:
         if self._active:
@@ -177,27 +240,43 @@ class AiWorkerRuntime:
         registered = False
         tasks: list[asyncio.Task[None]] = []
         quiesce = asyncio.Event()
+        primary_error: BaseException | None = None
         try:
             await self.cli.verify()
             # Actual credentials are never read before operator proof/live deployment checks.
-            if not await self._await_receipt(stop):
+            if not await _diagnosed(AiRuntimePhase.RECEIPT_RECHECK, self._await_receipt(stop)):
                 return
             await self.cache.validate_ready()
             await self.health.register()
             registered = True
-            await self.health.heartbeat(ready=True)
+            await _diagnosed(AiRuntimePhase.HEARTBEAT, self.health.heartbeat(ready=True))
             await self._serve(stop, quiesce, tasks)
             registered = False
+        except BaseException as error:
+            primary_error = error
+            raise
         finally:
             quiesce.set()
             try:
                 if registered:
-                    await self.health.revoke(clean=False)
+                    await _diagnosed(
+                        AiRuntimePhase.REVOKE, self.health.revoke(clean=False), primary=False
+                    )
             finally:
                 for task in tasks:
                     if not task.done():
                         task.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                if results:
+                    worker_result = results[0]
+                    if (
+                        isinstance(worker_result, BaseException)
+                        and not isinstance(worker_result, asyncio.CancelledError)
+                        and worker_result is not primary_error
+                    ):
+                        _record_failure(
+                            AiRuntimePhase.PHYSICAL_CLEANUP, worker_result, primary=False
+                        )
                 self._active = False
 
 
@@ -232,12 +311,15 @@ def create_ai_worker_runtime(
             configuration.model,
             configuration.workspaces_root,
             sandbox=LinuxSandbox(
-                configuration.bubblewrap, configuration.prlimit, network_egress_restricted=True
+                configuration.bubblewrap,
+                configuration.prlimit,
+                processes=configuration.max_processes,
+                network_egress_restricted=True,
             ),
         ),
         cache,
         RetainedDisplayReader(storage),
-        PinnedProcessPolicy(cli),
+        PinnedProcessPolicy(cli, configuration.max_processes),
     )
     worker_id = uuid4()
     queue = SqlAiQueue(sessions, worker_id=worker_id)
@@ -281,6 +363,7 @@ class AiValidationRuntime:
                 stage="containment",
                 model=self.configuration.model,
                 account_binding_sha256=self.binding_digest,
+                max_processes=self.configuration.max_processes,
             ),
         )
         if receipt.stage != "containment":
@@ -314,12 +397,15 @@ def create_ai_validation_runtime(
             configuration.model,
             configuration.workspaces_root,
             sandbox=LinuxSandbox(
-                configuration.bubblewrap, configuration.prlimit, network_egress_restricted=True
+                configuration.bubblewrap,
+                configuration.prlimit,
+                processes=configuration.max_processes,
+                network_egress_restricted=True,
             ),
         ),
         cache,
         RetainedDisplayReader(storage),
-        PinnedProcessPolicy(cli),
+        PinnedProcessPolicy(cli, configuration.max_processes),
     )
     return AiValidationRuntime(
         configuration, cli, cache, executor, credential_binding_digest(codec)

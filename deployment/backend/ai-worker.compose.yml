@@ -4,7 +4,7 @@ services:
   ai-worker:
     image: ${PEERLY_AI_IMAGE:?Set the accepted immutable AI image digest}
     command: [python, -m, studymate.ai_worker]
-    user: '10001:10001'
+    user: '10002:10002'
     read_only: true
     init: true
     restart: 'no'
@@ -17,8 +17,8 @@ services:
     env_file:
       - ${PEERLY_AI_ENV_FILE:?Set the parent-provisioned private environment file}
     tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,size=33554432,uid=10001,gid=10001,mode=0700
-      - /var/lib/peerly-ai/jobs:rw,noexec,nosuid,nodev,size=67108864,uid=10001,gid=10001,mode=0700
+      - /tmp:rw,noexec,nosuid,nodev,size=33554432,uid=10002,gid=10002,mode=0700
+      - /var/lib/peerly-ai/jobs:rw,noexec,nosuid,nodev,size=67108864,uid=10002,gid=10002,mode=0700
     volumes:
       - type: volume
         source: ai-credentials

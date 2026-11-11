@@ -10,6 +10,18 @@ from studymate.infrastructure.changes.models import (
 from studymate.infrastructure.chat_images.cleanup_models import ChatImageTransportCleanupRecord
 from studymate.infrastructure.chat_images.models import CHAT_IMAGE_MODELS
 from studymate.infrastructure.chat_images.origins import ChatImageQueueOriginRecord
+from studymate.infrastructure.client_observations.models import (
+    ClientObservationRecord,
+    ObservationBatchRecord,
+    ObservationFrameRecord,
+)
+from studymate.infrastructure.external_delivery.models import (
+    DeliveryAttemptRecord,
+    DeliveryDestinationRecord,
+    DeliveryScheduleRecord,
+    DeliverySourceRecord,
+    ExternalDeliveryRecord,
+)
 from studymate.infrastructure.feedback.models import (
     FeedbackCommandIntentRecord,
     PeerFeedbackRecord,
@@ -137,6 +149,14 @@ from studymate.infrastructure.support.models import (
 )
 
 MODELS: tuple[type[Base], ...] = (
+    ObservationBatchRecord,
+    ClientObservationRecord,
+    ObservationFrameRecord,
+    DeliveryDestinationRecord,
+    DeliverySourceRecord,
+    ExternalDeliveryRecord,
+    DeliveryAttemptRecord,
+    DeliveryScheduleRecord,
     *CHAT_IMAGE_MODELS,
     ChatImageTransportCleanupRecord,
     *LIFECYCLE_MODELS,

@@ -13,7 +13,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from studymate.infrastructure.ai.runtime.policy import InspectionPolicy
+from studymate.infrastructure.ai.runtime.policy import (
+    DEFAULT_MAX_PROCESSES,
+    MAX_PROCESSES,
+    InspectionPolicy,
+    require_max_processes,
+)
 from studymate.infrastructure.ai.runtime.preflight import PinnedCli
 
 MAX_RECEIPT_BYTES = 16384
@@ -51,16 +56,25 @@ class RuntimeReceipt(BaseModel):
     pid_namespace: Annotated[str, Field(pattern=r"^pid:\[[0-9]+\]$")]
     cgroup_membership: Annotated[str, Field(min_length=1, max_length=2048)]
     memory_max: Annotated[int, Field(gt=0, le=2147483648)]
-    pids_max: Annotated[int, Field(gt=0, le=32)]
+    pids_max: Annotated[int, Field(ge=DEFAULT_MAX_PROCESSES, le=MAX_PROCESSES)]
     cpu_max: Annotated[str, Field(pattern=r"^[0-9]+ [0-9]+$")]
     workspace_bytes: Annotated[int, Field(gt=0, le=67108864)]
     evidence: dict[str, Digest] = Field(min_length=4, max_length=7)
 
 
-def policy_digest(cli: PinnedCli) -> str:
+def policy_digest(cli: PinnedCli, *, max_processes: int = DEFAULT_MAX_PROCESSES) -> str:
     # Normalize dynamic job paths; the actual adapter binds auth to CODEX_HOME.
-    settings = InspectionPolicy(Path("/job"), Path("/job/auth")).overrides(cli)
-    return hashlib.sha256(json.dumps(settings, separators=(",", ":")).encode()).hexdigest()
+    settings = InspectionPolicy(Path("/job"), Path("/job/auth"), max_processes).overrides(cli)
+    # Retain the deployed32 policy byte-for-byte. An opt-in resource contract is
+    # distinct proof identity, not an invented CLI/provider configuration option.
+    payload = (
+        json.dumps(settings, separators=(",", ":"))
+        if max_processes == DEFAULT_MAX_PROCESSES
+        else json.dumps(
+            {"overrides": settings, "max_processes": max_processes}, separators=(",", ":")
+        )
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +82,10 @@ class ReceiptExpectation:
     stage: Literal["containment", "provider_accepted"] = "provider_accepted"
     model: str | None = None
     account_binding_sha256: str | None = None
+    max_processes: int = DEFAULT_MAX_PROCESSES
+
+    def __post_init__(self) -> None:
+        require_max_processes(self.max_processes)
 
 
 DEFAULT_EXPECTATION = ReceiptExpectation()
@@ -137,7 +155,8 @@ async def validate_runtime_receipt(
             or not receipt.issued_at <= at < receipt.expires_at
             or receipt.expires_at - receipt.issued_at > timedelta(days=1)
             or receipt.binary_sha256 != cli.sha256
-            or receipt.policy_sha256 != policy_digest(cli)
+            or receipt.policy_sha256 != policy_digest(cli, max_processes=expectation.max_processes)
+            or receipt.pids_max != expectation.max_processes
             or (receipt.stage == "provider_accepted" and receipt.model != model)
             or set(receipt.evidence)
             != (
