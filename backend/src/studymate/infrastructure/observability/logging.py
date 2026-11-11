@@ -4,6 +4,7 @@ import json
 import logging
 import logging.config
 import math
+import re
 import sys
 from collections import deque
 from datetime import UTC, datetime
@@ -16,9 +17,15 @@ from types import TracebackType
 from typing import TextIO
 from uuid import UUID
 
+from sqlalchemy.exc import DBAPIError
+
 from studymate.application.ports.http_observer import HttpObservation
 
 MAX_STACK_FRAMES = 20
+MAX_APPLICATION_FRAMES = 10
+MAX_ERROR_CHAIN = 16
+ERROR_TYPE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
+SQLSTATE = re.compile(r"[0-9A-Z]{5}")
 HTTP_STATUS_MIN = 100
 HTTP_STATUS_MAX = 599
 LOG_QUEUE_CAPACITY = 1024
@@ -57,6 +64,57 @@ def _hex(record: logging.LogRecord, name: str, length: int) -> str | None:
     ):
         return value
     return None
+
+
+def _error_metadata(error: BaseException) -> dict[str, str]:
+    """Public DBAPI attributes only; never inspect args, SQL, params or error text."""
+    pending = deque([error])
+    seen: set[int] = set()
+    content: dict[str, str] = {}
+    while pending and len(seen) < MAX_ERROR_CHAIN:
+        current = pending.popleft()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        name = type(current).__name__
+        if ERROR_TYPE.fullmatch(name):
+            content["error_type"] = name
+        if isinstance(current, DBAPIError):
+            value: object = getattr(current.orig, "sqlstate", None)
+            if isinstance(value, str) and SQLSTATE.fullmatch(value):
+                content["database_error_code"] = value
+            if isinstance(current.orig, BaseException):
+                pending.append(current.orig)
+        cause = current.__cause__
+        if cause is None and not current.__suppress_context__:
+            cause = current.__context__
+        if cause is not None:
+            pending.append(cause)
+        if isinstance(current, BaseExceptionGroup):
+            pending.extend(current.exceptions[:MAX_ERROR_CHAIN])
+    return content
+
+
+def _safe_stack(traceback: TracebackType | None) -> list[dict[str, str | int]]:
+    """Keep application callers even when driver internals exceed the frame cap."""
+    application: deque[tuple[int, dict[str, str | int]]] = deque(maxlen=MAX_APPLICATION_FRAMES)
+    tail: deque[tuple[int, dict[str, str | int]]] = deque(maxlen=MAX_STACK_FRAMES)
+    for index, (frame, line) in enumerate(walk_tb(traceback)):
+        value: dict[str, str | int] = {
+            "file": Path(frame.f_code.co_filename).name,
+            "function": frame.f_code.co_name,
+            "line": line,
+        }
+        tail.append((index, value))
+        module: object = frame.f_globals.get("__name__")
+        if isinstance(module, str) and module.startswith("studymate."):
+            application.append((index, value))
+    selected = dict(application)
+    for index, value in reversed(tail):
+        if len(selected) >= MAX_STACK_FRAMES:
+            break
+        selected.setdefault(index, value)
+    return [selected[index] for index in sorted(selected)]
 
 
 class SafeJsonFormatter(logging.Formatter):
@@ -148,14 +206,8 @@ class SafeJsonFormatter(logging.Formatter):
             content["status"] = status
         if record.exc_info is not None and record.exc_info[1] is not None:
             content["event"] = LogEvent.RUNTIME_ERROR
-            content["stack"] = [
-                {
-                    "file": Path(frame.f_code.co_filename).name,
-                    "function": frame.f_code.co_name,
-                    "line": line,
-                }
-                for frame, line in deque(walk_tb(record.exc_info[2]), maxlen=MAX_STACK_FRAMES)
-            ]
+            content.update(_error_metadata(record.exc_info[1]))
+            content["stack"] = _safe_stack(record.exc_info[2])
         return json.dumps(content, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
 
 
