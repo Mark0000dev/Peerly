@@ -296,6 +296,16 @@ export class PhotoWorkflow implements OnChanges {
       this.starting.error.code === 'photo_version_conflict'
     );
   }
+  protected get rejectionMessage(): string {
+    switch (this.upload.data?.failure) {
+      case 'storage_unavailable':
+        return 'Photo storage is temporarily unavailable. This upload wasn’t saved. You can try uploading the same photo again later.';
+      case 'processing_unavailable':
+        return 'Photo processing is temporarily unavailable. This upload wasn’t saved. You can try uploading the same photo again later.';
+      default:
+        return 'We couldn’t use this photo. Choose another JPEG or PNG, or try again if processing was unavailable.';
+    }
+  }
   protected async reloadPhoto(): Promise<void> {
     if (!this.permitted) return;
     if (this.busy || !this.photoConflict) return;

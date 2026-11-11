@@ -393,6 +393,24 @@ describe('real photo recovery query boundary', () => {
       expect(host(fixture).textContent).not.toContain('few seconds');
     });
   }
+  for (const failure of ['storage_unavailable', 'processing_unavailable'] as const) {
+    it(`distinguishes ${failure} from a bad photo without retrying automatically`, async () => {
+      await load();
+      click(fixture, 'Check upload');
+      const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
+      request.flush({ ...upload, state: 'rejected', failure });
+      await shown(fixture, 'This upload wasn’t saved.');
+      expect(host(fixture).textContent).toContain(
+        failure === 'storage_unavailable'
+          ? 'Photo storage is temporarily unavailable.'
+          : 'Photo processing is temporarily unavailable.',
+      );
+      expect(host(fixture).textContent).toContain('try uploading the same photo again later');
+      expect(host(fixture).textContent).not.toContain('We couldn’t use this photo.');
+      expect(host(fixture).textContent).not.toContain('Choose another JPEG or PNG');
+      backend.expectNone({ url: '/api/v1/media/uploads', method: 'POST' });
+    });
+  }
   it('clears private cached work on an actual authorization failure', async () => {
     const expired = vi.fn();
     fixture.componentInstance.expired.subscribe(expired);

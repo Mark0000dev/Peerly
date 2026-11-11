@@ -261,6 +261,35 @@ test('photo crop is local and keyboard operable at320px and200percent text', asy
   await checkpoint('photo-crop-cancelled320-200.png');
 });
 
+test('photo storage outage is not presented as an unsuitable photo', async ({
+  page,
+  checkpoint,
+}: Context) => {
+  const current = { ...upload, state: 'rejected', failure: 'storage_unavailable' } as const;
+  let writes = 0;
+  await page.route('**/api/v1/media/**', async (route) => {
+    if (route.request().method() !== 'GET') writes += 1;
+    await route.fulfill({
+      json: route.request().url().endsWith('/uploads')
+        ? { photo: null, uploads: [{ upload: current, source_sha256: 'a'.repeat(64) }] }
+        : current,
+    });
+  });
+  await open(page);
+  await page.getByRole('button', { name: 'Check upload 1', exact: true }).click();
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('Photo storage is temporarily unavailable.');
+  await expect(alert).toContainText('try uploading the same photo again later');
+  await expect(alert).not.toContainText('We couldn’t use this photo.');
+  await expect(page.getByRole('button', { name: 'Choose new photo', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Cancel upload', exact: true })).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true);
+  expect(writes).toBe(0);
+  await checkpoint('photo-storage-unavailable.png');
+});
+
 for (const scenario of [
   { state: 'queued', text: 'Your photo is waiting for processing.', pending: true },
   { state: 'processing', text: 'Your photo is being processed.', pending: true },

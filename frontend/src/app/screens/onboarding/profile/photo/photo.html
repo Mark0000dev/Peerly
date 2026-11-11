@@ -123,10 +123,7 @@
         <p role="status">Your photo is saved.</p>
       }
       @case ('rejected') {
-        <p role="alert">
-          We couldn’t use this photo. Choose another JPEG or PNG, or try again if processing was
-          unavailable.
-        </p>
+        <p role="alert">{{ rejectionMessage }}</p>
       }
       @case ('expired') {
         <p role="alert">This upload expired. Choose your photo again to start a new request.</p>
