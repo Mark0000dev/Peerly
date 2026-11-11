@@ -6,9 +6,10 @@ from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import SpanKind, StatusCode
 from pydantic import SecretStr
 from sqlalchemy.engine import make_url
 
@@ -101,4 +102,46 @@ async def test_explicit_telemetry_is_owned_by_real_application_lifespan(
         assert response.status_code == HTTPStatus.OK
         assert response.headers["x-request-id"]
     assert closed == ["metrics", "traces"]
-    assert [span.name for span in exported.get_finished_spans()] == ["GET /api/ready"]
+    _assert_readiness_trace(exported.get_finished_spans(), response.headers["x-request-id"])
+
+
+def _assert_readiness_trace(spans: tuple[ReadableSpan, ...], request_id: str) -> None:
+    expected_names = {"db.query", "GET /api/ready"}
+    assert len(spans) == len(expected_names)
+    assert {span.name for span in spans} == expected_names
+    by_name = {span.name: span for span in spans}
+    database_span, request_span = by_name["db.query"], by_name["GET /api/ready"]
+    assert request_span.kind is SpanKind.SERVER
+    assert database_span.kind is SpanKind.CLIENT
+    assert request_span.parent is None
+    assert request_span.context is not None
+    assert database_span.context is not None
+    assert database_span.parent is not None
+    assert database_span.context.trace_id == request_span.context.trace_id
+    assert database_span.parent.span_id == request_span.context.span_id
+    assert database_span.parent.trace_id == request_span.context.trace_id
+    assert request_span.start_time is not None
+    assert request_span.end_time is not None
+    assert database_span.start_time is not None
+    assert database_span.end_time is not None
+    assert (
+        request_span.start_time
+        <= database_span.start_time
+        <= database_span.end_time
+        <= request_span.end_time
+    )
+    assert dict(database_span.attributes or {}) == {
+        "db.system": "postgresql",
+        "db.pool.name": "core",
+        "query.operation": "other",
+    }
+    assert dict(request_span.attributes or {}) == {
+        "request.id": request_id,
+        "http.request.method": "GET",
+        "http.route": "/api/ready",
+        "http.response.status_code": 200,
+    }
+    for span in spans:
+        assert span.status.status_code is StatusCode.UNSET
+        assert span.status.description is None
+        assert not span.events
