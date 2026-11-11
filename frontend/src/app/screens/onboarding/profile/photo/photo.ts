@@ -117,6 +117,7 @@ export class PhotoWorkflow implements OnChanges {
   protected readonly editing = signal(false);
   protected readonly preparing = signal(false);
   protected readonly localError = signal<string | null>(null);
+  protected readonly transferInterrupted = signal(false);
   protected readonly maxBytes = maxPhotoBytes;
   private readonly resumeQuery = new QueryObserver(
     this.client,
@@ -415,6 +416,7 @@ export class PhotoWorkflow implements OnChanges {
     this.editing.set(false);
     this.preparing.set(false);
     this.localError.set(null);
+    this.transferInterrupted.set(false);
   }
   private denied(error: unknown): void {
     if (
@@ -452,6 +454,7 @@ export class PhotoWorkflow implements OnChanges {
     this.finalizeMutation.reset();
     this.cancelMutation.reset();
     this.localError.set(null);
+    this.transferInterrupted.set(false);
     this.uploadQuery.setOptions(uploadOptions(this.http, this.actor().account_id, null));
   }
   protected chooseFile(): void {
@@ -667,8 +670,11 @@ export class PhotoWorkflow implements OnChanges {
       };
       await this.startMutation.mutate(intent);
       const updated = this.uploadQuery.getCurrentResult().data;
-      if (!this.current(accountId) || !this.authorized(accountId) || updated?.state !== 'uploading')
+      if (!this.current(accountId) || updated?.state !== 'uploading') return;
+      if (!this.authorized(accountId)) {
+        this.pauseTransfer();
         return;
+      }
       await this.sendBytes(updated.id, file, accountId);
     } catch (error: unknown) {
       if (!this.current(accountId)) return;
@@ -688,8 +694,8 @@ export class PhotoWorkflow implements OnChanges {
       } else if (error instanceof CancelledError) {
         return;
       } else if (error instanceof DOMException) {
-        if (error.name !== 'AbortError')
-          this.localError.set('We couldn’t read this file. Reselect your photo and try again.');
+        if (error.name === 'AbortError') this.pauseTransfer();
+        else this.localError.set('We couldn’t read this file. Reselect your photo and try again.');
       } else throw error;
     } finally {
       if (this.current(accountId)) this.preparing.set(false);
@@ -771,6 +777,7 @@ export class PhotoWorkflow implements OnChanges {
     this.lifetime.signal.addEventListener('abort', stop, { once: true });
     try {
       const actor = this.authority(accountId);
+      this.transferInterrupted.set(false);
       await transferPhoto(
         this.http,
         uploadId,
@@ -783,13 +790,30 @@ export class PhotoWorkflow implements OnChanges {
       this.lifetime.signal.removeEventListener('abort', stop);
       if (this.transferAbort() === controller) this.transferAbort.set(null);
     }
-    if (!this.current(accountId) || !this.permitted || controller.signal.aborted) return;
+    if (!this.current(accountId)) return;
+    if (!this.permitted || controller.signal.aborted) {
+      this.pauseTransfer();
+      return;
+    }
     const previous = this.finalizing.variables;
     const intent =
       isUncertain(this.finalizing.error) && previous !== undefined
         ? previous
         : { accountId, uploadId, key: crypto.randomUUID() };
     await this.finalizeMutation.mutate(intent);
+  }
+  private pauseTransfer(): void {
+    const accountId = this.actor().account_id;
+    const key = this.uploadQuery.options.queryKey;
+    if (
+      this.current(accountId) &&
+      key[1] === accountId &&
+      typeof key[3] === 'string' &&
+      (this.upload.data === undefined || this.upload.data.state === 'uploading') &&
+      this.selected.value !== null &&
+      !this.cancelling.isPending
+    )
+      this.transferInterrupted.set(true);
   }
   protected async retryTransfer(): Promise<void> {
     if (this.upload.data?.state === 'uploading') await this.send();

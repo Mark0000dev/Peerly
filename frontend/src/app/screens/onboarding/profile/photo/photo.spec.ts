@@ -1,4 +1,5 @@
 import { By } from '@angular/platform-browser';
+import { HttpClient } from '@angular/common/http';
 import type { TestRequest } from '@angular/common/http/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Component, input, output } from '@angular/core';
@@ -13,6 +14,7 @@ import { click, shown, host } from '../../testing-host';
 import { verifiedActor } from '../../onboarding.fixtures';
 import { PhotoWorkflow } from './photo';
 import { sourceHash } from './image';
+import { sessionOptions } from '../../../session';
 
 const upload: Api['schemas']['PhotoUploadResponse'] = {
   id: '00000000-0000-0000-0000-000000000003',
@@ -294,17 +296,17 @@ describe('real photo recovery query boundary', () => {
     fixture.componentRef.setInput('checking', false);
     fixture.detectChanges();
     await settle(created, await sourceHash(file));
-    await shown(fixture, 'Waiting for the file transfer.');
+    await shown(fixture, 'Your photo upload paused before processing could be confirmed.');
     backend.expectNone(`/api/v1/media/uploads/${upload.id}/access`);
     await vi.waitFor(() => {
       fixture.detectChanges();
       const retry = Array.from(host(fixture).querySelectorAll('button')).find(
         (button: Readonly<HTMLButtonElement>) =>
-          button.textContent.trim() === 'Retry selected file',
+          button.textContent.trim() === 'Resume selected photo',
       );
       expect(retry?.disabled).toBe(false);
     });
-    click(fixture, 'Retry selected file');
+    click(fixture, 'Resume selected photo');
     const ticket = await vi.waitFor(() =>
       backend.expectOne(`/api/v1/media/uploads/${upload.id}/access`),
     );
@@ -1213,6 +1215,108 @@ describe('real photo recovery query boundary', () => {
       }),
     );
     expect(host(fixture).textContent).not.toContain('We couldn’t prepare this file.');
+    backend.expectNone({ url: '/api/v1/media/uploads', method: 'POST' });
+  });
+  it('retains an accepted S3 upload when session revalidation interrupts before finalization', async () => {
+    const file = await photoFile();
+    const hash = await sourceHash(file);
+    const matching = { ...upload, size_bytes: file.size };
+    await load({ photo: null, uploads: [{ upload: matching, source_sha256: hash }] });
+    await open(matching);
+    await choosePhoto(file);
+    let accepted: (response: Response) => void = () => {
+      throw new Error('Missing accepted transfer response');
+    };
+    const pending = new Promise<Response>((resolve) => {
+      accepted = resolve;
+    });
+    const fetcher = vi.fn<typeof fetch>().mockReturnValue(pending);
+    vi.stubGlobal('fetch', fetcher);
+    click(fixture, 'Use the original without cropping');
+    const access = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/media/uploads/${upload.id}/access`),
+    );
+    access.flush({ url: 'https://storage.invalid/fixture', fields: {} });
+    await vi.waitFor(() => {
+      expect(fetcher).toHaveBeenCalledOnce();
+    });
+    // S3 has committed the bytes, but the browser response races a /me check.
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    accepted(new Response(null, { status: 204 }));
+    await shown(fixture, 'uploading is paused.');
+    backend.expectNone(`/api/v1/media/uploads/${upload.id}/finalize`);
+    fixture.componentRef.setInput('checking', false);
+    fixture.detectChanges();
+    await settle(matching, hash);
+    await shown(fixture, 'Your photo upload paused before processing could be confirmed.');
+    expect(workflow().hasLocalDraft).toBe(true);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      const retry = Array.from(host(fixture).querySelectorAll('button')).find(
+        (button: Readonly<HTMLButtonElement>) =>
+          button.textContent.trim() === 'Resume selected photo',
+      );
+      expect(retry?.disabled).toBe(false);
+    });
+    backend.expectNone(`/api/v1/media/uploads/${upload.id}/finalize`);
+    backend.expectNone({ url: '/api/v1/media/uploads', method: 'POST' });
+    click(fixture, 'Resume selected photo');
+    const resumedAccess = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/media/uploads/${upload.id}/access`),
+    );
+    expect(host(fixture).textContent).not.toContain('Your photo upload paused');
+    resumedAccess.flush({ url: 'https://storage.invalid/fixture', fields: {} });
+    const finalize = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/media/uploads/${upload.id}/finalize`),
+    );
+    const queued = { ...matching, state: 'queued' } as const;
+    finalize.flush(queued);
+    await settle(queued, hash);
+    await shown(fixture, 'Your photo is waiting for processing.');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    backend.expectNone({ url: '/api/v1/media/uploads', method: 'POST' });
+  });
+  it('preserves an interrupted owned upload across the real session cache-retirement boundary', async () => {
+    const file = await photoFile();
+    const hash = await sourceHash(file);
+    const matching = { ...upload, size_bytes: file.size };
+    await load({ photo: null, uploads: [{ upload: matching, source_sha256: hash }] });
+    await open(matching);
+    await choosePhoto(file);
+    let accepted: (response: Response) => void = () => {
+      throw new Error('Missing response');
+    };
+    const pending = new Promise<Response>((resolve) => {
+      accepted = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockReturnValue(pending));
+    click(fixture, 'Use the original without cropping');
+    const access = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/media/uploads/${upload.id}/access`),
+    );
+    access.flush({ url: 'https://storage.invalid/fixture', fields: {} });
+    await vi.waitFor(() => {
+      expect(fetch).toHaveBeenCalledOnce();
+    });
+    const revalidation = client.query(sessionOptions(TestBed.inject(HttpClient), client));
+    const me = await vi.waitFor(() => backend.expectOne('/api/v1/me'));
+    expect(
+      client.getQueryData(['account', verifiedActor.account_id, 'photo-upload', upload.id]),
+    ).toBeUndefined();
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    accepted(new Response(null, { status: 204 }));
+    await shown(fixture, 'uploading is paused.');
+    backend.expectNone(`/api/v1/media/uploads/${upload.id}/finalize`);
+    me.flush(verifiedActor);
+    await revalidation;
+    fixture.componentRef.setInput('checking', false);
+    fixture.detectChanges();
+    await settle(matching, hash);
+    await shown(fixture, 'Your photo upload paused before processing could be confirmed.');
+    expect(workflow().hasLocalDraft).toBe(true);
+    backend.expectNone(`/api/v1/media/uploads/${upload.id}/finalize`);
     backend.expectNone({ url: '/api/v1/media/uploads', method: 'POST' });
   });
   it('does not finalize a transfer response that races a successful cancellation', async () => {

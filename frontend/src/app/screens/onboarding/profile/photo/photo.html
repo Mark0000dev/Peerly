@@ -100,7 +100,14 @@
     @switch (current.state) {
       @case ('uploading') {
         @if (finalizing.isIdle) {
-          <p role="status">Waiting for the file transfer.</p>
+          @if (transferInterrupted()) {
+            <p role="status">
+              Your photo upload paused before processing could be confirmed. Check photo status,
+              then resume your selected photo. Nothing will be retried automatically.
+            </p>
+          } @else {
+            <p role="status">Waiting for the file transfer.</p>
+          }
         }
         @if (hasSelectedFile) {
           <button
@@ -109,7 +116,7 @@
             [disabled]="busy || !history.isSuccess || history.isFetching"
             (click)="retryTransfer()"
           >
-            Retry selected file
+            {{ transferInterrupted() ? 'Resume selected photo' : 'Retry selected file' }}
           </button>
         }
       }

@@ -261,6 +261,80 @@ test('photo crop is local and keyboard operable at320px and200percent text', asy
   await checkpoint('photo-crop-cancelled320-200.png');
 });
 
+test('photo upload pause offers explicit resume after the same sign-in is confirmed', async ({
+  page,
+  checkpoint,
+}: Context) => {
+  await empty(page);
+  const source = await nativePhoto(page);
+  const current = { ...upload, size_bytes: source.size_bytes, content_type: source.content_type };
+  let releaseStart: () => void = () => undefined;
+  let releaseSession: () => void = () => undefined;
+  const startGate = new Promise<void>((resolve) => {
+    releaseStart = resolve;
+  });
+  const sessionGate = new Promise<void>((resolve) => {
+    releaseSession = resolve;
+  });
+  let starts = 0;
+  let accesses = 0;
+  await page.route('**/api/v1/media/uploads', async (route) => {
+    if (route.request().method() === 'POST') {
+      starts += 1;
+      await startGate;
+      await route.fulfill({ status: 202, json: current });
+    } else
+      await route.fulfill({
+        json: { photo: null, uploads: [{ upload: current, source_sha256: source.sha256 }] },
+      });
+  });
+  await page.route(`**/api/v1/media/${upload.id}`, async (route) => {
+    await route.fulfill({ json: current });
+  });
+  await page.route(`**/api/v1/media/uploads/${upload.id}/access`, async (route) => {
+    accesses += 1;
+    await route.fulfill({ status: 503, json: { code: 'media_storage_unavailable' } });
+  });
+  try {
+    const created = page.waitForRequest(
+      (request) => request.url().endsWith('/media/uploads') && request.method() === 'POST',
+    );
+    await page
+      .getByRole('button', { name: 'Use the original without cropping', exact: true })
+      .click();
+    await created;
+    await page.route('**/api/v1/me', async (route) => {
+      await sessionGate;
+      await route.fulfill({ json: verifiedActor });
+    });
+    await page.getByRole('button', { name: 'Check status', exact: true }).click();
+    await expect(
+      page.getByText(
+        'Your sign-in is being checked. Your selected photo is still here; uploading is paused.',
+      ),
+    ).toBeVisible();
+    releaseStart();
+    await expect(
+      page.getByText('Your photo upload paused before processing could be confirmed.', {
+        exact: false,
+      }),
+    ).toBeVisible();
+    releaseSession();
+    const resume = page.getByRole('button', { name: 'Resume selected photo', exact: true });
+    await expect(resume).toBeEnabled();
+    await expect(page.getByText('Waiting for the file transfer.', { exact: true })).toHaveCount(0);
+    expect(starts).toBe(1);
+    expect(accesses).toBe(0);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true);
+    await checkpoint('photo-transfer-paused-resume.png');
+  } finally {
+    releaseStart();
+    releaseSession();
+  }
+});
+
 test('photo storage outage is not presented as an unsuitable photo', async ({
   page,
   checkpoint,
