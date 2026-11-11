@@ -859,7 +859,7 @@ class _S3CacheWarmup(Protocol):
     def warm_up_loader_caches(self, service_name: str) -> None: ...
 
 
-def _prepare_media_session() -> tuple[AioSession, ssl.SSLContext]:
+def _prepare_media_session() -> AioSession:
     session = AioSession(
         session_vars={
             "profile": (None, None, None, None),
@@ -871,12 +871,12 @@ def _prepare_media_session() -> tuple[AioSession, ssl.SSLContext]:
     if not isinstance(session, _S3CacheWarmup):
         raise RuntimeError("Pinned S3 SDK cache warmup is unavailable")
     session.warm_up_loader_caches("s3")
-    return session, ssl.create_default_context()
+    return session
 
 
 @asynccontextmanager
 async def _open_media_storage(configuration: MediaConfiguration) -> AsyncIterator[MediaStorage]:
-    session, tls = await asyncio.to_thread(_prepare_media_session)
+    session = await asyncio.to_thread(_prepare_media_session)
     options = AioConfig(
         signature_version="s3v4",
         connect_timeout=5,
@@ -886,7 +886,6 @@ async def _open_media_storage(configuration: MediaConfiguration) -> AsyncIterato
         s3={"addressing_style": "path"},
         request_checksum_calculation="when_required",
         response_checksum_validation="when_required",
-        connector_args={"ssl_context": tls},
     )
     async with session.create_client(
         "s3",

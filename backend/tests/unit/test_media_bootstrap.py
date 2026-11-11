@@ -1,4 +1,3 @@
-import ssl
 import threading
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -19,7 +18,7 @@ async def test_media_composition_uses_explicit_credentials_and_warms_files_offlo
     main_thread = threading.get_ident()
     warmed: list[bool] = []
 
-    def prepare() -> tuple[AioSession, ssl.SSLContext]:
+    def prepare() -> AioSession:
         assert threading.get_ident() != main_thread
         warmed.append(True)
         return original()
