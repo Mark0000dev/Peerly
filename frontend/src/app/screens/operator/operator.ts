@@ -1,4 +1,8 @@
-import { operatorDenied, retireOperatorFailure } from './operator-authority';
+import {
+  operatorDenied,
+  recheckOperatorAuthority,
+  retireOperatorFailure,
+} from './operator-authority';
 import { HttpClient } from '@angular/common/http';
 import { ChangeDetectorRef, Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
@@ -16,6 +20,7 @@ import { accountsOptions, detailOptions, uuid } from './operator-contract';
 import { hiddenFilters, lifecycleFilters, readFilters, searchFields } from './operator-search';
 import { OperatorOverview } from './operator-overview';
 import { OperatorAcademic } from './operator-academic';
+import { OperatorProfileHistory } from './operator-profile-history';
 import { academicReset } from './operator-academic-route';
 
 @Component({
@@ -30,6 +35,7 @@ import { academicReset } from './operator-academic-route';
     TuiNativeSelect,
     OperatorOverview,
     OperatorAcademic,
+    OperatorProfileHistory,
     TuiTabs,
   ],
   templateUrl: './operator.html',
@@ -102,7 +108,7 @@ export class Operator {
     return this.tab === 'overview' ? 0 : this.tab === 'goals' ? 1 : 2;
   }
   protected accountSelection(account: string) {
-    return { ...academicReset, account };
+    return { ...academicReset, profile_history: null, profile_cursor: null, account };
   }
   protected changeTab(index: number): void {
     const tab = (['overview', 'goals', 'help'] as const)[index];
@@ -110,6 +116,8 @@ export class Operator {
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {
+        profile_history: null,
+        profile_cursor: null,
         tab: tab === 'overview' ? null : tab,
         goal: null,
         goals_cursor: null,
@@ -187,6 +195,9 @@ export class Operator {
             : 'any',
       );
       this.submitted.set(false);
+      const previousAccount = this.accountQuery.options.queryKey[4];
+      if (typeof previousAccount === 'string' && previousAccount !== this.selected)
+        this.resetAcademicCursors();
       this.sync();
       this.change.markForCheck();
     });
@@ -211,7 +222,9 @@ export class Operator {
     const params = this.route.snapshot.queryParamMap;
     if (
       this.resettingAcademicCursor() ||
-      !['goals_cursor', 'goal_cursor', 'help_cursor'].some((key) => params.has(key))
+      !['goals_cursor', 'goal_cursor', 'help_cursor', 'profile_cursor'].some((key) =>
+        params.has(key),
+      )
     )
       return;
     // This signal only owns a pending URL transition, never identity or query data.
@@ -219,7 +232,12 @@ export class Operator {
     void this.router
       .navigate([], {
         relativeTo: this.route,
-        queryParams: { goals_cursor: null, goal_cursor: null, help_cursor: null },
+        queryParams: {
+          goals_cursor: null,
+          goal_cursor: null,
+          help_cursor: null,
+          profile_cursor: null,
+        },
         queryParamsHandling: 'merge',
       })
       .then(() => {
@@ -289,7 +307,13 @@ export class Operator {
   protected next(cursor: string): void {
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { ...academicReset, cursor, account: null },
+      queryParams: {
+        ...academicReset,
+        profile_history: null,
+        profile_cursor: null,
+        cursor,
+        account: null,
+      },
       queryParamsHandling: 'merge',
     });
   }
@@ -303,7 +327,7 @@ export class Operator {
   protected close(): void {
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { ...academicReset, account: null },
+      queryParams: { ...academicReset, profile_history: null, profile_cursor: null, account: null },
       queryParamsHandling: 'merge',
     });
   }
@@ -314,7 +338,15 @@ export class Operator {
     if (this.actor !== null && !this.denied) void this.accountQuery.refetch();
   }
   protected recheck(): void {
-    void this.sessionQuery.refetch();
+    void recheckOperatorAuthority(
+      this.client,
+      this.ownerId,
+      () => this.ownerId,
+      () => this.sessionQuery.refetch(),
+    ).then(() => {
+      this.sync();
+      this.change.markForCheck();
+    });
   }
   private errorText(error: unknown): string {
     if (error instanceof ApiFailure) {

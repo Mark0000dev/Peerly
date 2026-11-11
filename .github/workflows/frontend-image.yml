@@ -50,6 +50,8 @@ jobs:
           set -euo pipefail
           mkdir -p "$RECEIPT_DIRECTORY"
           docker build --file frontend/Dockerfile \
+            --build-arg "PEERLY_RELEASE=$GITHUB_SHA" \
+            --build-arg "PEERLY_PUBLIC_ORIGIN=https://peerly-staging.aleksei-orlov.dev" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --tag "$IMAGE_REPOSITORY:staging-$GITHUB_SHA" frontend
@@ -111,6 +113,28 @@ jobs:
 
           root = document("index.html")
           csr = document("index.csr.html")
+          status, body, headers = fetch("/assets/observation-release.json")
+          if status != 200 or headers.get_content_type() != "application/json":
+              raise RuntimeError("Actual public release map must be served as JSON")
+          if headers.get("Cache-Control") != "no-cache":
+              raise RuntimeError("Release discovery must not retain a stale release map")
+          release = json.loads(body)
+          if (release["releaseId"] != os.environ["GITHUB_SHA"]
+                  or release["origin"] != "https://peerly-staging.aleksei-orlov.dev"):
+              raise RuntimeError("Release map must match this build and staging origin")
+          names = sorted(subprocess.check_output([
+              "docker", "exec", container, "find", "/usr/share/nginx/html",
+              "-maxdepth", "1", "-type", "f", "-name", "*.js",
+          ], text=True).splitlines())
+          expected = [{"basename": name.rsplit("/", 1)[-1], "assetId": index}
+                      for index, name in enumerate(names)]
+          if not expected or release["assets"] != expected:
+              raise RuntimeError("Release map must describe every actual emitted root JS asset")
+          Path(os.environ["RECEIPT_DIRECTORY"], "observation-release.json").write_bytes(body)
+          approved = [{"release_id": release["releaseId"],
+                       "asset_ids": [asset["assetId"] for asset in release["assets"]]}]
+          Path(os.environ["RECEIPT_DIRECTORY"], "approved-public-releases.json").write_text(
+              json.dumps(approved, indent=2) + "\n", encoding="utf-8")
           if root == csr:
               raise RuntimeError("Expected distinct prerendered landing and client app documents")
           checks = []

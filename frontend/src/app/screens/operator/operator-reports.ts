@@ -1,4 +1,8 @@
-import { operatorDenied, retireOperatorFailure } from './operator-authority';
+import {
+  operatorDenied,
+  recheckOperatorAuthority,
+  retireOperatorFailure,
+} from './operator-authority';
 import { HttpClient } from '@angular/common/http';
 import { ChangeDetectorRef, Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
@@ -209,7 +213,15 @@ export class OperatorReports {
     else void this.detailQuery.refetch();
   }
   protected recheck(): void {
-    void this.sessionQuery.refetch();
+    void recheckOperatorAuthority(
+      this.client,
+      this.ownerId,
+      () => this.ownerId,
+      () => this.sessionQuery.refetch(),
+    ).then(() => {
+      this.sync();
+      this.change.markForCheck();
+    });
   }
   protected cursorError(error: unknown): boolean {
     return error instanceof ApiFailure && error.status === 422;

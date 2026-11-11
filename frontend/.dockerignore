@@ -11,6 +11,7 @@
 !tooling/
 !tooling/font-watcher-patch.mjs
 !tooling/font-watcher-hashes.json
+!tooling/observation-release.mjs
 !deployment/
 !deployment/nginx.conf
 !src/

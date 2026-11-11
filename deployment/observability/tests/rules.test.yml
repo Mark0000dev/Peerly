@@ -1,0 +1,60 @@
+rule_files:
+- ../prometheus/alerts.yml
+evaluation_interval: 1m
+tests:
+- name: low volume must not trigger REST ratio
+  interval: 1m
+  input_series:
+  - series: http_server_requests{deployment_environment_name="test",http_response_status_code="500",http_route="/api/v1/me"}
+    values: 0+1x20
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: PeerlyRestErrorRatio
+    exp_alerts: []
+- name: sustained high volume server failures trigger REST ratio
+  interval: 1m
+  input_series:
+  - series: http_server_requests{deployment_environment_name="test",http_response_status_code="500",http_route="/api/v1/me"}
+    values: 0+30x20
+  - series: http_server_requests{deployment_environment_name="test",http_response_status_code="200",http_route="/api/v1/me"}
+    values: 0+270x20
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: PeerlyRestErrorRatio
+    exp_alerts:
+    - exp_labels:
+        deployment_environment_name: test
+        severity: warning
+        owner: peerly-team
+      exp_annotations:
+        summary: REST 5xx ratio exceeds 5% with at least 100 observations
+        description: Check route/outcome metrics, then correlated traces and safe logs. Excludes the actual SSE
+          route. See OPS02 runbook.
+        dashboard_uid: peerly-technical-v1
+- name: long-lived SSE is excluded from REST errors
+  interval: 1m
+  input_series:
+  - series: http_server_requests{deployment_environment_name="test",http_response_status_code="500",http_route="/api/v1/events"}
+    values: 0+1000x20
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: PeerlyRestErrorRatio
+    exp_alerts: []
+- name: native collector failed-log counter without type suffix triggers even if span counter absent
+  interval: 1m
+  input_series:
+  - series: otelcol_exporter_send_failed_log_records{exporter="otlp_http/loki",deployment_environment_name="test"}
+    values: 0+1x10
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: PeerlyTelemetryExportFailed
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        owner: peerly-team
+        deployment_environment_name: test
+      exp_annotations:
+        summary: Collector failed to export telemetry
+        description: Check Tempo/Loki readiness and persistent queues. Retries/queues are bounded and telemetry
+          may be dropped; never report zero-loss guarantees.
+        dashboard_uid: peerly-technical-v1

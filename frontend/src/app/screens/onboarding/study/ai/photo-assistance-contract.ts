@@ -15,7 +15,7 @@ export function samePhotoSource(
 ): boolean {
   return left.id === right.id && left.version === right.version;
 }
-function observation(value: unknown): value is Api['schemas']['Observation'] {
+function observation(value: unknown): value is Api['schemas']['PhotoResultResponse']['blurred'] {
   return value === 'yes' || value === 'no' || value === 'uncertain';
 }
 export function isPhotoAdvice(value: unknown): value is Api['schemas']['PhotoResultResponse'] {
@@ -82,7 +82,7 @@ export function acceptsPhotoJob(
 export const photoAdvice: Readonly<
   Record<
     keyof Api['schemas']['PhotoResultResponse'],
-    Readonly<Record<Api['schemas']['Observation'], string>>
+    Readonly<Record<Api['schemas']['PhotoResultResponse']['blurred'], string>>
   >
 > = {
   blurred: {

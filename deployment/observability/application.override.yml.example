@@ -1,0 +1,62 @@
+# REVIEW/MERGE ONLY after parent inventory/config approval, collector-first startup.
+# Never apply standalone; network attachment remains parent-owned.
+services:
+  api:
+    environment: &id001
+      OBSERVABILITY__COLLECTOR_ORIGIN: http://peerly-otel:4318
+      OBSERVABILITY__ENVIRONMENT: ${PEERLY_ENVIRONMENT:?Set actual environment}
+      OBSERVABILITY__RELEASE: ${PEERLY_RELEASE:?Set actual release}
+      OBSERVABILITY__TRACE_QUEUE_CAPACITY: '512'
+    logging:
+      driver: syslog
+      options:
+        syslog-address: tcp://127.0.0.1:${PEERLY_SYSLOG_PORT:-5514}
+        syslog-format: rfc5424micro
+        tag: studymate-api
+        mode: non-blocking
+        max-buffer-size: 1m
+        cache-disabled: 'true'
+  email:
+    environment: *id001
+    logging:
+      driver: syslog
+      options:
+        syslog-address: tcp://127.0.0.1:${PEERLY_SYSLOG_PORT:-5514}
+        syslog-format: rfc5424micro
+        tag: studymate-email-worker
+        mode: non-blocking
+        max-buffer-size: 1m
+        cache-disabled: 'true'
+  media:
+    environment: *id001
+    logging:
+      driver: syslog
+      options:
+        syslog-address: tcp://127.0.0.1:${PEERLY_SYSLOG_PORT:-5514}
+        syslog-format: rfc5424micro
+        tag: studymate-media-worker
+        mode: non-blocking
+        max-buffer-size: 1m
+        cache-disabled: 'true'
+  requests:
+    environment: *id001
+    logging:
+      driver: syslog
+      options:
+        syslog-address: tcp://127.0.0.1:${PEERLY_SYSLOG_PORT:-5514}
+        syslog-format: rfc5424micro
+        tag: peerly-requests-worker
+        mode: non-blocking
+        max-buffer-size: 1m
+        cache-disabled: 'true'
+  changes:
+    environment: *id001
+    logging:
+      driver: syslog
+      options:
+        syslog-address: tcp://127.0.0.1:${PEERLY_SYSLOG_PORT:-5514}
+        syslog-format: rfc5424micro
+        tag: peerly-changes-worker
+        mode: non-blocking
+        max-buffer-size: 1m
+        cache-disabled: 'true'

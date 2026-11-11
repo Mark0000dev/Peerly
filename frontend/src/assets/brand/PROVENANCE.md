@@ -14,6 +14,6 @@ Source: owner-provided design-v2 `peerly-design-package-2026-11-07.zip`, `design
 | `mascot-letter.svg` | `ad681cec6756e0dc802b8a79b8938797f78e3b304dd8f2003fb702b6f9f82b89` |
 | `mascot-oops.svg`   | `dcd4960784b5da897472f07eb90d5632f0f5a5bdf908598ff0371ed18f7036c4` |
 
-Mascot copies are static derivatives: embedded exported animation styles and class hooks removed; original vector paths retained. This avoids decorative motion in reduced-motion and image-document media contexts. Hashes above identify original supplied SVGs, not derived output.
+Mascots are byte-identical original supplied SVGs. Their embedded declarative CSS animations stay inside each image document; the supplied `prefers-reduced-motion: reduce` rule disables all mascot animation when reduced motion is requested. No exported page/runtime CSS, global animation overrides, scripts or new rendering wrapper is used. Hashes above identify these shipped SVGs.
 
 Self-hosted fonts come from pinned Fontsource Inter 5.3.0 and M PLUS Rounded 1c 5.3.0 packages. Their redistributed OFL licenses are included as `Inter-OFL.txt` and `M-PLUS-Rounded-1c-OFL.txt`.

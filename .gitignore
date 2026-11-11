@@ -28,3 +28,34 @@ client_secret*.json
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Angular / mobile build artifacts
+.angular/
+coverage/
+*.tsbuildinfo
+android/.gradle/
+android/local.properties
+android/**/build/
+ios/App/Pods/
+ios/App/build/
+
+# Python tooling / reports
+.mypy_cache/
+.ruff_cache/
+.import_linter_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Browser test artifacts (reference screenshots are tracked)
+playwright-report/
+test-results/
+
+# Owner-supplied credentials and reference exports (never stage)
+/secrets
+/secrets.*
+/secrets/
+/GITHUB_TOKEN
+/design/
+/design-v*/
+/Study_Partner_MVP_Design_Specification.docx

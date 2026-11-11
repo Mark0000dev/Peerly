@@ -1,3 +1,4 @@
+import type { OperatorSupport } from './screens/operator/support/operator-support';
 import type { ProfilePage } from './screens/onboarding/profile-page';
 import type { SupportContact } from './screens/help/contact/support-contact';
 import type { NotificationPreferences } from './screens/notifications/notification-preferences';
@@ -5,7 +6,8 @@ import type { Onboarding } from './screens/onboarding/onboarding';
 import { HttpClient } from '@angular/common/http';
 import { ApplicationRef, DestroyRef, inject, provideEnvironmentInitializer } from '@angular/core';
 import { watchChanges } from './screens/changes';
-import type { Routes } from '@angular/router';
+import { attachClientObservations } from './observability/observation-owner';
+import type { ActivatedRouteSnapshot, Routes } from '@angular/router';
 import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
 export const contentRoutes: Routes = [
   {
@@ -19,6 +21,7 @@ export const contentRoutes: Routes = [
           },
         }),
       ),
+      provideEnvironmentInitializer(attachClientObservations),
       provideEnvironmentInitializer(() => {
         const application = inject(ApplicationRef);
         const destroy = inject(DestroyRef);
@@ -103,6 +106,17 @@ export const contentRoutes: Routes = [
         title: 'Deletion status · Peerly',
         loadComponent: async () =>
           (await import('./screens/account/deletion-status')).DeletionStatus,
+      },
+      {
+        path: 'operator/support',
+        title: 'Student support · Peerly',
+        runGuardsAndResolvers: (
+          from: Readonly<ActivatedRouteSnapshot>,
+          to: Readonly<ActivatedRouteSnapshot>,
+        ) => from.queryParamMap.get('case') !== to.queryParamMap.get('case'),
+        canDeactivate: [(component: Readonly<OperatorSupport>) => component.canLeave()],
+        loadComponent: async () =>
+          (await import('./screens/operator/support/operator-support')).OperatorSupport,
       },
       {
         path: 'operator/conversations',

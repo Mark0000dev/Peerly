@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import type { HttpClient } from '@angular/common/http';
+import type { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom, fromEvent, takeUntil, throwIfEmpty } from 'rxjs';
 
 export class ApiFailure extends Error {
@@ -76,11 +76,16 @@ export async function writeJson<T>(
   headers: Readonly<Record<string, string>>,
   accept: (value: unknown) => value is T,
   method: 'POST' | 'PUT' = 'POST',
+  context?: HttpContext,
 ): Promise<T> {
   if (!url.startsWith('/api/v1/')) throw new ApiFailure(0, 'invalid_api_target', null);
   try {
     const value: unknown = await firstValueFrom(
-      http.request<unknown>(method, url, { body, headers }),
+      http.request<unknown>(method, url, {
+        body,
+        headers,
+        ...(context === undefined ? {} : { context }),
+      }),
     );
     if (!accept(value)) throw new ApiFailure(0, 'invalid_response', null);
     return value;

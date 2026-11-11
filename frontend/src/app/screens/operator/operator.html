@@ -212,15 +212,22 @@
                 [tab]="tab"
                 (authorityFailure)="privateChanged($event.error, $event.actorId)"
               />
-            } @else if (detail.isPending || detail.isFetching) {
-              <p role="status">Loading account…</p>
-            } @else if (detail.isError) {
-              <section role="alert">
-                <p>{{ detailError }}</p>
-                <button tuiButton type="button" (click)="retryDetail()">Retry account</button>
-              </section>
-            } @else if (detail.data; as record) {
-              <app-operator-overview [detail]="record" />
+            } @else {
+              @if (detail.isPending || detail.isFetching) {
+                <p role="status">Loading account…</p>
+              } @else if (detail.isError) {
+                <section role="alert">
+                  <p>{{ detailError }}</p>
+                  <button tuiButton type="button" (click)="retryDetail()">Retry account</button>
+                </section>
+              } @else if (detail.data; as record) {
+                <app-operator-overview [detail]="record" />
+              }
+              <app-operator-profile-history
+                [actorId]="actor.account_id"
+                [accountId]="selected"
+                (authorityFailure)="privateChanged($event.error, $event.actorId)"
+              />
             }
           </section>
         </section>

@@ -1,0 +1,99 @@
+name: Backend
+
+on:
+  pull_request:
+    paths:
+      - backend/**
+      - deployment/backend/**
+      - .github/workflows/backend.yml
+  push:
+    paths:
+      - backend/**
+      - deployment/backend/**
+      - .github/workflows/backend.yml
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend quality
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16.15
+        env:
+          POSTGRES_USER: studymate
+          POSTGRES_PASSWORD: studymate
+          POSTGRES_DB: studymate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U studymate -d studymate_test"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://studymate:studymate@localhost:5432/studymate_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.13.7'
+          enable-cache: true
+      - run: uv sync --locked
+      - run: make check
+      - run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://studymate:studymate@localhost:5432/studymate_test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+
+  publish:
+    name: Publish staging backend
+    needs: backend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/peerly-staging-backend'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY_IMAGE: ghcr.io/mark0000dev/peerly-backend
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set temporary registry configuration
+        run: printf 'DOCKER_CONFIG=%s/peerly-registry-auth\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Build exact checked revision
+        run: |
+          docker build \
+            --label org.opencontainers.image.source=https://github.com/Mark0000dev/StudyMate-AI \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --label org.opencontainers.image.title=Peerly \
+            --tag "$REGISTRY_IMAGE:staging-$GITHUB_SHA" \
+            backend
+      - name: Check production imports and container isolation
+        run: |
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --entrypoint python "$REGISTRY_IMAGE:staging-$GITHUB_SHA" \
+            -c 'import os, importlib.util; import studymate.server, studymate.email_worker, studymate.media_worker, studymate.requests_worker, studymate.changes_worker; assert os.getuid() != 0; assert importlib.util.find_spec("pytest") is None'
+      - name: Authenticate with repository-scoped token
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Publish immutable commit tag
+        run: docker push "$REGISTRY_IMAGE:staging-$GITHUB_SHA"
+      - name: Record published digest
+        run: |
+          docker image inspect "$REGISTRY_IMAGE:staging-$GITHUB_SHA" \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove temporary registry credentials
+        if: always()
+        run: rm -rf -- "$DOCKER_CONFIG"

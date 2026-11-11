@@ -52,6 +52,9 @@ export const eventKinds = [
   'feedback.saved',
   'study.prompt_offered',
   'account.lifecycle_changed',
+  'support.received',
+  'support.status_changed',
+  'notification_preference.changed',
 ] as const satisfies readonly Api['schemas']['OperatorEventKind'][];
 
 const sourceKinds = [
@@ -76,14 +79,22 @@ const sourceKinds = [
   'feedback_revision',
   'study_prompt',
   'account_lifecycle_revision',
+  'support_case_revision',
+  'notification_preference_revision',
 ] as const satisfies readonly Api['schemas']['OperatorSourceKind'][];
 
 const operatorActions = [
   'search_accounts',
+  'search_audits',
   'search_events',
   'search_reports',
+  'search_support_cases',
+  'search_delivery_sources',
+  'read_delivery_source',
+  'read_support_case',
   'read_report',
   'read_media',
+  'read_chat_media',
   'read_event',
   'read_audit',
   'read_account',
@@ -98,6 +109,9 @@ const resourceKinds = [
   'audit',
   'report',
   'profile_media',
+  'chat_media',
+  'delivery_source',
+  'support_case',
 ] as const satisfies readonly Api['schemas']['OperatorResourceKind'][];
 
 const aiKinds = [
@@ -340,6 +354,11 @@ export function isAudit(value: unknown): value is Api['schemas']['OperatorAuditD
     nullable(value['requested_media_owner_id'], uuid) &&
     nullable(value['requested_media_attempt_id'], uuid) &&
     nullable(value['actual_source_upload_id'], uuid) &&
+    nullable(value['actual_source_image_id'], uuid) &&
+    nullable(value['requested_chat_attempt_id'], uuid) &&
+    nullable(value['requested_chat_owner_id'], uuid) &&
+    (value['requested_chat_kind'] === null ||
+      member(value['requested_chat_kind'], ['original', 'display'])) &&
     (value['requested_media_kind'] === null ||
       member(value['requested_media_kind'], ['original', 'display'])) &&
     array(value['results'], result, 50)

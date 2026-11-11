@@ -1,0 +1,54 @@
+# Tempo3.1.1 S3 primary block backend, durable local WAL; not an offline backup.
+# No automatic retention/compaction; parent must also disable bucket lifecycle expiry.
+server:
+  http_listen_port: 3200
+  http_listen_address: 0.0.0.0
+  log_level: warn
+  log_format: json
+multitenancy_enabled: false
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+storage:
+  trace:
+    backend: s3
+    wal:
+      path: /var/tempo/wal
+    s3:
+      endpoint: ${PEERLY_TEMPO_S3_ENDPOINT}
+      region: ${PEERLY_TEMPO_S3_REGION}
+      bucket: ${PEERLY_TEMPO_S3_BUCKET}
+      prefix: ${PEERLY_TEMPO_S3_PREFIX}
+      access_key: ${PEERLY_TEMPO_S3_ACCESS_KEY}
+      secret_key: ${PEERLY_TEMPO_S3_SECRET_KEY}
+      insecure: false
+      forcepathstyle: ${PEERLY_TEMPO_S3_FORCE_PATH_STYLE}
+      tls_min_version: VersionTLS12
+      retry_max_attempts: 3
+      retry_backoff_initial: 1s
+      retry_backoff_max: 5s
+backend_scheduler:
+  local_work_path: /var/tempo/work
+overrides:
+  defaults:
+    compaction:
+      compaction_disabled: true
+usage_report:
+  reporting_enabled: false
+backend_worker:
+  backend_scheduler_addr: 127.0.0.1:9095
+querier:
+  frontend_worker:
+    frontend_address: 127.0.0.1:9095
+live_store:
+  wal:
+    path: /var/tempo/live-store/traces
+  shutdown_marker_dir: /var/tempo/live-store/shutdown-marker
+  max_live_traces_bytes: 67108864
+  max_block_bytes: 16777216
+  max_block_duration: 30s
+  complete_block_concurrency: 1
+  query_block_concurrency: 2

@@ -1,0 +1,12 @@
+# OPTIONAL merge with compose.yml AFTER existing remote-write receiver inventory.
+# Replaces the metrics pipeline exporter; do not scrape the same stream as well.
+services:
+  collector:
+    command:
+      - --config=/etc/otelcol/collector.yaml
+      - --config=/etc/otelcol/remote-write.yaml
+    environment:
+      PROMETHEUS_REMOTE_WRITE_URL: ${PROMETHEUS_REMOTE_WRITE_URL:?Set the verified HTTPS receiver URL}
+      PROMETHEUS_AUTHORIZATION: ${PROMETHEUS_AUTHORIZATION:-}
+    volumes:
+      - ./collector/remote-write.yaml:/etc/otelcol/remote-write.yaml:ro

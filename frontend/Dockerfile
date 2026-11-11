@@ -11,10 +11,19 @@ RUN npm ci --no-audit --no-fund
 COPY angular.json tsconfig.json tsconfig.app.json ./
 COPY src/ ./src/
 RUN npm run build
+COPY tooling/observation-release.mjs ./tooling/
+ARG PEERLY_RELEASE
+ARG PEERLY_PUBLIC_ORIGIN
+RUN node tooling/observation-release.mjs \
+    --directory dist/studymate/browser \
+    --release-id "$PEERLY_RELEASE" \
+    --origin "$PEERLY_PUBLIC_ORIGIN" \
+    --output /tmp/peerly-observation-release.json
 
 FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03 AS runtime
 COPY deployment/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /workspace/frontend/dist/studymate/browser/ /usr/share/nginx/html/
+COPY --from=build /tmp/peerly-observation-release.json /usr/share/nginx/html/assets/observation-release.json
 USER 101:101
 EXPOSE 8080
 STOPSIGNAL SIGQUIT

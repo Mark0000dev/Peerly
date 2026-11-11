@@ -1,0 +1,11 @@
+# SMTP sender recognition polish
+
+Completed bounded SMTP-only code change on10November2026. `backend/src/studymate/infrastructure/email/smtp.py` uses standard `email.headerregistry.Address` for fixed display namePeerly. SMTP envelope sender remains the exact bare configured address; recipient, optional Reply-To, deterministic delivery-ID/domain Message-ID, Date, TLS/STARTTLS/certificate validation, authentication, timeouts, retry/error/cancellation behavior remain unchanged. No domain/application/API/configuration change, new credential/service or live email.
+
+Plain-text body describes the code as confirming access to the APU student mailbox in Peerly, identifies Peerly as an independent student project, asks for the latest requested code, and states expiry10minutes after the request rather than implying10minutes after SMTP arrival. VerificationEmail contains only email/code, no issued_at/expires_at: no absolute request/expiry timestamp was fabricated; Date remains actual send time. Existing ten-minute product lifetime wording retained with the correct reference point. No links, HTML, tracking or claim of university authority.
+
+This supports recognition ONLY. It does not prove deliverability or fix quarantine; parent owns provider/DNS/raw-header diagnosis. No delivery guarantee, sender-domain/authentication-service change or DNS edits claimed.
+
+Validation: real stdlib SMTP wire serialization and BytesParser header boundaries assert one Peerly address with unchanged bare envelope, one intended recipient/no CC/BCC, optional Reply-To, stable retry Message-ID, awareDate, plaintext and bounded purpose/code/latest/expiry copy. Controlled aiosmtplib boundary only. Focused sender14 +Reply-To24 =38PASS0.49s; log `/tmp/peerly-smtp-polish.log`, XML `/tmp/peerly-smtp-polish.xml`. Scoped Ruff/format and strict mypy2PASS. Final assertion splitting was lint-only equivalent after that successful run; no repetitive rerun. No whole gate/PG/browser/provider/network or live-mail claim.
+
+Frozen source/test/docs plus exact manifest for parent selective hotfix: `/tmp/peerly-smtp-polish-handoff/`. No Git/staging/commit/push/publication/deploy performed by this developer. AI policy/runtime untouched; Noether retains identity recreation/migration0054 and shared composition.

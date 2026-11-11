@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "policies": [
+    {"kind": "terms", "version": "image-test-v1", "title": "Synthetic smoke Terms", "content": "SYNTHETIC_TEST_ONLY_TERMS_NOT_FOR_PRODUCTION"},
+    {"kind": "privacy", "version": "image-test-v1", "title": "Synthetic smoke Privacy", "content": "SYNTHETIC_TEST_ONLY_PRIVACY_NOT_FOR_PRODUCTION"}
+  ],
+  "catalogue": {
+    "version": "image-test-v1",
+    "subjects": [{"id": "00000000-0000-0000-0000-000000000200", "name": "Synthetic Image Subject", "aliases": ["Synthetic Image Alias"]}]
+  }
+}

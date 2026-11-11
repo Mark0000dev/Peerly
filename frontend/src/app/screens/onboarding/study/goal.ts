@@ -8,7 +8,7 @@ import type {
   GoalAssistanceDraft,
 } from './ai/goal-assistance-contract';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import {
   Component,
   DestroyRef,
@@ -47,9 +47,13 @@ import { ApiFailure, readJson, writeJson } from '../../../api-http';
 import { isUncertain } from '../../uncertain';
 import { isCatalogue, isGoal, isOwnGoal } from './goal-contract';
 import type { CanonicalChoice, CatalogueView, SubjectChoice } from './goal-contract';
+import { CLIENT_OBSERVATIONS } from '../../../observability/observation-errors';
+import { CLIENT_ACTION } from '../../../observability/observation-context';
+import type { ActionHandle } from '../../../observability/observation-contract';
 
 type Identity = Api['schemas']['IdentityResponse'];
 interface GoalIntent {
+  readonly action: ActionHandle | null;
   readonly body: Api['schemas']['SaveGoalRequest'];
   readonly key: string;
   readonly accountId: string;
@@ -149,6 +153,7 @@ export class StudyGoal implements OnChanges {
     readonly version: number;
   }> | null>(null);
   private readonly http = inject(HttpClient);
+  private readonly observations = inject(CLIENT_OBSERVATIONS);
   private readonly client = inject(QueryClient);
   private readonly change = inject(ChangeDetectorRef);
   private readonly destroy = inject(DestroyRef);
@@ -201,6 +206,7 @@ export class StudyGoal implements OnChanges {
         { 'x-csrf-token': actor.csrf_token, 'idempotency-key': intent.key },
         isGoal,
         'PUT',
+        new HttpContext().set(CLIENT_ACTION, intent.action),
       );
     },
     onSuccess: async (result, intent: Readonly<GoalIntent>) => {
@@ -561,7 +567,12 @@ export class StudyGoal implements OnChanges {
     const intent =
       this.uncertain && previous !== undefined
         ? previous
-        : { body, key: crypto.randomUUID(), accountId: this.actor().account_id };
+        : {
+            body,
+            key: crypto.randomUUID(),
+            accountId: this.actor().account_id,
+            action: this.observations.beginAction('submit'),
+          };
     try {
       await this.saveMutation.mutate(intent);
     } catch (error: unknown) {

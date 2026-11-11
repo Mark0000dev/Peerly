@@ -1,0 +1,411 @@
+<main>
+  <header>
+    <a tuiLink routerLink="/">Peerly</a>
+    <h1>Operator · student support</h1>
+    <p>Privileged workspace · every case inspection and status request is recorded.</p>
+    <a tuiLink routerLink="/operator/accounts">Account records</a>
+  </header>
+  @if (session.isPending || session.isFetching) {
+    <p role="status">Checking your Google session…</p>
+  } @else if (transitioning) {
+    <p role="status">Updating the selected case…</p>
+  } @else if (session.isError) {
+    <section role="alert">
+      <h2>Your session could not be checked</h2>
+      <button tuiButton type="button" (click)="recheck()">Try again</button>
+    </section>
+  } @else if (actor === null) {
+    <section>
+      <h2>Sign in with your operator Google account</h2>
+      <a tuiLink routerLink="/onboarding">Continue to sign in</a>
+    </section>
+  } @else if (denied) {
+    <section role="alert">
+      <h2>Operator access denied</h2>
+      <p>This account does not currently have access to support records.</p>
+      <button tuiButton type="button" (click)="recheck()">Check access again</button>
+    </section>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="search()" aria-label="Support filters">
+      <h2>Find support cases</h2>
+      <div class="filters">
+        @for (field of textFields; track field.key) {
+          <div>
+            <label tuiLabel [for]="'support-' + field.key">{{ field.label }}</label>
+            <tui-textfield
+              ><input
+                tuiInput
+                [id]="'support-' + field.key"
+                [formControl]="form.controls[field.key]"
+                [attr.aria-describedby]="'support-hint-' + field.key"
+                autocomplete="off"
+            /></tui-textfield>
+            <p [id]="'support-hint-' + field.key">{{ field.hint }}</p>
+          </div>
+        }
+        <div>
+          <label tuiLabel for="support-topic">Topic</label
+          ><tui-textfield
+            ><select
+              tuiSelect
+              id="support-topic"
+              [items]="topics"
+              [formControl]="form.controls.topic"
+            ></select
+          ></tui-textfield>
+        </div>
+        <div>
+          <label tuiLabel for="support-status">Status</label
+          ><tui-textfield
+            ><select
+              tuiSelect
+              id="support-status"
+              [items]="statuses"
+              [formControl]="form.controls.status"
+            ></select
+          ></tui-textfield>
+        </div>
+        <div>
+          <label tuiLabel for="support-anonymous">No linked account</label
+          ><tui-textfield
+            ><select
+              tuiSelect
+              id="support-anonymous"
+              [items]="accountFilters"
+              [formControl]="form.controls.anonymous"
+            ></select
+          ></tui-textfield>
+          <p>All cases, no linked account (true), or linked account (false).</p>
+        </div>
+      </div>
+      @if (formError; as error) {
+        <p role="alert">{{ error }}</p>
+      }
+      <button tuiButton type="submit">Search support cases</button>
+    </form>
+    <section aria-label="Support inbox">
+      <h2>Support cases</h2>
+      <p>Each page shows the status checked for that request. Statuses may change between pages.</p>
+      @if (state.filterError; as error) {
+        <p role="alert">{{ error }}</p>
+        <button tuiButton type="button" (click)="page(null)">First inbox page</button>
+      } @else if (inbox.isPending || inbox.isFetching) {
+        <p role="status">Loading support cases…</p>
+      } @else if (inbox.isError) {
+        <p role="alert">{{ errorText(inbox.error, 'inbox') }}</p>
+        <button tuiButton type="button" (click)="retryInbox()">Retry inbox</button>
+        @if (cursorError(inbox.error)) {
+          <button tuiButton type="button" (click)="page(null)">First inbox page</button>
+        }
+      } @else if (inbox.data; as data) {
+        <ul class="cases">
+          @for (row of data.cases; track row.case_id) {
+            <li>
+              <h3>{{ topicText(row.topic) }}</h3>
+              <p>Case ID {{ row.case_id }}</p>
+              <p>{{ statusText(row.status) }} · version {{ row.version }}</p>
+              <p>
+                Received <time [attr.datetime]="row.received_at">{{ row.received_at }}</time>
+              </p>
+              <p>
+                Last status record
+                <time [attr.datetime]="row.changed_at">{{ row.changed_at }}</time>
+              </p>
+              @if (row.actor_id; as actorId) {
+                <p>
+                  <a tuiLink routerLink="/operator/accounts" [queryParams]="{ account: actorId }"
+                    >Account {{ actorId }}</a
+                  >
+                </p>
+              } @else {
+                <p>No linked account</p>
+              }
+              <button
+                tuiButton
+                type="button"
+                [attr.aria-label]="'Open support case ' + row.case_id"
+                (click)="selectCase(row.case_id)"
+              >
+                Open case
+              </button>
+            </li>
+          } @empty {
+            <li>No support cases match these filters.</li>
+          }
+        </ul>
+        <div class="actions">
+          @if (data.next_cursor; as cursor) {
+            <button tuiButton type="button" (click)="page(cursor)">Next support cases</button>
+          }
+          @if (state.filters.cursor !== null && state.filters.cursor !== undefined) {
+            <button tuiButton type="button" (click)="page(null)">First inbox page</button>
+          }
+          <button tuiButton type="button" (click)="retryInbox()">Refresh inbox</button>
+        </div>
+      }
+    </section>
+    @if (state.caseId !== null) {
+      <section aria-label="Selected support case">
+        <button tuiButton type="button" appearance="flat" (click)="selectCase(null)">
+          Close support case
+        </button>
+        @if (state.caseError; as error) {
+          <p role="alert">{{ error }}</p>
+        } @else {
+          @if (record.isPending || record.isFetching) {
+            <p role="status">Loading support case…</p>
+          } @else if (record.isError) {
+            <p role="alert">{{ errorText(record.error, 'case') }}</p>
+            <button tuiButton type="button" (click)="refreshCase()">Retry case</button>
+          } @else if (record.data; as detail) {
+            <h2>Support case {{ detail.receipt.case_id }}</h2>
+            <dl>
+              <div>
+                <dt>Topic</dt>
+                <dd>{{ topicText(detail.topic) }}</dd>
+              </div>
+              <div>
+                <dt>Reply address</dt>
+                <dd>{{ detail.reply_address }}</dd>
+              </div>
+              <div>
+                <dt>Message</dt>
+                <dd>{{ detail.message }}</dd>
+              </div>
+              <div>
+                <dt>Additional details</dt>
+                <dd>
+                  {{
+                    detail.details === undefined || detail.details === null
+                      ? 'Not recorded'
+                      : detail.details === ''
+                        ? 'Empty string'
+                        : detail.details
+                  }}
+                </dd>
+              </div>
+              <div>
+                <dt>Linked account</dt>
+                <dd>
+                  @if (detail.actor_id; as actorId) {
+                    <a
+                      tuiLink
+                      routerLink="/operator/accounts"
+                      [queryParams]="{ account: actorId }"
+                      >{{ actorId }}</a
+                    >
+                  } @else {
+                    No linked account
+                  }
+                </dd>
+              </div>
+              <div>
+                <dt>Current case status</dt>
+                <dd>{{ statusText(detail.receipt.status) }}</dd>
+              </div>
+              <div>
+                <dt>Current version</dt>
+                <dd>{{ detail.receipt.version }}</dd>
+              </div>
+              <div>
+                <dt>Received at</dt>
+                <dd>
+                  <time [attr.datetime]="detail.receipt.received_at">{{
+                    detail.receipt.received_at
+                  }}</time>
+                </dd>
+              </div>
+              <div>
+                <dt>Changed at</dt>
+                <dd>
+                  <time [attr.datetime]="detail.receipt.changed_at">{{
+                    detail.receipt.changed_at
+                  }}</time>
+                </dd>
+              </div>
+            </dl>
+            <button tuiButton type="button" (click)="refreshCase()">Check current case</button>
+          }
+          <section aria-label="Change support status">
+            <h2>Change case status</h2>
+            <p>
+              Status tracks this support case. Account access and email verification are separate.
+            </p>
+            @if (editor.intent(); as intent) {
+              <p>
+                Prepared change for {{ intent.caseId }}: {{ statusText(intent.body.status) }} ·
+                expected version {{ intent.body.expected_version }}.
+              </p>
+              @if (editor.result.isIdle) {
+                <p>Confirm this status request. It sends no reply to the address above.</p>
+                <button
+                  tuiButton
+                  type="button"
+                  (click)="editor.confirm()"
+                  [disabled]="!editor.canConfirm"
+                >
+                  Confirm status change
+                </button>
+              }
+            }
+            @if (editor.result.isPending) {
+              <p role="status">
+                The status request is in progress. The result is not confirmed yet.
+              </p>
+            } @else if (editor.result.isSuccess && editor.result.data; as receipt) {
+              <section role="status">
+                <h3>Recorded result for your request</h3>
+                <p>{{ statusText(receipt.status) }} · version {{ receipt.version }}</p>
+                <p>Received at {{ receipt.received_at }}</p>
+                <p>Changed at {{ receipt.changed_at }}</p>
+                <p>
+                  This receipt records the original result. The current case above may have changed
+                  since then.
+                </p>
+              </section>
+            } @else if (editor.unknown) {
+              <p role="alert">
+                We could not confirm the result. Checking the current status does not prove whether
+                this request completed.
+              </p>
+              <button tuiButton type="button" (click)="editor.replay()">
+                Retry the same status change
+              </button>
+            } @else if (editor.conflict) {
+              <p role="alert">
+                This request conflicts with the current case or an earlier attempt. Check the
+                current case before preparing a new change.
+              </p>
+            } @else if (editor.result.isError) {
+              <p role="alert">
+                The earlier status request could not be completed. Check the current case and your
+                access before preparing a new change.
+              </p>
+            }
+            @if (editor.staleDraft && editor.intent() === null) {
+              <p role="alert">
+                This case changed since the draft was prepared. Use the current case to review a new
+                choice.
+              </p>
+            }
+            <form
+              [formGroup]="editor.form"
+              (ngSubmit)="editor.review()"
+              aria-label="Support status choice"
+            >
+              <label tuiLabel for="support-new-status">New case status</label>
+              <tui-textfield
+                ><select
+                  tuiSelect
+                  id="support-new-status"
+                  [items]="changeStatuses"
+                  [formControl]="editor.form.controls.status"
+                ></select
+              ></tui-textfield>
+              <button tuiButton type="submit" [disabled]="!editor.canReview">
+                Review status change
+              </button>
+            </form>
+            <button
+              tuiButton
+              type="button"
+              (click)="editor.useCurrent()"
+              [disabled]="editor.result.isPending"
+            >
+              Use current case for a new change
+            </button>
+          </section>
+          @if (!state.historyOpen) {
+            <button tuiButton type="button" (click)="historyPage(null)">
+              Open retained status history
+            </button>
+          } @else {
+            <section aria-label="Support status history">
+              <h2>Retained status history</h2>
+              <button tuiButton type="button" (click)="closeHistory()">Close status history</button>
+              @if (state.historyError; as error) {
+                <p role="alert">{{ error }}</p>
+                <button tuiButton type="button" (click)="historyPage(null)">
+                  First history page
+                </button>
+              } @else if (history.isPending || history.isFetching) {
+                <p role="status">Loading status history…</p>
+              } @else if (history.isError) {
+                <p role="alert">{{ errorText(history.error, 'history') }}</p>
+                <button tuiButton type="button" (click)="retryHistory()">
+                  Retry status history
+                </button>
+                @if (cursorError(history.error)) {
+                  <button tuiButton type="button" (click)="historyPage(null)">
+                    First history page
+                  </button>
+                }
+              } @else if (history.data; as data) {
+                <p>Page anchor version {{ data.anchor_version }}</p>
+                <ol>
+                  @for (revision of data.revisions; track revision.version) {
+                    <li>
+                      <article [attr.aria-label]="'Status revision ' + revision.version">
+                        <h3>Version {{ revision.version }}</h3>
+                        <dl>
+                          <div>
+                            <dt>Status</dt>
+                            <dd>{{ statusText(revision.status) }}</dd>
+                          </div>
+                          <div>
+                            <dt>Changed at</dt>
+                            <dd>
+                              <time [attr.datetime]="revision.changed_at">{{
+                                revision.changed_at
+                              }}</time>
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Changed by</dt>
+                            <dd>
+                              @if (revision.changed_by_id; as actorId) {
+                                <a
+                                  tuiLink
+                                  routerLink="/operator/accounts"
+                                  [queryParams]="{ account: actorId }"
+                                  >{{ actorId }}</a
+                                >
+                              } @else {
+                                Not recorded
+                              }
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Operator access version</dt>
+                            <dd>{{ revision.operator_access_version ?? 'Not recorded' }}</dd>
+                          </div>
+                        </dl>
+                      </article>
+                    </li>
+                  } @empty {
+                    <li>No retained status revisions on this page.</li>
+                  }
+                </ol>
+                <div class="actions">
+                  @if (data.next_cursor; as cursor) {
+                    <button tuiButton type="button" (click)="historyPage(cursor)">
+                      Older status revisions
+                    </button>
+                  }
+                  @if (state.historyCursor !== null) {
+                    <button tuiButton type="button" (click)="historyPage(null)">
+                      First history page
+                    </button>
+                  }
+                  <button tuiButton type="button" (click)="retryHistory()">
+                    Refresh status history
+                  </button>
+                </div>
+              }
+            </section>
+          }
+        }
+      </section>
+    }
+  }
+</main>

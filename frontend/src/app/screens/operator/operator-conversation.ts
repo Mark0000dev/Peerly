@@ -8,7 +8,11 @@ import { TuiButton, TuiInput, TuiLink, TuiTextfield } from '@taiga-ui/core';
 import { ApiFailure } from '../../api-http';
 import { sessionOptions } from '../session';
 import { uuid } from './operator-contract';
-import { operatorDenied, retireOperatorFailure } from './operator-authority';
+import {
+  operatorDenied,
+  recheckOperatorAuthority,
+  retireOperatorFailure,
+} from './operator-authority';
 import { conversationRoute, operatorMessagesOptions } from './operator-conversation-contract';
 
 @Component({
@@ -158,7 +162,15 @@ export class OperatorConversation {
     if (this.actorId !== null && !this.denied) void this.messagesQuery.refetch();
   }
   protected recheck(): void {
-    void this.sessionQuery.refetch();
+    void recheckOperatorAuthority(
+      this.client,
+      this.ownerId,
+      () => this.ownerId,
+      () => this.sessionQuery.refetch(),
+    ).then(() => {
+      this.sync();
+      this.change.markForCheck();
+    });
   }
   protected cursorError(error: unknown): boolean {
     return error instanceof ApiFailure && error.status === 422;

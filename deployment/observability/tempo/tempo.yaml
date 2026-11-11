@@ -1,0 +1,33 @@
+# Tempo3.1.1 single-binary; explicit internal scheduler/query addresses.
+server:
+  http_listen_port: 3200
+  http_listen_address: 0.0.0.0
+  log_level: warn
+  log_format: json
+multitenancy_enabled: false
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+backend_scheduler:
+  local_work_path: /var/tempo/work
+overrides:
+  defaults:
+    compaction:
+      compaction_disabled: true
+usage_report:
+  reporting_enabled: false
+backend_worker:
+  backend_scheduler_addr: 127.0.0.1:9095
+querier:
+  frontend_worker:
+    frontend_address: 127.0.0.1:9095

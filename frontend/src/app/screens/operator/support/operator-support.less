@@ -1,0 +1,86 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  padding: 1rem;
+  padding-block-end: max(1rem, env(safe-area-inset-bottom));
+}
+
+header,
+form,
+section,
+article,
+li,
+dl,
+dl > div {
+  min-inline-size: 0;
+}
+
+form,
+section,
+dl,
+.filters,
+.filters > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.filters > div {
+  align-content: start;
+  gap: 0.5rem;
+}
+
+h1,
+h2,
+h3,
+p,
+dt,
+dd,
+a,
+button {
+  overflow-wrap: anywhere;
+}
+
+dd {
+  margin-inline: 0;
+  white-space: pre-wrap;
+}
+
+ul,
+ol {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+button {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: var(--tui-height-l);
+  max-inline-size: 100%;
+}
+
+@media (width >= 48rem) {
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width >= 80rem) {
+  .filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

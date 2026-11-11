@@ -14,7 +14,62 @@ export interface Api {
       readonly kind: Api['schemas']['OperatorAccountLinkKind'];
       readonly version: number | null;
     };
+    readonly Action:
+      | 'navigate'
+      | 'submit'
+      | 'retry'
+      | 'cancel'
+      | 'apply'
+      | 'dismiss'
+      | 'load_more'
+      | 'upload'
+      | 'permission_request'
+      | 'open_settings';
+    readonly ActionObserved: {
+      readonly action: Api['schemas']['Action'];
+      readonly action_id?: string | null;
+      readonly header: Api['schemas']['ObservationHeader'];
+      readonly outcome: Api['schemas']['ObservedOutcome'];
+    };
+    readonly ActionObservedBody: {
+      readonly action: Api['schemas']['Action'];
+      readonly action_id?: string | null;
+      readonly event_id: string;
+      readonly kind: 'action.observed';
+      readonly observed_at: string;
+      readonly outcome: Api['schemas']['ObservedOutcome'];
+      readonly screen: Api['schemas']['Screen'];
+    };
     readonly AiKind: 'clarify_goal' | 'suggest_subject' | 'assess_photo' | 'triage_report';
+    readonly ApiRoute:
+      | 'identity'
+      | 'verification'
+      | 'registration'
+      | 'profile'
+      | 'study'
+      | 'discovery'
+      | 'requests'
+      | 'conversations'
+      | 'media'
+      | 'support'
+      | 'notifications'
+      | 'ai'
+      | 'operator'
+      | 'other';
+    readonly AttemptSummary: {
+      readonly attempt_no: number;
+      readonly ended_at: string | null;
+      readonly failure: Api['schemas']['FailureCode'] | null;
+      readonly http_status: number | null;
+      readonly late_ack_at: string | null;
+      readonly late_message_id: number | null;
+      readonly lease_expired: boolean;
+      readonly lease_id: string;
+      readonly outcome: Api['schemas']['ResultKind'] | null;
+      readonly provider_message_id: number | null;
+      readonly retry_after_seconds: number | null;
+      readonly started_at: string;
+    };
     readonly AvailableFeedbackSummaryResponse: {
       readonly maybe: number;
       readonly no: number;
@@ -65,6 +120,15 @@ export interface Api {
       readonly operation_id: string;
       readonly outcome?: 'cancelled';
     };
+    readonly CanonicalSource: {
+      readonly actor_id: string;
+      readonly facts: Api['schemas']['OperatorEventFacts'];
+      readonly id: string;
+      readonly kind: Api['schemas']['OperatorEventKind'];
+      readonly membership_evidence?: Api['schemas']['MembershipEvidence'];
+      readonly notification_mode?: Api['schemas']['NotificationMode'] | null;
+      readonly occurred_at: string;
+    };
     readonly CanonicalSubjectRequest: { readonly id: string; readonly kind: 'canonical' };
     readonly CanonicalSubjectResponse: {
       readonly id: string;
@@ -75,6 +139,15 @@ export interface Api {
       readonly can_begin_onboarding: boolean;
       readonly can_use_student_features: boolean;
       readonly can_verify_student_email: boolean;
+    };
+    readonly CaptureMode: 'live' | 'backfill_umami';
+    readonly CapturedSource: {
+      readonly captured_at: string;
+      readonly id: string;
+      readonly kind: Api['schemas']['SourceKind'];
+      readonly mode: Api['schemas']['CaptureMode'];
+      readonly routing_version?: number;
+      readonly source: Api['schemas']['SelectedSource'];
     };
     readonly ChallengeResponse: {
       readonly expires_at: string;
@@ -138,6 +211,13 @@ export interface Api {
       readonly text: string;
     };
     readonly ClarifyResultResponse: { readonly suggestion: string };
+    readonly ClientObservationSource: {
+      readonly actor_id: string;
+      readonly event: Api['schemas']['studymate__domain__client_observations__events__Observation'];
+      readonly id: string;
+      readonly received_at: string;
+      readonly release_id: string | null;
+    };
     readonly CompleteGoalRequest: { readonly expected_version: number; readonly goal_id: string };
     readonly CompleteRegistrationRequest: { readonly context_id: string };
     readonly ConfirmedDeletionResponse: {
@@ -243,6 +323,22 @@ export interface Api {
       readonly source_version: number;
       readonly workflow_id: string;
     };
+    readonly DeliveryState: 'pending' | 'leased' | 'retry' | 'succeeded' | 'dead';
+    readonly DeliverySummary: {
+      readonly attempts: readonly Api['schemas']['AttemptSummary'][];
+      readonly created_at: string;
+      readonly delivered_at: string | null;
+      readonly destination_revision: number | null;
+      readonly id: string;
+      readonly last_failure: Api['schemas']['FailureCode'] | null;
+      readonly lease_until: string | null;
+      readonly next_attempt_at: string;
+      readonly projection_version: number;
+      readonly provider_message_id: number | null;
+      readonly sink: Api['schemas']['Sink'];
+      readonly state: Api['schemas']['DeliveryState'];
+      readonly updated_at: string;
+    };
     readonly DiscoveryCardResponse: {
       readonly about: string | null;
       readonly display_name: string;
@@ -293,6 +389,21 @@ export interface Api {
       readonly version: number;
     };
     readonly EmailDeliveryState: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled';
+    readonly ErrorCategory:
+      'network' | 'http' | 'timeout' | 'offline' | 'javascript' | 'render' | 'resource' | 'unknown';
+    readonly ErrorObserved: {
+      readonly category: Api['schemas']['ErrorCategory'];
+      readonly frames?: readonly Api['schemas']['PublicFrame'][];
+      readonly header: Api['schemas']['ObservationHeader'];
+    };
+    readonly ErrorObservedBody: {
+      readonly category: Api['schemas']['ErrorCategory'];
+      readonly event_id: string;
+      readonly frames?: readonly Api['schemas']['PublicFrameBody'][];
+      readonly kind: 'error.observed';
+      readonly observed_at: string;
+      readonly screen: Api['schemas']['Screen'];
+    };
     readonly ExpectedImageSource: {
       readonly content_type: Api['schemas']['PhotoContentType'];
       readonly sha256: string;
@@ -314,6 +425,16 @@ export interface Api {
       | 'account_unavailable'
       | 'stale_source'
       | 'executor_lost';
+    readonly FailureCode:
+      | 'transient'
+      | 'rate_limited'
+      | 'credentials_unavailable'
+      | 'destination_unavailable'
+      | 'invalid_response'
+      | 'timeout'
+      | 'lease_expired'
+      | 'cancelled'
+      | 'permanent';
     readonly FeedbackBody: {
       readonly again: Api['schemas']['StudyAgain'];
       readonly descriptors?: readonly Api['schemas']['FeedbackDescriptor'][];
@@ -390,6 +511,30 @@ export interface Api {
       readonly subject_id: string;
       readonly topic_note: string | null;
     };
+    readonly HttpMethod: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
+    readonly HttpObserved: {
+      readonly action_id?: string | null;
+      readonly duration_ms: number;
+      readonly header: Api['schemas']['ObservationHeader'];
+      readonly method: Api['schemas']['HttpMethod'];
+      readonly request_id?: string | null;
+      readonly route: Api['schemas']['ApiRoute'];
+      readonly status_class: Api['schemas']['StatusClass'];
+      readonly trace_id?: string | null;
+    };
+    readonly HttpObservedBody: {
+      readonly action_id?: string | null;
+      readonly duration_ms: number;
+      readonly event_id: string;
+      readonly kind: 'http.observed';
+      readonly method: Api['schemas']['HttpMethod'];
+      readonly observed_at: string;
+      readonly request_id?: string | null;
+      readonly route: Api['schemas']['ApiRoute'];
+      readonly screen: Api['schemas']['Screen'];
+      readonly status_class: Api['schemas']['StatusClass'];
+      readonly trace_id?: string | null;
+    };
     readonly IdentityResponse: {
       readonly account_id: string;
       readonly account_status: 'active' | 'banned';
@@ -456,6 +601,8 @@ export interface Api {
       readonly hidden_at: string | null;
       readonly visibility_version: number;
     };
+    readonly MembershipEvidence:
+      'not_applicable' | 'otp' | 'manual_placeholder' | 'manual_challenge' | 'unknown';
     readonly MembershipResponse: {
       readonly email: string;
       readonly revoked_at: string | null;
@@ -497,9 +644,40 @@ export interface Api {
       readonly sequence: number;
       readonly text: string | null;
     };
+    readonly Metric: 'route_ready' | 'lcp' | 'inp' | 'fcp' | 'ttfb' | 'cls';
     readonly NoStudyPromptResponse: { readonly outcome?: 'no_offer' };
     readonly NotificationMode: 'messages_and_requests' | 'all_updates';
-    readonly Observation: 'yes' | 'no' | 'uncertain';
+    readonly ObservationBatchBody: {
+      readonly events: readonly Api['schemas']['ObservationBody'][];
+      readonly expected_actor_id?: string | null;
+      readonly release_id?: string | null;
+      readonly schema_version: 1;
+    };
+    readonly ObservationBatchResponse: {
+      readonly accepted: readonly string[];
+      readonly duplicates: readonly string[];
+      readonly received_at: string;
+      readonly schema_version?: 1;
+    };
+    readonly ObservationBody:
+      | Api['schemas']['ScreenViewedBody']
+      | Api['schemas']['ActionObservedBody']
+      | Api['schemas']['PerformanceObservedBody']
+      | Api['schemas']['ErrorObservedBody']
+      | Api['schemas']['HttpObservedBody']
+      | Api['schemas']['QualityObservedBody'];
+    readonly ObservationHeader: {
+      readonly event_id: string;
+      readonly observed_at: string;
+      readonly screen: Api['schemas']['Screen'];
+    };
+    readonly ObservedOutcome:
+      | 'invoked'
+      | 'succeeded_observed'
+      | 'rejected_observed'
+      | 'failed_observed'
+      | 'cancelled_observed'
+      | 'unknown';
     readonly OfferHelpContext: { readonly help_version: number; readonly mode: 'offer_help' };
     readonly OfferedStudyPromptResponse: {
       readonly conversation_id: string;
@@ -555,10 +733,15 @@ export interface Api {
     readonly OperatorAction:
       | 'search_accounts'
       | 'search_events'
+      | 'search_audits'
       | 'search_reports'
+      | 'search_support_cases'
+      | 'search_delivery_sources'
+      | 'read_delivery_source'
       | 'read_support_case'
       | 'read_report'
       | 'read_media'
+      | 'read_chat_media'
       | 'read_event'
       | 'read_audit'
       | 'read_account'
@@ -626,6 +809,7 @@ export interface Api {
     };
     readonly OperatorAuditDetailResponse: {
       readonly action: Api['schemas']['OperatorAction'];
+      readonly actual_source_image_id: string | null;
       readonly actual_source_upload_id: string | null;
       readonly id: string;
       readonly occurred_at: string;
@@ -635,6 +819,9 @@ export interface Api {
       readonly origin: Api['schemas']['OperatorEventOriginResponse'];
       readonly outcome: Api['schemas']['OperatorAuditOutcome'];
       readonly query_fingerprinted: boolean;
+      readonly requested_chat_attempt_id: string | null;
+      readonly requested_chat_kind: Api['schemas']['OperatorChatMediaKind'] | null;
+      readonly requested_chat_owner_id: string | null;
       readonly requested_id: string | null;
       readonly requested_kind: Api['schemas']['OperatorResourceKind'] | null;
       readonly requested_media_attempt_id: string | null;
@@ -646,6 +833,132 @@ export interface Api {
     readonly OperatorAuditResultRefResponse: {
       readonly id: string;
       readonly kind: Api['schemas']['OperatorResourceKind'];
+    };
+    readonly OperatorAuditsResponse: {
+      readonly audits: readonly Api['schemas']['OperatorAuditDetailResponse'][];
+      readonly next_cursor: string | null;
+      readonly search_anchor_at: string;
+    };
+    readonly OperatorChatImageAttemptOutcome:
+      'processing' | 'ready' | 'retry' | 'rejected' | 'stale' | 'interrupted';
+    readonly OperatorChatImageAttemptResponse: {
+      readonly display_height: number | null;
+      readonly display_sha256: string | null;
+      readonly display_size: number | null;
+      readonly display_width: number | null;
+      readonly failure: Api['schemas']['ChatImageFailure'] | null;
+      readonly finished_at: string | null;
+      readonly id: string;
+      readonly image_id: string;
+      readonly lease_until: string;
+      readonly next_attempt_at: string | null;
+      readonly number: number;
+      readonly outcome: Api['schemas']['OperatorChatImageAttemptOutcome'];
+      readonly started_at: string;
+    };
+    readonly OperatorChatImageHistoryResponse: {
+      readonly anchor_version: number;
+      readonly attempt_observation?: 'current_recorded_not_revision_time';
+      readonly attempts_current: readonly Api['schemas']['OperatorChatImageAttemptResponse'][];
+      readonly matching_client_operation:
+        Api['schemas']['OperatorChatImageMatchingOperationResponse'] | null;
+      readonly next_cursor: string | null;
+      readonly observed_at: string;
+      readonly operation_observation?: 'current_matching_client_id_no_attachment_proof';
+      readonly revisions: readonly Api['schemas']['OperatorChatImageRevisionResponse'][];
+      readonly root_observation?: 'current_recorded_not_revision_time';
+      readonly upload: Api['schemas']['OperatorChatImageRootResponse'];
+    };
+    readonly OperatorChatImageMatchingOperationResponse: {
+      readonly author_id: string;
+      readonly cancelled_at: string | null;
+      readonly client_message_id: string;
+      readonly conversation_id: string;
+      readonly id: string;
+      readonly message_id: string | null;
+      readonly state: Api['schemas']['MessageOutcome'];
+    };
+    readonly OperatorChatImageRevisionResponse: {
+      readonly account_id: string;
+      readonly attempt_id: string | null;
+      readonly client_message_id: string;
+      readonly conversation_id: string;
+      readonly failure: Api['schemas']['ChatImageFailure'] | null;
+      readonly image_id: string;
+      readonly ready_attempt_outcome: Api['schemas']['OperatorChatImageAttemptOutcome'] | null;
+      readonly state: Api['schemas']['ChatImageState'];
+      readonly updated_at: string;
+      readonly version: number;
+    };
+    readonly OperatorChatImageRootResponse: {
+      readonly account_id: string;
+      readonly client_message_id: string;
+      readonly conversation_id: string;
+      readonly created_at: string;
+      readonly current_revision: Api['schemas']['OperatorChatImageRevisionResponse'];
+      readonly current_version: number;
+      readonly high_id: string;
+      readonly id: string;
+      readonly low_id: string;
+      readonly processing_expires_at: string;
+      readonly source_content_type: string;
+      readonly source_metadata?: 'declared_not_object_verified';
+      readonly source_sha256: string;
+      readonly source_size: number;
+      readonly upload_expires_at: string;
+    };
+    readonly OperatorChatImageUploadsResponse: {
+      readonly account_id: string;
+      readonly anchor_created_at: string | null;
+      readonly anchor_image_id: string | null;
+      readonly next_cursor: string | null;
+      readonly observed_at: string;
+      readonly pagination?: 'anchored_search_not_commit_order';
+      readonly uploads: readonly Api['schemas']['OperatorChatImageRootResponse'][];
+    };
+    readonly OperatorChatMediaKind: 'original' | 'display';
+    readonly OperatorConversationSummaryResponse: {
+      readonly accepted_request_version: number;
+      readonly high_id: string;
+      readonly id: string;
+      readonly low_id: string;
+      readonly relationship_id: string;
+      readonly request_id: string;
+    };
+    readonly OperatorConversationsResponse: {
+      readonly account_id: string;
+      readonly conversations: readonly Api['schemas']['OperatorConversationSummaryResponse'][];
+      readonly next_cursor: string | null;
+    };
+    readonly OperatorDisclosuresResponse: {
+      readonly account_id: string;
+      readonly ack_scope?: 'CURRENT_ACK_ROWS_FOR_PAGE_ONLY';
+      readonly acknowledgements: readonly Api['schemas']['OperatorRequestAcknowledgementResponse'][];
+      readonly anchor_created_at: string | null;
+      readonly anchor_disclosure_id: string | null;
+      readonly disclosure_representation?: 'technical_disclosure_not_ack';
+      readonly disclosures: readonly Api['schemas']['OperatorRetainedDisclosureResponse'][];
+      readonly next_cursor: string | null;
+      readonly observed_at: string;
+      readonly pagination?: 'anchored_search_not_commit_order';
+      readonly request: Api['schemas']['OperatorRequestRootResponse'];
+      readonly root_observation?: 'current_recorded_not_revision_snapshot';
+    };
+    readonly OperatorEventFacts: {
+      readonly ai_kind?: Api['schemas']['AiKind'] | null;
+      readonly ai_reason?: Api['schemas']['Failure'] | null;
+      readonly ai_state?: Api['schemas']['JobState'] | null;
+      readonly blocked?: boolean | null;
+      readonly feedback_again?: Api['schemas']['StudyAgain'] | null;
+      readonly lifecycle_operation?: Api['schemas']['LifecycleOperation'] | null;
+      readonly message_state?: Api['schemas']['MessageOutcome'] | null;
+      readonly onboarding_task?: Api['schemas']['OnboardingTask'] | null;
+      readonly operator_action?: Api['schemas']['OperatorAction'] | null;
+      readonly passed?: boolean | null;
+      readonly request_state?: Api['schemas']['RequestState'] | null;
+      readonly shared_learning?: boolean | null;
+      readonly study_answer?: Api['schemas']['StudyAnswer'] | null;
+      readonly topic_present?: boolean | null;
     };
     readonly OperatorEventFactsResponse: {
       readonly ai_kind: Api['schemas']['AiKind'] | null;
@@ -723,6 +1036,77 @@ export interface Api {
       readonly next_cursor: string | null;
       readonly pagination?: 'anchored_search_not_commit_order';
       readonly search_anchor_at: string;
+    };
+    readonly OperatorFeedbackDirection: 'given' | 'received';
+    readonly OperatorFeedbackHistoryResponse: {
+      readonly anchor_version: number;
+      readonly feedback: Api['schemas']['OperatorFeedbackRootResponse'];
+      readonly next_cursor: string | null;
+      readonly observed_at: string;
+      readonly revisions: readonly Api['schemas']['OperatorFeedbackRevisionResponse'][];
+      readonly root_observation?: 'current_recorded_not_revision_snapshot';
+    };
+    readonly OperatorFeedbackRemovalResponse: {
+      readonly feedback_id: string;
+      readonly id: string;
+      readonly kind: string;
+      readonly operator_access_active: boolean;
+      readonly operator_access_version: number;
+      readonly operator_id: string;
+      readonly origin: Api['schemas']['OperatorEventOriginResponse'];
+      readonly reason: string;
+      readonly removed_at: string;
+      readonly source_version: number;
+    };
+    readonly OperatorFeedbackRemovalsResponse: {
+      readonly anchor_removal_id: string | null;
+      readonly anchor_removed_at: string | null;
+      readonly feedback: Api['schemas']['OperatorFeedbackRootResponse'];
+      readonly next_cursor: string | null;
+      readonly observed_at: string;
+      readonly pagination?: 'anchored_search_not_commit_order';
+      readonly removals: readonly Api['schemas']['OperatorFeedbackRemovalResponse'][];
+      readonly root_observation?: 'current_recorded_not_revision_snapshot';
+    };
+    readonly OperatorFeedbackRevisionResponse: {
+      readonly again: string;
+      readonly changed_at: string;
+      readonly conversation_id: string;
+      readonly descriptors: readonly string[];
+      readonly feedback_id: string;
+      readonly high_id: string;
+      readonly high_message_id: string | null;
+      readonly low_id: string;
+      readonly low_message_id: string | null;
+      readonly origin: Api['schemas']['OperatorEventOriginResponse'];
+      readonly partner_id: string;
+      readonly representation?: 'raw_recorded_feedback_not_current_content_decoder';
+      readonly reviewer_id: string;
+      readonly team_note: string | null;
+      readonly version: number;
+      readonly worked_answer: string;
+      readonly worked_confirmation_id: string;
+    };
+    readonly OperatorFeedbackRootResponse: {
+      readonly conversation_id: string;
+      readonly current_changed_at: string;
+      readonly current_removal_id: string | null;
+      readonly current_version: number;
+      readonly high_id: string;
+      readonly id: string;
+      readonly low_id: string;
+      readonly partner_id: string;
+      readonly removal_reference?: 'pointer_not_all_history';
+      readonly reviewer_id: string;
+    };
+    readonly OperatorFeedbackRootsResponse: {
+      readonly account_id: string;
+      readonly anchor_changed_at: string | null;
+      readonly anchor_feedback_id: string | null;
+      readonly feedback: readonly Api['schemas']['OperatorFeedbackRootResponse'][];
+      readonly next_cursor: string | null;
+      readonly observed_at: string;
+      readonly pagination?: 'current_pointer_anchored_search_not_creation_or_commit_snapshot';
     };
     readonly OperatorGoalHistoryResponse: {
       readonly anchor_version: number;
@@ -944,6 +1328,92 @@ export interface Api {
       readonly reports: readonly Api['schemas']['OperatorReportSummaryResponse'][];
       readonly search_anchor_at: string;
     };
+    readonly OperatorRequestAcknowledgementResponse: {
+      readonly acknowledged_at: string;
+      readonly disclosure: Api['schemas']['OperatorRequestDisclosureResponse'];
+      readonly id: string;
+      readonly origin: Api['schemas']['OperatorRequestOriginResponse'];
+      readonly request_id: string;
+      readonly stored_version: number;
+      readonly viewer_id: string;
+    };
+    readonly OperatorRequestDirection: 'sent' | 'received';
+    readonly OperatorRequestDisclosureResponse: {
+      readonly created_at: string;
+      readonly id: string;
+      readonly origin: Api['schemas']['OperatorRequestOriginResponse'];
+      readonly request_id: string;
+      readonly stored_version: number;
+      readonly viewer_id: string;
+    };
+    readonly OperatorRequestHistoryResponse: {
+      readonly ack_scope?: 'page_revisions_only';
+      readonly acknowledgements: readonly Api['schemas']['OperatorRequestAcknowledgementResponse'][];
+      readonly anchor_version: number;
+      readonly disclosure_scope?: 'ack_linked_disclosures_not_all_views';
+      readonly next_cursor: string | null;
+      readonly note: string | null;
+      readonly observed_at: string;
+      readonly preview: Api['schemas']['OperatorRequestPreviewResponse'];
+      readonly request: Api['schemas']['OperatorRequestRootResponse'];
+      readonly request_text: string;
+      readonly revisions: readonly Api['schemas']['OperatorRequestRevisionResponse'][];
+      readonly root_observation?: 'current_recorded_not_revision_snapshot';
+    };
+    readonly OperatorRequestOriginResponse: {
+      readonly action_id: string | null;
+      readonly http_request_id: string | null;
+      readonly representation?: 'raw_recorded_source_correlation';
+      readonly span_id: string | null;
+      readonly trace_id: string | null;
+    };
+    readonly OperatorRequestPreviewResponse: {
+      readonly created_at: string;
+      readonly id: string;
+      readonly mode: Api['schemas']['DiscoveryMode'];
+      readonly recipient_goal_id: string | null;
+      readonly recipient_goal_version: number | null;
+      readonly recipient_help_version: number | null;
+      readonly recipient_id: string;
+      readonly representation?: 'raw_stored_json_object_not_current_request_schema';
+      readonly sender_goal_id: string | null;
+      readonly sender_goal_version: number | null;
+      readonly sender_help_version: number | null;
+      readonly sender_id: string;
+      readonly source_json_raw: string;
+      readonly subject_id: string;
+    };
+    readonly OperatorRequestRevisionResponse: {
+      readonly changed_at: string;
+      readonly conversation_id: string | null;
+      readonly decline_until: string | null;
+      readonly request_id: string;
+      readonly state: Api['schemas']['RequestState'];
+      readonly version: number;
+    };
+    readonly OperatorRequestRootResponse: {
+      readonly current_version: number;
+      readonly expires_at: string;
+      readonly id: string;
+      readonly mode: Api['schemas']['DiscoveryMode'];
+      readonly origin: Api['schemas']['OperatorRequestOriginResponse'];
+      readonly preview_id: string;
+      readonly recipient_id: string;
+      readonly relationship_id: string;
+      readonly sender_id: string;
+      readonly sent_at: string;
+      readonly state: Api['schemas']['RequestState'];
+      readonly subject_id: string;
+    };
+    readonly OperatorRequestsResponse: {
+      readonly account_id: string;
+      readonly anchor_request_id: string | null;
+      readonly anchor_sent_at: string | null;
+      readonly next_cursor: string | null;
+      readonly observed_at: string;
+      readonly pagination?: 'anchored_search_not_commit_order';
+      readonly requests: readonly Api['schemas']['OperatorRequestRootResponse'][];
+    };
     readonly OperatorResourceKind:
       | 'account'
       | 'conversation'
@@ -952,7 +1422,19 @@ export interface Api {
       | 'audit'
       | 'report'
       | 'profile_media'
-      | 'support_case';
+      | 'chat_media'
+      | 'support_case'
+      | 'delivery_source';
+    readonly OperatorRetainedDisclosureResponse: {
+      readonly created_at: string;
+      readonly id: string;
+      readonly origin: Api['schemas']['OperatorRequestOriginResponse'];
+      readonly recipient_id: string;
+      readonly request_id: string;
+      readonly sender_id: string;
+      readonly stored_version: number;
+      readonly viewer_id: string;
+    };
     readonly OperatorSourceKind:
       | 'account_lifecycle_revision'
       | 'account'
@@ -977,6 +1459,25 @@ export interface Api {
       | 'study_prompt'
       | 'notification_preference_revision'
       | 'support_case_revision';
+    readonly OperatorSupportHistoryResponse: {
+      readonly anchor_version: number;
+      readonly case_id: string;
+      readonly next_cursor: string | null;
+      readonly revisions: readonly Api['schemas']['OperatorSupportHistoryRevisionResponse'][];
+    };
+    readonly OperatorSupportHistoryRevisionResponse: {
+      readonly changed_at: string;
+      readonly changed_by_id: string | null;
+      readonly operator_access_version: number | null;
+      readonly status: Api['schemas']['SupportStatus'];
+      readonly version: number;
+    };
+    readonly OperatorSupportInboxResponse: {
+      readonly cases: readonly Api['schemas']['OperatorSupportSummaryResponse'][];
+      readonly metadata_anchor: string;
+      readonly next_cursor: string | null;
+      readonly status_semantics?: 'current_at_each_request';
+    };
     readonly OperatorSupportResponse: {
       readonly actor_id: string | null;
       readonly details?: string | null;
@@ -984,6 +1485,15 @@ export interface Api {
       readonly receipt: Api['schemas']['SupportReceiptResponse'];
       readonly reply_address: string;
       readonly topic: Api['schemas']['SupportTopic'];
+    };
+    readonly OperatorSupportSummaryResponse: {
+      readonly actor_id: string | null;
+      readonly case_id: string;
+      readonly changed_at: string;
+      readonly received_at: string;
+      readonly status: Api['schemas']['SupportStatus'];
+      readonly topic: Api['schemas']['SupportTopic'];
+      readonly version: number;
     };
     readonly OwnBlocksResponse: {
       readonly next_cursor: string | null;
@@ -1014,6 +1524,19 @@ export interface Api {
       readonly state?: 'pending';
       readonly workflow_id: string;
     };
+    readonly PerformanceObserved: {
+      readonly header: Api['schemas']['ObservationHeader'];
+      readonly metric: Api['schemas']['Metric'];
+      readonly value: number;
+    };
+    readonly PerformanceObservedBody: {
+      readonly event_id: string;
+      readonly kind: 'performance.observed';
+      readonly metric: Api['schemas']['Metric'];
+      readonly observed_at: string;
+      readonly screen: Api['schemas']['Screen'];
+      readonly value: number;
+    };
     readonly PhotoContentType: 'image/jpeg' | 'image/png';
     readonly PhotoFailure:
       | 'invalid_image'
@@ -1036,9 +1559,9 @@ export interface Api {
       readonly source: Api['schemas']['ResourceSourceRequest'];
     };
     readonly PhotoResultResponse: {
-      readonly blurred: Api['schemas']['Observation'];
-      readonly face_visible: Api['schemas']['Observation'];
-      readonly multiple_people: Api['schemas']['Observation'];
+      readonly blurred: Api['schemas']['studymate__domain__ai__tasks__Observation'];
+      readonly face_visible: Api['schemas']['studymate__domain__ai__tasks__Observation'];
+      readonly multiple_people: Api['schemas']['studymate__domain__ai__tasks__Observation'];
     };
     readonly PhotoResumeItemResponse: {
       readonly source_sha256: string;
@@ -1183,6 +1706,16 @@ export interface Api {
       readonly hidden_at: string | null;
       readonly version: number;
     };
+    readonly PublicFrame: {
+      readonly asset_id: number;
+      readonly column: number;
+      readonly line: number;
+    };
+    readonly PublicFrameBody: {
+      readonly asset_id: number;
+      readonly column: number;
+      readonly line: number;
+    };
     readonly PublicPhotoResponse: { readonly display_url: string; readonly version: number };
     readonly PublicProfileResponse: {
       readonly about: string | null;
@@ -1203,6 +1736,21 @@ export interface Api {
       readonly reference: Api['schemas']['PolicyReferenceResponse'];
       readonly title: string;
     };
+    readonly QualityObserved: {
+      readonly count: number;
+      readonly header: Api['schemas']['ObservationHeader'];
+      readonly reason: Api['schemas']['QualityReason'];
+    };
+    readonly QualityObservedBody: {
+      readonly count: number;
+      readonly event_id: string;
+      readonly kind: 'quality.observed';
+      readonly observed_at: string;
+      readonly reason: Api['schemas']['QualityReason'];
+      readonly screen: Api['schemas']['Screen'];
+    };
+    readonly QualityReason:
+      'overflow' | 'invalid' | 'expired' | 'rejected' | 'exhausted' | 'unavailable';
     readonly ReadyImageMetadata: {
       readonly height: number;
       readonly size: number;
@@ -1327,6 +1875,7 @@ export interface Api {
       readonly version: number;
     };
     readonly RestoreRequirement: 'photo' | 'study_context';
+    readonly ResultKind: 'accepted' | 'retryable' | 'ambiguous' | 'permanent';
     readonly SaveGoalRequest: {
       readonly context?: string | null;
       readonly expected_goal_id?: string | null;
@@ -1349,6 +1898,34 @@ export interface Api {
       readonly task?: Api['schemas']['OnboardingTask'];
       readonly year_label?: string | null;
     };
+    readonly Screen:
+      | 'welcome'
+      | 'verification'
+      | 'onboarding'
+      | 'discover'
+      | 'requests'
+      | 'chats'
+      | 'conversation'
+      | 'profile'
+      | 'study'
+      | 'notifications'
+      | 'support'
+      | 'help'
+      | 'terms'
+      | 'privacy'
+      | 'operator'
+      | 'unknown';
+    readonly ScreenViewed: { readonly header: Api['schemas']['ObservationHeader'] };
+    readonly ScreenViewedBody: {
+      readonly event_id: string;
+      readonly kind: 'screen.viewed';
+      readonly observed_at: string;
+      readonly screen: Api['schemas']['Screen'];
+    };
+    readonly SelectedSource:
+      | Api['schemas']['CanonicalSource']
+      | Api['schemas']['ClientObservationSource']
+      | Api['schemas']['SupportCaseSource'];
     readonly SendMessageBody: {
       readonly client_message_id: string;
       readonly image_id?: string | null;
@@ -1384,6 +1961,28 @@ export interface Api {
       readonly topic: string | null;
       readonly version: number;
     };
+    readonly Sink: 'umami' | 'telegram_support';
+    readonly SourceDetailResponse: {
+      readonly deliveries: readonly Api['schemas']['DeliverySummary'][];
+      readonly source: Api['schemas']['CapturedSource'];
+      readonly summary: Api['schemas']['SourceSummary'];
+    };
+    readonly SourceKind: 'canonical' | 'client_observation' | 'support_case';
+    readonly SourceSummary: {
+      readonly actor_id: string | null;
+      readonly captured_at: string;
+      readonly exclusion_reason: string | null;
+      readonly id: string;
+      readonly kind: Api['schemas']['SourceKind'];
+      readonly materialized_at: string | null;
+      readonly mode: Api['schemas']['CaptureMode'];
+      readonly original_id: string;
+      readonly routing_version: number;
+    };
+    readonly SourcesResponse: {
+      readonly next_cursor: string | null;
+      readonly sources: readonly Api['schemas']['SourceSummary'][];
+    };
     readonly StartEmailRequest: { readonly email: string; readonly resend_of?: string | null };
     readonly StartImageBody: {
       readonly client_message_id: string;
@@ -1397,6 +1996,7 @@ export interface Api {
       readonly sha256: string;
       readonly size_bytes: number;
     };
+    readonly StatusClass: '1xx' | '2xx' | '3xx' | '4xx' | '5xx' | 'network' | 'cancelled';
     readonly StudyAgain: 'yes' | 'maybe' | 'no';
     readonly StudyAnswer: 'yes' | 'not_yet' | 'did_not_work_out';
     readonly StudyOutcomeBody: {
@@ -1437,6 +2037,12 @@ export interface Api {
       readonly details?: string | null;
       readonly message: string;
       readonly reply_address: string;
+      readonly topic: Api['schemas']['SupportTopic'];
+    };
+    readonly SupportCaseSource: {
+      readonly actor_id: string | null;
+      readonly id: string;
+      readonly received_at: string;
       readonly topic: Api['schemas']['SupportTopic'];
     };
     readonly SupportPreparationBody: Readonly<Record<string, never>>;
@@ -1484,6 +2090,14 @@ export interface Api {
       readonly request_id: string;
       readonly stored_version: number;
     };
+    readonly studymate__domain__ai__tasks__Observation: 'yes' | 'no' | 'uncertain';
+    readonly studymate__domain__client_observations__events__Observation:
+      | Api['schemas']['ScreenViewed']
+      | Api['schemas']['ActionObserved']
+      | Api['schemas']['PerformanceObserved']
+      | Api['schemas']['ErrorObserved']
+      | Api['schemas']['HttpObserved']
+      | Api['schemas']['QualityObserved'];
   };
   readonly paths: {
     readonly '/api/health': {
@@ -2990,6 +3604,153 @@ export interface Api {
         };
       };
     };
+    readonly '/api/v1/operator/accounts/{account_id}/chat-image-uploads': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'query:conversation_id'?: string | null;
+          readonly 'query:state'?: Api['schemas']['ChatImageState'] | null;
+          readonly 'query:created_from'?: string | null;
+          readonly 'query:created_before'?: string | null;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorChatImageUploadsResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/chat-image-uploads/{image_id}/attempts/{attempt_id}/{kind}': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'path:image_id': string;
+          readonly 'path:attempt_id': string;
+          readonly 'path:kind': Api['schemas']['OperatorChatMediaKind'];
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Readonly<Blob>;
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/chat-image-uploads/{image_id}/history': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'path:image_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorChatImageHistoryResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/connection-requests': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'query:peer_id'?: string | null;
+          readonly 'query:direction'?: Api['schemas']['OperatorRequestDirection'] | null;
+          readonly 'query:mode'?: Api['schemas']['DiscoveryMode'] | null;
+          readonly 'query:state'?: Api['schemas']['RequestState'] | null;
+          readonly 'query:sent_from'?: string | null;
+          readonly 'query:sent_before'?: string | null;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorRequestsResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/connection-requests/{request_id}/disclosures': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'path:request_id': string;
+          readonly 'query:viewer_id'?: string | null;
+          readonly 'query:stored_version'?: number | null;
+          readonly 'query:created_from'?: string | null;
+          readonly 'query:created_before'?: string | null;
+          readonly 'query:disclosure_id'?: string | null;
+          readonly 'query:acknowledgement_id'?: string | null;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorDisclosuresResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/connection-requests/{request_id}/history': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'path:request_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorRequestHistoryResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/conversations': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorConversationsResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
     readonly '/api/v1/operator/accounts/{account_id}/goals': {
       readonly get: {
         readonly parameters: {
@@ -3039,6 +3800,67 @@ export interface Api {
         readonly body: undefined;
         readonly responses: {
           readonly '200': Api['schemas']['OperatorHelpHistoryResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/peer-feedback': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'query:peer_id'?: string | null;
+          readonly 'query:direction'?: Api['schemas']['OperatorFeedbackDirection'] | null;
+          readonly 'query:removed'?: boolean | null;
+          readonly 'query:changed_from'?: string | null;
+          readonly 'query:changed_before'?: string | null;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorFeedbackRootsResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/peer-feedback/{feedback_id}/history': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'path:feedback_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorFeedbackHistoryResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/peer-feedback/{feedback_id}/removals': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'path:feedback_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorFeedbackRemovalsResponse'];
           readonly '401': Api['schemas']['ProblemResponse'];
           readonly '403': Api['schemas']['ProblemResponse'];
           readonly '404': Api['schemas']['ProblemResponse'];
@@ -3126,12 +3948,61 @@ export interface Api {
         };
       };
     };
+    readonly '/api/v1/operator/audits': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'query:operator_id'?: string | null;
+          readonly 'query:action'?: Api['schemas']['OperatorAction'] | null;
+          readonly 'query:requested_kind'?: Api['schemas']['OperatorResourceKind'] | null;
+          readonly 'query:requested_id'?: string | null;
+          readonly 'query:http_request_id'?: string | null;
+          readonly 'query:action_id'?: string | null;
+          readonly 'query:trace_id'?: string | null;
+          readonly 'query:occurred_from'?: string | null;
+          readonly 'query:occurred_before'?: string | null;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorAuditsResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
     readonly '/api/v1/operator/audits/{audit_id}': {
       readonly get: {
         readonly parameters: { readonly 'path:audit_id': string };
         readonly body: undefined;
         readonly responses: {
           readonly '200': Api['schemas']['OperatorAuditDetailResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/cases': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'query:case_id'?: string | null;
+          readonly 'query:actor_id'?: string | null;
+          readonly 'query:topic'?: Api['schemas']['SupportTopic'] | null;
+          readonly 'query:status'?: Api['schemas']['SupportStatus'] | null;
+          readonly 'query:anonymous'?: boolean | null;
+          readonly 'query:received_from'?: string | null;
+          readonly 'query:received_before'?: string | null;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorSupportInboxResponse'];
           readonly '401': Api['schemas']['ProblemResponse'];
           readonly '403': Api['schemas']['ProblemResponse'];
           readonly '404': Api['schemas']['ProblemResponse'];
@@ -3151,6 +4022,24 @@ export interface Api {
           readonly '403': Api['schemas']['ProblemResponse'];
           readonly '404': Api['schemas']['ProblemResponse'];
           readonly '409': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/cases/{case_id}/history': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:case_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorSupportHistoryResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
           readonly '422': Api['schemas']['ProblemResponse'];
           readonly '500': Api['schemas']['ProblemResponse'];
           readonly '503': Api['schemas']['ProblemResponse'];
@@ -3187,6 +4076,40 @@ export interface Api {
         readonly body: undefined;
         readonly responses: {
           readonly '200': Api['schemas']['OperatorMessagesResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/delivery-sources': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'query:actor_id'?: string | null;
+          readonly 'query:kind'?: Api['schemas']['SourceKind'] | null;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['SourcesResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/delivery-sources/{source_id}': {
+      readonly get: {
+        readonly parameters: { readonly 'path:source_id': string };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['SourceDetailResponse'];
           readonly '401': Api['schemas']['ProblemResponse'];
           readonly '403': Api['schemas']['ProblemResponse'];
           readonly '404': Api['schemas']['ProblemResponse'];
@@ -3679,6 +4602,28 @@ export interface Api {
           readonly '403': Api['schemas']['ProblemResponse'];
           readonly '404': Api['schemas']['ProblemResponse'];
           readonly '409': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '429': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/telemetry/events': {
+      readonly post: {
+        readonly parameters: {
+          readonly 'header:origin'?: string | null;
+          readonly 'header:x-csrf-token'?: string | null;
+          readonly 'header:idempotency-key': string;
+        };
+        readonly body: Api['schemas']['ObservationBatchBody'];
+        readonly responses: {
+          readonly '200': Api['schemas']['ObservationBatchResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '409': Api['schemas']['ProblemResponse'];
+          readonly '413': Api['schemas']['ProblemResponse'];
+          readonly '415': Api['schemas']['ProblemResponse'];
           readonly '422': Api['schemas']['ProblemResponse'];
           readonly '429': Api['schemas']['ProblemResponse'];
           readonly '500': Api['schemas']['ProblemResponse'];

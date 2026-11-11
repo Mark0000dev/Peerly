@@ -1,4 +1,5 @@
-import { Component } from '@angular/core';
+import { Component, afterNextRender, inject } from '@angular/core';
+import { ObservationRelease } from './observability/observation-release';
 import { RouterOutlet } from '@angular/router';
 import { TuiRoot } from '@taiga-ui/core';
 
@@ -7,4 +8,11 @@ import { TuiRoot } from '@taiga-ui/core';
   imports: [RouterOutlet, TuiRoot],
   template: '<tui-root><router-outlet /></tui-root>',
 })
-export class App {}
+export class App {
+  private readonly release = inject(ObservationRelease);
+  public constructor() {
+    afterNextRender(() => {
+      void this.release.load();
+    });
+  }
+}

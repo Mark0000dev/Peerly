@@ -1,0 +1,40 @@
+# OPTIONAL staging overlay; never deploy on the capacity-exhausted monitoring host.
+# Parent must provision a dedicated bounded persistent local filesystem first.
+services:
+  tempo-storage-preflight:
+    image: python:3.12-alpine@sha256:e064671ca452259bab50e8e2c7bd896e39e9a343bb06ca25234adf6fe18d0fc7
+    user: '10001:10001'
+    command:
+      - python
+      - -B
+      - /etc/tempo/storage_budget.py
+      - --cap-bytes
+      - ${PEERLY_TEMPO_WAL_CAP_BYTES:?Set approved bounded filesystem byte budget}
+      - --minimum-free-bytes
+      - ${PEERLY_TEMPO_WAL_MIN_FREE_BYTES:-268435456}
+    volumes:
+      - ./tempo/storage_budget.py:/etc/tempo/storage_budget.py:ro
+      - ${PEERLY_TEMPO_DATA_DIR:?Set bounded persistent staging Tempo filesystem}:/var/tempo:ro
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: 0.1
+    pids_limit: 32
+    restart: 'no'
+  tempo:
+    command: ['-target=all', '-config.file=/etc/tempo/tempo.yaml', '-config.expand-env=true']
+    depends_on:
+      tempo-storage-preflight:
+        condition: service_completed_successfully
+    environment:
+      PEERLY_TEMPO_S3_ENDPOINT: ${PEERLY_TEMPO_S3_ENDPOINT:?Set actual host:port without scheme/path}
+      PEERLY_TEMPO_S3_REGION: ${PEERLY_TEMPO_S3_REGION:?Set actual storage region}
+      PEERLY_TEMPO_S3_BUCKET: ${PEERLY_TEMPO_S3_BUCKET:?Set owner-approved telemetry bucket}
+      PEERLY_TEMPO_S3_PREFIX: ${PEERLY_TEMPO_S3_PREFIX:?Set owner-approved isolated telemetry prefix}
+      PEERLY_TEMPO_S3_ACCESS_KEY: ${PEERLY_TEMPO_S3_ACCESS_KEY:?Parent supplies scoped access identifier}
+      PEERLY_TEMPO_S3_SECRET_KEY: ${PEERLY_TEMPO_S3_SECRET_KEY:?Parent supplies scoped storage secret}
+      PEERLY_TEMPO_S3_FORCE_PATH_STYLE: ${PEERLY_TEMPO_S3_FORCE_PATH_STYLE:-false}
+    volumes:
+      - ./tempo/tempo-s3.yaml:/etc/tempo/tempo.yaml:ro

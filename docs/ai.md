@@ -1,0 +1,77 @@
+# MVP AI execution design
+
+## Knowledge-area semantics (approved 9 November 2026)
+
+The MVP catalogue contains broad knowledge areas, not APU course enrolments or completed modules. Existing `subject`, `subject_id` and `help_subjects` names are stable wire/storage names for these areas. Selecting “can help” is self-declared; institutional email verification establishes membership, never expertise, course completion or grades.
+
+A goal uses its chosen area plus optional `topic` (80 characters) and `context` (240 characters). A helper may select up to five canonical areas, each with an optional `topic_note` (80 characters). For example, choose Databases and describe SQL joins in the topic/note; IDB, SSCC or BMK2 may appear as optional task/module context. Helpers with workplace knowledge and students from other courses remain eligible under the same existing account/source/pair guards.
+
+Discovery matches equal canonical area IDs. Different topics or module contexts do not prevent an area match; the literal same-topic hint does not certify competence. Different area IDs and free-form custom labels never become equal through matching text or AI advice. Custom goals remain supported but have no exact canonical match until explicitly changed by their owner. Aliases are true equivalent labels only, not course-to-area or technology-to-area mappings. Future course mappings/AI suggestions are advisory, never permission or verified qualification. No taxonomy graph, multi-tag expansion, API rename or migration is introduced.
+
+Status: accepted scope/architecture baseline from the owner, 7 November 2026; not implemented or capacity-validated. AI is part of MVP delivery, but not a prerequisite for ordinary product actions. During MVP use one Codex executor authenticated through the owner's personal subscription (owner calls it “Max”); this is an owner-provided access arrangement, not a verified official plan name or capacity guarantee. Do not use direct model API calls in MVP. Replace the infrastructure adapter with a normal API provider after MVP without changing product use cases or job contracts.
+
+## Product scope
+
+| Kind              | Trigger and result                                                                                                                 | Required fallback                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `clarify_goal`    | Explicit Make it clearer action on deliberately submitted text; return an editable suggestion without invented claims              | Preserve original; ordinary save and deterministic request templates work                 |
+| `suggest_subject` | Explicit request to map a custom label against a supplied bounded catalogue subset; return canonical IDs or no suitable suggestion | Manual catalogue search/custom label; confirmation always required                        |
+| `assess_photo`    | Optional advisory analysis of an owned profile photo; return blur/face-visibility/multiple-person observations with uncertainty    | Upload/onboarding continue; user may use the photo; separate moderation rules still apply |
+| `triage_report`   | Internal prioritisation of a submitted report and its selected evidence, not unrestricted chat history                             | Ordinary moderator queue; a human makes punitive decisions                                |
+
+Deliver all four in MVP; demonstrate goal clarification end to end first. No compatibility scores, identity verification, generated reviews, hidden chat analysis, autonomous social actions or automatic restrictions. Existing uploaded design boards still describe AI as optional assistance: optional use and nonblocking behavior remain valid, while shipping AI is now required.
+
+## Boundaries and process topology
+
+FastAPI accepts durable jobs and returns promptly; it never starts or awaits Codex inside an HTTP request. General worker delivers email/Telegram and other tasks. A separate AI worker/supervisor, with separate bounded database pool and CPU/memory/PID/temp-disk limits, serves one durable AI queue. Codex child processes have no database, S3, deployment, email or operator credentials. The trusted supervisor prepares a bounded job-specific input; the child receives only that input and dedicated Codex authentication. Separate service identity and fresh temporary workspace/context per job; no cross-user conversation/session resume, plugins, MCP integrations, browsing or application mutation tools. Enforce isolation in runtime configuration, not only in a prompt. No application repository or developer home mounted into the executor.
+
+Application port: narrow async `AiExecutor.execute(task) -> typed result`; cancellation/deadline behavior is explicit. No CLI details in domain/application. MVP infrastructure adapter runs `codex exec` via `asyncio.create_subprocess_exec`, fixed argv without shell interpolation, prompt on stdin, image file as a validated local attachment, JSON Schema output and ephemeral execution where supported. Bound stdout/stderr and output-file size; drain concurrently, reject malformed/nonconforming output, and never log raw prompts/results/events. Pin a verified CLI version and configured supported model; do not infer a model or plan capacity. Validate the actual deployment's authentication, image input and structured output with a small synthetic smoke test before enabling real jobs.
+
+The installed CLI's help and official [non-interactive documentation](https://learn.chatgpt.com/docs/non-interactive-mode) support scripted execution and structured results; [CLI reference](https://learn.chatgpt.com/docs/cli/reference) covers image attachments. Subscription throughput, authentication renewal and deployment compatibility remain empirical acceptance checks, not guarantees. No live Codex jobs or account authentication have been performed for this plan.
+
+## Durable queue and admission
+
+Use PostgreSQL `ai_jobs`, not an in-memory queue or a new broker. Store actor, kind, resource/version, input digest, prompt/schema/model versions, state, priority class, creation/not-before/expiry, attempt count, lease token/generation, result reference, safe error code and correlation IDs. Private input/result snapshots have restricted business-storage access and bounded lifecycle; no content in analytics/outbox/logs. Jobs and any completion hints commit transactionally. Add only the queue mechanisms required here; do not build a general workflow engine.
+
+Initial configurable engineering defaults, to verify under load:
+
+- Exactly one active Codex invocation globally; one active executor supervisor. A fenced singleton executor slot must be acquired before claiming a job. Task claiming uses short transactions and `FOR UPDATE SKIP LOCKED`; no SQL transaction or connection remains open during inference.
+- At most 100 queued jobs globally and two nonterminal jobs per student. Enforce global admission and per-actor quotas atomically under a documented lock order, not COUNT-then-insert races. Reserve 10 queue slots for internal report triage; total remains 100. Running jobs do not count as queued but do count toward actor outstanding limits.
+- Student submission token bucket: capacity five, refill one token per minute, configurable and persisted atomically. Internal triggers have their own bounded budget; retries and deduplicated requests do not consume another user submission token.
+- Weighted scheduling: at most four interactive claims before one due internal triage claim; FIFO among eligible actors within each class with round-robin actor selection and ageing. Photo checks are interactive but do not block onboarding. Delayed retry must not block other jobs.
+- Interactive queue lifetime five minutes; report triage 30 minutes. Deadline includes queue wait and all attempts; expire before execution if insufficient budget remains. Execution timeout at most 60 seconds and within remaining deadline. These values may expire most of a large burst; bounded rejection/fallback is intentional.
+- Retry transient failures at most twice (three attempts total), with bounded exponential backoff/jitter and deadline checks. Invalid output gets at most one additional attempt within that budget. Invalid input/unauthorised jobs are not retried. Rate limits pause the executor until a known reset/Retry-After; unknown reset uses bounded probing. Authentication failure opens the circuit and alerts the owner; no login loops or account rotation.
+
+Admission response: 202 with job resource for accepted intent; 429 and Retry-After for actor quota; 503 and Retry-After for full queue or open executor circuit. Reject before expensive input preparation. Job creation is idempotent by actor/kind/key plus payload fingerprint. Same key/different input is a conflict; same intent returns existing job, not another invocation. Coalesce identical active requests only within the same actor/resource/version. Never share private result caches across users.
+
+Job states: `queued -> running -> succeeded`; retryable running failure returns to queued with not-before; terminal alternatives are `failed`, `cancelled`, `expired`. Submission rejection is not a stored successful job. Ownership checks apply on every read/cancel; internal triage jobs are operator-only. Poll initially with bounded backoff; later the existing SSE transport publishes content-free `ai_job.changed` hints, not token streams. Do not hold REST open or add Socket.IO for AI.
+
+## Crashes, cancellation and result correctness
+
+Lease heartbeat every 10 seconds, lease duration 45 seconds, using short transactions. Every write checks current lease generation. A stale attempt cannot publish a result, requeue or mutate the source resource. At most one result is committed; inference can be repeated after an ambiguous failure, so do not claim exactly-once provider execution.
+
+Fencing alone does not stop an orphaned Codex process. The supervisor owns the entire child process group/cgroup; timeout/cancel sends termination, escalates after five seconds and reaps all children. Reclaim or replacement requires confirmed termination of the previous executor container/process group. On lost database connectivity the supervisor stops its child and fails closed. If prior termination is uncertain, keep execution paused and alert rather than starting a second agent. Runtime restart must kill previous children; expired database lease by itself is insufficient proof. Test this failure path explicitly.
+
+Cancellation wins via a conditional state/version update; it discards late outputs even if provider execution cannot be stopped immediately. Source edit/photo replacement makes old results stale. The API may show a stale suggestion with its source version for explicit review but cannot automatically apply it. AI output never saves goals, sends requests, accepts connections or moderates accounts; separate authorised human commands do that.
+
+Validate semantic constraints after JSON parsing: permitted catalogue IDs, length bounds, advisory enums, no invented capability/availability claims. Hostile text and image content are untrusted data, not instructions. Tool restriction and no business credentials prevent prompt injection from becoming a product action. Use synthetic fixtures/evaluations for usefulness and unsupported-claim checks; schema validity alone is not quality proof.
+
+## Load, telemetry and lifecycle
+
+100–500 accounts is a pilot audience, not an inference throughput promise. One executor with mean service time S seconds has theoretical capacity at most 60/S jobs per minute, lower with retries or rate limits. Admission controls preserve the core app by rejecting/degrading AI under overload; establish actual latency and wait distributions with measurements. Set no guaranteed queue position or completion estimate without sufficient evidence.
+
+Metrics: accepted/rejected jobs by bounded reason/kind, queue depth, oldest age, execution/wait histograms, timeouts/retries, expired jobs, singleton availability, lease loss, circuit state and discarded stale results. IDs belong in trace/log correlation, not Prometheus labels. Request trace links to job and attempt spans; never capture prompts, images, returned text or raw CLI output. Alerts cover unavailable executor/auth, sustained queue age and rejection, repeated invalid output and cleanup failure. AI readiness is separate from core API readiness.
+
+Owner-approved lifecycle: retain accumulated AI job input/output and attempt metadata as private business history, including after account soft deletion; no automatic business-history purge. Keep only resource references when media already exists; delete temporary files on every exit and reap leftovers on restart. No private Codex session history in the persistent auth volume. Operator inspection of retained job data is audited like other business records. Final notice must name the actual external AI processing and data sent; do not send ordinary conversations by default.
+
+## Replacement and acceptance
+
+Future API adapter implements the same executor port and task-specific schemas. Jobs retain adapter/model/prompt version for diagnosis, not a serialized CLI command. No frontend or domain rewrite is needed; capacity limits can be raised only after measurement.
+
+Before pilot: prove crash/restart recovery, cancellation/late result fencing, one physical invocation, admission races, malformed output, auth/rate-limit circuit, temporary-file cleanup and saturation isolation. Run 500 simulated accounts with a deliberately slow fake executor; verify bounded memory/DB connections/queue size and continued auth/core traffic. This proves isolation under the measured environment, not real subscription capacity. Then perform a small owner-authenticated synthetic Codex text/image smoke test separately from CI.
+
+## Measured pool-isolation correction
+
+The synthetic500-account stress test found that sharing a two-connection AI admission/heartbeat pool could starve the executor heartbeat behind admission requests. The required topology is now separate bounded pools: AI admission capacity2, singleton worker/heartbeat capacity1, ordinary API pool independent. Budget up to3 AI connections in addition to core/delivery/listener/migration/monitoring capacity. Inference retains no SQL connection; each heartbeat/claim/ack transaction is short. AI admission has a total2-second deadline including pool/lock waits; capacity/unavailable maps to safe503 with Retry-After1 rather than an unbounded30-second wait or falsely accepted job. Pool limits are admission2/max_overflow0 and singleton worker/heartbeat1/max_overflow0, separate from core API. Validate this topology under saturation and pool failure. Earlier two-connection figures describe the initial experiment, not the corrected aggregate budget.
+
+The corrected bounded-wait500-burst experiment admitted fewer queued jobs than the earlier long-wait experiment; old90queued/409rejected figures must not be presented as acceptance of the corrected deadline topology. Use the current AI ledger’s exact workload/environment and distinguish Python tracked allocation from total RSS/child memory. No real Codex subscription throughput has been measured.

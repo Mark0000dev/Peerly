@@ -1,0 +1,28 @@
+# OPTIONAL config overlay; bounded memory queue, no unbounded disk WAL.
+exporters:
+  prometheusremotewrite:
+    endpoint: ${env:PROMETHEUS_REMOTE_WRITE_URL}
+    headers:
+      Authorization: ${env:PROMETHEUS_AUTHORIZATION}
+    tls:
+      min_version: '1.2'
+    timeout: 5s
+    external_labels:
+      deployment_environment_name: ${env:PEERLY_ENVIRONMENT}
+    translation_strategy: UnderscoreEscapingWithoutSuffixes
+    resource_to_telemetry_conversion:
+      enabled: true
+    remote_write_queue:
+      enabled: true
+      queue_size: 64
+      num_consumers: 1
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 10s
+      max_elapsed_time: 60s
+service:
+  pipelines:
+    metrics:
+      exporters:
+      - prometheusremotewrite

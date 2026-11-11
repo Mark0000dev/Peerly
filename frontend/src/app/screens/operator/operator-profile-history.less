@@ -1,0 +1,57 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+section,
+article,
+li,
+dl,
+dl > div {
+  min-inline-size: 0;
+}
+
+section,
+dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+h2,
+h3,
+p,
+dt,
+dd,
+button {
+  overflow-wrap: anywhere;
+}
+
+dd {
+  margin-inline: 0;
+  white-space: pre-wrap;
+}
+
+section > ol {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1.5rem;
+}
+
+dd > ol {
+  padding-inline-start: 1.5rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+button {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: var(--tui-height-l);
+  max-inline-size: 100%;
+}
