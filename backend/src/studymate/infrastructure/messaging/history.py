@@ -77,5 +77,7 @@ class SqlMessageHistoryUnitOfWork:
     async def transaction(
         self, conversation_id: UUID
     ) -> AsyncIterator[SqlMessageHistoryTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlMessageHistoryTransaction(session, conversation_id, self.recorder)
+        async with open_transaction(self.sessions, read_only=True) as session:
+            yield SqlMessageHistoryTransaction(
+                session, conversation_id, self.recorder, shared_identity_locks=True
+            )

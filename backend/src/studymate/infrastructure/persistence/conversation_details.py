@@ -58,7 +58,11 @@ class SqlConversationDetailsUnitOfWork:
     async def transaction(
         self, conversation_id: UUID
     ) -> AsyncIterator[SqlConversationDetailsTransaction]:
-        async with open_transaction(self.sessions) as session:
+        async with open_transaction(self.sessions, read_only=True) as session:
             yield SqlConversationDetailsTransaction(
-                session, conversation_id, self.message_recorder, read_recorder=self.read_recorder
+                session,
+                conversation_id,
+                self.message_recorder,
+                read_recorder=self.read_recorder,
+                shared_identity_locks=True,
             )

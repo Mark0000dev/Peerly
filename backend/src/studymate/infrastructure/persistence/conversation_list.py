@@ -280,5 +280,5 @@ class SqlConversationListUnitOfWork:
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[SqlConversationListTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlConversationListTransaction(session)
+        async with open_transaction(self.sessions, read_only=True) as session:
+            yield SqlConversationListTransaction(session, shared_identity_locks=True)

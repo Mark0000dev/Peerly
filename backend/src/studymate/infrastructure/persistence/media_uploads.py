@@ -89,7 +89,9 @@ class SqlMediaTransaction(SqlIdentityTransaction):
             else PhotoUploadRevisionRecord.version == version
         )
         if version is None:
-            statement = statement.with_for_update(of=PhotoUploadRecord)
+            statement = statement.with_for_update(
+                of=PhotoUploadRecord, read=self.shared_identity_locks
+            )
         row = (await self.session.execute(statement)).one_or_none()
         return upload_value(*row) if row is not None else None
 
@@ -236,8 +238,9 @@ class SqlMediaTransaction(SqlIdentityTransaction):
 @dataclass(frozen=True, slots=True)
 class SqlMediaUnitOfWork:
     sessions: async_sessionmaker[AsyncSession]
+    shared_identity_locks: bool = False
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[MediaTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlMediaTransaction(session)
+        async with open_transaction(self.sessions, read_only=self.shared_identity_locks) as session:
+            yield SqlMediaTransaction(session, shared_identity_locks=self.shared_identity_locks)

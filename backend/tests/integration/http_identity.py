@@ -97,6 +97,19 @@ async def browser(
         timeout = connect_args["timeout"]
         assert isinstance(timeout, (int, float))
         assert timeout > 0
+        if connect_args.get("server_settings") == {"lock_timeout": "1000"}:
+            assert not pool_options
+            return original_engine_factory(
+                url,
+                pool_pre_ping=pool_pre_ping,
+                connect_args={
+                    **connect_args,
+                    "server_settings": {
+                        "search_path": schema,
+                        "lock_timeout": "1000",
+                    },
+                },
+            )
         if "server_settings" in connect_args:
             # Direct calls to actual named factories keep their own topology.
             # Only this explicitly isolated disposable schema is permitted.

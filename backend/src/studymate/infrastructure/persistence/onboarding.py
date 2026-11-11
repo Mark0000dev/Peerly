@@ -103,5 +103,5 @@ class SqlProfileSetupUnitOfWork:
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[SqlProfileSetupTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlProfileSetupTransaction(session)
+        async with open_transaction(self.sessions, read_only=True) as session:
+            yield SqlProfileSetupTransaction(session, shared_identity_locks=True)

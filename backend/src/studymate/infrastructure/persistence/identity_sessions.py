@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
@@ -23,12 +23,17 @@ from studymate.infrastructure.persistence.identity_models import (
 )
 from studymate.infrastructure.persistence.onboarding_models import ProfileActivationRecord
 from studymate.infrastructure.persistence.registration_reads import read_receipt
-from studymate.infrastructure.persistence.transactions import open_transaction
+from studymate.infrastructure.persistence.transactions import (
+    IDENTITY_READ_ONLY_KEY,
+    open_transaction,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class SqlIdentityTransaction:
     session: AsyncSession
+    # Explicitly composed no-write readers share locks; mutations retain serialization.
+    shared_identity_locks: bool = field(default=False, kw_only=True)
 
     def authenticated(self, account_id: UUID) -> None:
         record_authenticated_actor(account_id)
@@ -44,6 +49,8 @@ class SqlIdentityTransaction:
     async def _lock_identity(
         self, secret_digest: bytes, peer_id: UUID | None
     ) -> IdentitySnapshot | None:
+        if self.shared_identity_locks and self.session.info.get(IDENTITY_READ_ONLY_KEY) is not True:
+            raise RuntimeError("Shared identity locks require a guarded read-only unit")
         # This lookup supplies lock scope only; authority is re-read under locks below.
         account_id = await self.session.scalar(
             select(SessionRecord.account_id).where(SessionRecord.secret_digest == secret_digest)
@@ -57,7 +64,9 @@ class SqlIdentityTransaction:
             select(AccountRecord.id)
             .where(AccountRecord.id.in_(participants))
             .order_by(AccountRecord.id)
-            .with_for_update(key_share=True)
+            .with_for_update(
+                read=self.shared_identity_locks, key_share=not self.shared_identity_locks
+            )
         )
         statement = (
             select(SessionRecord, AccountRecord)
@@ -66,7 +75,11 @@ class SqlIdentityTransaction:
                 SessionRecord.secret_digest == secret_digest,
                 SessionRecord.account_id == account_id,
             )
-            .with_for_update(of=SessionRecord, key_share=True)
+            .with_for_update(
+                of=SessionRecord,
+                read=self.shared_identity_locks,
+                key_share=not self.shared_identity_locks,
+            )
         )
         row = (await self.session.execute(statement)).one_or_none()
         if row is None:
@@ -139,8 +152,9 @@ class SqlPeerIdentityTransaction(SqlIdentityTransaction):
 @dataclass(frozen=True, slots=True)
 class SqlIdentityUnitOfWork:
     sessions: async_sessionmaker[AsyncSession]
+    shared_identity_locks: bool = False
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[IdentityTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlIdentityTransaction(session)
+        async with open_transaction(self.sessions, read_only=self.shared_identity_locks) as session:
+            yield SqlIdentityTransaction(session, shared_identity_locks=self.shared_identity_locks)

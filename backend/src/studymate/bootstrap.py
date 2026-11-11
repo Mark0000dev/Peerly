@@ -386,7 +386,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     engine = create_async_engine(
         configuration.database_url.get_secret_value(),
         pool_pre_ping=True,
-        connect_args={"timeout": 5},
+        connect_args={"timeout": 5, "server_settings": {"lock_timeout": "1000"}},
     )
     sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
     ai_engine = (
@@ -499,9 +499,10 @@ def create_ai_admission_engine(
     database_url: str, *, server_settings: Mapping[str, str] | None = None
 ) -> AsyncEngine:
     """One bounded admission policy for application composition and controlled load tests."""
-    connect_args: dict[str, object] = {"timeout": 2}
-    if server_settings is not None:
-        connect_args["server_settings"] = dict(server_settings)
+    connect_args: dict[str, object] = {
+        "timeout": 2,
+        "server_settings": {"lock_timeout": "1000", **(server_settings or {})},
+    }
     return create_async_engine(
         database_url,
         pool_pre_ping=True,
@@ -516,9 +517,10 @@ def create_change_read_engine(
     database_url: str, *, server_settings: Mapping[str, str] | None = None
 ) -> AsyncEngine:
     """Transport reads have their own bounded pool, independent of core and AI."""
-    connect_args: dict[str, object] = {"timeout": 2}
-    if server_settings is not None:
-        connect_args["server_settings"] = dict(server_settings)
+    connect_args: dict[str, object] = {
+        "timeout": 2,
+        "server_settings": {"lock_timeout": "1000", **(server_settings or {})},
+    }
     return create_async_engine(
         database_url,
         pool_pre_ping=True,
@@ -533,9 +535,10 @@ def create_changes_worker_engine(
     database_url: str, *, server_settings: Mapping[str, str] | None = None
 ) -> AsyncEngine:
     """One maintenance connection; never share the stream-read admission pool."""
-    connect_args: dict[str, object] = {"timeout": 5}
-    if server_settings is not None:
-        connect_args["server_settings"] = dict(server_settings)
+    connect_args: dict[str, object] = {
+        "timeout": 5,
+        "server_settings": {"lock_timeout": "1000", **(server_settings or {})},
+    }
     return create_async_engine(
         database_url,
         pool_pre_ping=True,
@@ -600,7 +603,9 @@ def _authentication_services(
             configuration.callback_failures_per_hour,
         ),
         bootstrap=ReadBootstrap(
-            ReadIdentity(SqlIdentityUnitOfWork(sessions), Sha256SessionHasher())
+            ReadIdentity(
+                SqlIdentityUnitOfWork(sessions, shared_identity_locks=True), Sha256SessionHasher()
+            )
         ),
         logout=Logout(SqlIdentityUnitOfWork(sessions), Sha256SessionHasher()),
         signer=HmacBrowserTokenSigner(
@@ -620,7 +625,7 @@ async def run_email_worker(configuration: EmailWorkerSettings, stop: asyncio.Eve
         pool_size=2,
         max_overflow=0,
         pool_timeout=2,
-        connect_args={"timeout": 5},
+        connect_args={"timeout": 5, "server_settings": {"lock_timeout": "1000"}},
     )
     try:
         smtp = configuration.smtp
@@ -718,7 +723,7 @@ async def run_media_worker(configuration: MediaWorkerSettings, stop: asyncio.Eve
         pool_size=2,
         max_overflow=0,
         pool_timeout=2,
-        connect_args={"timeout": 5},
+        connect_args={"timeout": 5, "server_settings": {"lock_timeout": "1000"}},
     )
     processor = BoundedImageProcessor()
     try:
@@ -768,8 +773,12 @@ def _student_routers(
     profile_routes = profile_router(
         ProfileServices(
             SaveOwnProfile(profile_uow, profile_hasher, intent_fingerprinter),
-            ReadOwnProfile(profile_uow, profile_hasher),
-            ReadProfileReferenceData(profile_uow, profile_hasher),
+            ReadOwnProfile(
+                SqlProfileUnitOfWork(sessions, shared_identity_locks=True), profile_hasher
+            ),
+            ReadProfileReferenceData(
+                SqlProfileUnitOfWork(sessions, shared_identity_locks=True), profile_hasher
+            ),
             auth_services.signer,
             auth_services.browser,
         )
@@ -780,9 +789,13 @@ def _student_routers(
         StudyServices(
             save_goal=SaveOwnGoal(goal_uow, profile_hasher, intent_fingerprinter),
             complete_goal=CompleteOwnGoal(goal_uow, profile_hasher, intent_fingerprinter),
-            read_goal=ReadOwnGoal(goal_uow, profile_hasher),
+            read_goal=ReadOwnGoal(
+                SqlGoalUnitOfWork(sessions, shared_identity_locks=True), profile_hasher
+            ),
             save_help=SaveOwnHelpSubjects(help_uow, profile_hasher, intent_fingerprinter),
-            read_help=ReadOwnHelpSubjects(help_uow, profile_hasher),
+            read_help=ReadOwnHelpSubjects(
+                SqlHelpUnitOfWork(sessions, shared_identity_locks=True), profile_hasher
+            ),
             signer=auth_services.signer,
             browser=auth_services.browser,
         )
@@ -804,10 +817,16 @@ def _student_routers(
                 media_hasher,
                 intent_fingerprinter,
             ),
-            read=ReadOwnPhotoUpload(media_uow, media_hasher),
+            read=ReadOwnPhotoUpload(
+                SqlMediaUnitOfWork(sessions, shared_identity_locks=True), media_hasher
+            ),
             resume=ReadOwnPhotoResume(SqlPhotoResumeUnitOfWork(sessions), media_hasher),
             access=CreatePhotoUploadAccess(media_uow, media_hasher, media_storage),
-            display=ReadOwnPhotoDisplay(media_uow, media_hasher, media_storage),
+            display=ReadOwnPhotoDisplay(
+                SqlMediaUnitOfWork(sessions, shared_identity_locks=True),
+                media_hasher,
+                media_storage,
+            ),
             signer=auth_services.signer,
             browser=auth_services.browser,
         )
@@ -945,7 +964,9 @@ def _requests_router(
             DeclineRequest(commands, hasher, fingerprinter),
             UndoDecline(commands, hasher, fingerprinter),
             WithdrawRequest(commands, hasher, fingerprinter),
-            ListRequests(queries, hasher, codec),
+            ListRequests(
+                SqlRequestQueryUnitOfWork(sessions, shared_identity_locks=True), hasher, codec
+            ),
             ReadRequest(queries, hasher),
             AcknowledgeRequestViewed(
                 SqlRequestViewUnitOfWork(sessions, record_request_viewed), hasher, fingerprinter
@@ -964,7 +985,7 @@ async def run_requests_worker(configuration: RequestsWorkerSettings, stop: async
         pool_size=1,
         max_overflow=0,
         pool_timeout=2,
-        connect_args={"timeout": 5},
+        connect_args={"timeout": 5, "server_settings": {"lock_timeout": "1000"}},
     )
     try:
         sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
@@ -1310,7 +1331,7 @@ async def run_ai_worker(configuration: AiWorkerSettings, stop: asyncio.Event) ->
         pool_size=1,
         max_overflow=0,
         pool_timeout=2,
-        connect_args={"timeout": 5},
+        connect_args={"timeout": 5, "server_settings": {"lock_timeout": "1000"}},
     )
     try:
         async with _open_media_storage(configuration.media) as storage:
@@ -1354,7 +1375,12 @@ def _student_support_routers(
     return (
         notification_preferences_router(
             PreferenceHttpServices(
-                ReadOwnNotificationPreference(preferences, hasher),
+                ReadOwnNotificationPreference(
+                    SqlPreferenceUnitOfWork(
+                        sessions, record_notification_preference_event, shared_identity_locks=True
+                    ),
+                    hasher,
+                ),
                 ChooseOwnNotificationPreference(preferences, hasher, fingerprinter),
                 auth_services.signer,
                 auth_services.browser,

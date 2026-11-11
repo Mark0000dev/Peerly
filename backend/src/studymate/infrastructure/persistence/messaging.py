@@ -92,7 +92,7 @@ class SqlMessageTransaction(SqlIdentityTransaction):
                 ConversationRecord.id == conversation_id,
                 or_(ConversationRecord.low_id == actor_id, ConversationRecord.high_id == actor_id),
             )
-            .with_for_update()
+            .with_for_update(read=self.shared_identity_locks)
         )
         if record is None:
             return None
