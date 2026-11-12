@@ -57,14 +57,27 @@ test('P02 actual default and explicit saved enum, canonical current read', async
     page.getByRole('radio', { name: 'Messages and requests', exact: false }),
   ).toBeChecked();
   await assertOrdinaryHeaderRow(page);
+  const preference = page.getByRole('region', { name: 'Notification preference', exact: true });
+  const device = page.getByRole('region', { name: 'On this device', exact: true });
+  await expect(preference.getByRole('radio')).toHaveCount(2);
+  await expect(preference.getByRole('region', { name: 'On this device', exact: true })).toHaveCount(
+    0,
+  );
+  await expect(device).toContainText('Device delivery is unavailable in this preview.');
+  await expect(device).toContainText('Security messages are unchanged.');
+  await expect(
+    page.getByRole('button', { name: /enable notifications|open device settings/i }),
+  ).toHaveCount(0);
+
   await checkpoint('notifications-default-unchosen.png', { fullPage: true, threshold: 0 });
   await page.getByRole('radio', { name: 'All updates', exact: false }).check();
+  expect(saved).toBe(false);
   await page.getByRole('button', { name: 'Save preference', exact: true }).click();
   await expect(
     page.getByRole('status').filter({ hasText: 'Your choice was saved.' }),
   ).toContainText('Your choice was saved');
   await checkpoint('notifications-choice-saved.png', { fullPage: true, threshold: 0 });
-  await page.getByRole('button', { name: 'Use current saved preference' }).click();
+  await page.getByRole('button', { name: 'Use saved preference' }).click();
   await expect(page.getByRole('button', { name: 'Save preference', exact: true })).toBeEnabled();
   await expect(page.getByRole('radio', { name: 'All updates', exact: false })).toBeChecked();
   await checkpoint('notifications-current.png', { fullPage: true, threshold: 0 });
@@ -96,9 +109,25 @@ test('P02 unknown save requires identical replay and never requests OS permissio
   await page.getByRole('radio', { name: 'All updates', exact: false }).check();
   await page.getByRole('button', { name: 'Save preference', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('save outcome is unknown');
+  await expect(
+    page.getByText('Your last check found the default: Messages and requests.', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('You haven’t saved an explicit choice yet.', { exact: false }),
+  ).toHaveCount(0);
   await expect(page.getByRole('radio', { name: 'All updates', exact: false })).toBeDisabled();
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('font-size', '200%');
+  });
+  for (const label of ['Retry this save', 'Check saved preference']) {
+    const action = page.getByRole('button', { name: label, exact: true });
+    await assertNaturalWordWrapping(action);
+    await assertFullTextFits(action);
+  }
+
   await checkpoint('notifications-save-unknown.png', { fullPage: true, threshold: 0 });
-  await page.getByRole('button', { name: 'Retry identical save' }).click();
+  await page.getByRole('button', { name: 'Retry this save' }).click();
   await expect(
     page.getByRole('status').filter({ hasText: 'Your choice was saved.' }),
   ).toContainText('Your choice was saved');
@@ -129,7 +158,7 @@ test('P02 conflict fresh read permits a new explicit choice without automatic PU
   await page.getByRole('button', { name: 'Save preference', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('changed elsewhere');
   await checkpoint('notifications-conflict.png', { fullPage: true, threshold: 0 });
-  await page.getByRole('button', { name: 'Use current saved preference' }).click();
+  await page.getByRole('button', { name: 'Use saved preference' }).click();
   await expect(page.getByRole('button', { name: 'Save preference', exact: true })).toBeEnabled();
   expect(writes).toBe(1);
   await checkpoint('notifications-conflict-current.png', { fullPage: true, threshold: 0 });

@@ -62,7 +62,7 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
     );
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(host(fixture).textContent).toContain('haven’t saved');
+      expect(host(fixture).textContent).toContain('last check found the default');
     });
   }
   function chooseAll(): void {
@@ -75,6 +75,12 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
     await load();
     http.expectNone((request) => request.method === 'PUT');
     expect(host(fixture).textContent).toContain('Device delivery is unavailable');
+    expect(host(fixture).textContent).toContain('Security messages are unchanged.');
+    expect(
+      host(fixture).querySelector('[aria-label="Notification preference"] .device-panel'),
+    ).toBeNull();
+    expect(host(fixture).querySelectorAll('input[type="radio"]')).toHaveLength(2);
+
     expect(host(fixture).textContent).toContain(
       'New messages, requests for you and accepted connections',
     );
@@ -105,8 +111,7 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
       fixture.detectChanges();
       expect(host(fixture).textContent).toContain('Your choice was saved');
       const adopt = Array.from(host(fixture).querySelectorAll('button')).find(
-        (item: Readonly<HTMLButtonElement>) =>
-          item.textContent.trim() === 'Use current saved preference',
+        (item: Readonly<HTMLButtonElement>) => item.textContent.trim() === 'Use saved preference',
       );
       // Mutation success renders before the canonical read's observer settles.
       // Wait for the actual enabled action; a disabled native click sends nothing.
@@ -114,7 +119,7 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
     });
     expect(host(fixture).querySelector('input[value="all_updates"]:checked')).not.toBeNull();
     expect(host(fixture).querySelector('fieldset')?.disabled).toBe(true);
-    click('Use current saved preference');
+    click('Use saved preference');
     (
       await vi.waitFor(() =>
         http.expectOne(
@@ -140,9 +145,11 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(host(fixture).textContent).toContain('save outcome is unknown');
+      expect(host(fixture).textContent).toContain('Your last check found the default');
+      expect(host(fixture).textContent).not.toContain('haven’t saved');
     });
     expect(host(fixture).querySelector('fieldset')?.disabled).toBe(true);
-    click('Retry identical save');
+    click('Retry this save');
     const replay = await vi.waitFor(() => http.expectOne((pending) => pending.method === 'PUT'));
     expect(replay.request.body).toEqual(body);
     expect(replay.request.headers.get('idempotency-key')).toBe(key);
@@ -168,7 +175,7 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
       expect(host(fixture).textContent).toContain('changed elsewhere');
     });
     http.expectNone((pending) => pending.method === 'PUT');
-    click('Use current saved preference');
+    click('Use saved preference');
     (
       await vi.waitFor(() =>
         http.expectOne(
@@ -227,7 +234,7 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
       TUI_CONFIRM,
       expect.objectContaining({ label: 'Leave before the save is confirmed?' }),
     );
-    click('Retry identical save');
+    click('Retry this save');
     (await vi.waitFor(() => http.expectOne((request) => request.method === 'PUT'))).flush(
       savedPreference,
     );
@@ -294,20 +301,19 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
       expect(host(fixture).querySelector('input[value="all_updates"]:checked')).not.toBeNull();
     });
     http.expectNone((request) => request.method === 'PUT');
-    click('Read current preference');
+    click('Check saved preference');
     (await vi.waitFor(() => http.expectOne('/api/v1/me/notification-preference'))).flush(
       defaultPreference,
     );
     await vi.waitFor(() => {
       fixture.detectChanges();
       const action = Array.from(host(fixture).querySelectorAll('button')).find(
-        (item: Readonly<HTMLButtonElement>) =>
-          item.textContent.trim() === 'Use current saved preference',
+        (item: Readonly<HTMLButtonElement>) => item.textContent.trim() === 'Use saved preference',
       );
       expect(action?.disabled).toBe(false);
     });
     expect(host(fixture).querySelector('fieldset')?.disabled).toBe(true);
-    click('Use current saved preference');
+    click('Use saved preference');
     (await vi.waitFor(() => http.expectOne('/api/v1/me/notification-preference'))).flush(
       defaultPreference,
     );
@@ -353,7 +359,7 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
       fixture.detectChanges();
       expect(host(fixture).textContent).toContain('selection is still here');
     });
-    click('Use current saved preference');
+    click('Use saved preference');
     (await vi.waitFor(() => http.expectOne('/api/v1/me/notification-preference'))).flush(
       { code: 'storage_unavailable' },
       { status: 503, statusText: 'Unavailable' },
@@ -372,7 +378,7 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
       expect(host(fixture).querySelector('fieldset')?.disabled).toBe(true);
     });
     http.expectNone((request) => request.method === 'PUT');
-    click('Use current saved preference');
+    click('Use saved preference');
     (await vi.waitFor(() => http.expectOne('/api/v1/me/notification-preference'))).flush(
       defaultPreference,
     );
@@ -393,7 +399,7 @@ describe('P02 actual preference CAS and same-key recovery without device permiss
       fixture.detectChanges();
       expect(host(fixture).textContent).toContain('changed elsewhere');
     });
-    click('Use current saved preference');
+    click('Use saved preference');
     const canonical = await vi.waitFor(() => http.expectOne('/api/v1/me/notification-preference'));
     client.setQueryData(['session'], {
       ...notificationActorFixture,
