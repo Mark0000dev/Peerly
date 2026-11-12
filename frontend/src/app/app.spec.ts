@@ -27,30 +27,51 @@ describe('application routing and query ownership', () => {
     });
   });
   afterEach(() => {
-    if (fixture !== null) {
-      for (const element of fixture.debugElement.queryAll(By.directive(Onboarding)))
-        element.injector.get(QueryClient).clear();
-      fixture.destroy();
+    try {
+      if (fixture !== null) {
+        for (const element of fixture.debugElement.queryAll(By.directive(Onboarding)))
+          element.injector.get(QueryClient).clear();
+        fixture.destroy();
+      }
+      TestBed.inject(HttpTestingController).verify();
+    } finally {
+      fixture = null;
+      TestBed.resetTestingModule();
     }
-    TestBed.inject(HttpTestingController).verify();
   });
-  for (const path of ['/', '/unknown-route']) {
-    it(`renders public landing without private requests for ${path}`, async () => {
-      fixture = TestBed.createComponent(App);
-      await TestBed.inject(Router).navigateByUrl(path);
-      await fixture.whenStable();
-      expect(TestBed.inject(Router).url).toBe('/');
-      expect(fixture.debugElement.queryAll(By.css('h1'))).toHaveLength(1);
-      TestBed.inject(HttpTestingController).expectNone('/api/v1/me');
-    });
-  }
-  it('provides honest public help without a fake support form', async () => {
+  it('renders public landing without private requests', async () => {
+    fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/');
+    await fixture.whenStable();
+    expect(TestBed.inject(Router).url).toBe('/');
+    expect(fixture.debugElement.queryAll(By.css('h1'))).toHaveLength(1);
+    TestBed.inject(HttpTestingController).expectNone('/api/v1/me');
+  });
+  it('keeps an unknown route on the actual public not-found screen', async () => {
+    fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/unknown-route');
+    await fixture.whenStable();
+    expect(TestBed.inject(Router).url).toBe('/unknown-route');
+    const headings = fixture.debugElement.queryAll(By.css('h1'));
+    expect(headings).toHaveLength(1);
+    const heading: unknown = headings[0]?.nativeElement;
+    if (!(heading instanceof HTMLHeadingElement)) throw new Error('Missing not-found heading');
+    expect(heading.textContent.trim()).toBe('Page not found');
+    TestBed.inject(HttpTestingController).expectNone('/api/v1/me');
+  });
+  it('renders real public support after checking identity without preparing or submitting a case', async () => {
     fixture = TestBed.createComponent(App);
     await TestBed.inject(Router).navigateByUrl('/help');
+    const http = TestBed.inject(HttpTestingController);
+    const session = await vi.waitFor(() => http.expectOne('/api/v1/me'));
+    session.flush({ code: 'unauthenticated' }, { status: 401, statusText: 'Unauthorized' });
     await fixture.whenStable();
     expect(fixture.debugElement.queryAll(By.css('h1'))).toHaveLength(1);
-    expect(fixture.debugElement.queryAll(By.css('form'))).toHaveLength(0);
-    TestBed.inject(HttpTestingController).expectNone('/api/v1/me');
+    expect(fixture.debugElement.queryAll(By.css('form'))).toHaveLength(1);
+    expect(fixture.debugElement.queryAll(By.css('#support-reply'))).toHaveLength(1);
+    http.expectNone('/api/v1/support-context');
+    http.expectNone('/api/v1/support-cases');
+    http.expectNone('/api/v1/me/support-cases');
   });
   for (const code of ['login_cancelled', 'login_provider_unavailable', 'untrusted-provider-text']) {
     it(`strips callback metadata without trusting it as identity: ${code}`, async () => {
@@ -144,7 +165,7 @@ describe('application routing and query ownership', () => {
       );
       expect(fields.length).toBeGreaterThan(0);
       const client = fixture.debugElement.query(By.directive(Onboarding)).injector.get(QueryClient);
-      await TestBed.inject(Router).navigateByUrl('/help');
+      await TestBed.inject(Router).navigateByUrl('/');
       await fixture.whenStable();
       for (const field of fields) expect(disconnecting.mock.contexts).toContain(field.observer);
       expect(disconnecting.mock.contexts).not.toContain(font.observer);

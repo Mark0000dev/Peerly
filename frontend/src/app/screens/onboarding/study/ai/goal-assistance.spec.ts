@@ -1,3 +1,6 @@
+import { HttpClient } from '@angular/common/http';
+import { sessionOptions } from '../../../session';
+import type { Query } from '@tanstack/angular-query-experimental';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import type { TestRequest } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -563,5 +566,165 @@ describe('G01 optional actual AI job lifecycle', () => {
     expect(read.cancelled).toBe(true);
     expect(texts).toEqual([]);
     expect(areas).toEqual([]);
+  });
+  it('does not dispatch a queued goal AI admission after authority starts revalidating, and uses fresh CSRF only on a new explicit ask', async () => {
+    button('Suggest clearer wording').click();
+    const validation = client.query(sessionOptions(TestBed.inject(HttpClient), client));
+    const session = await vi.waitFor(() => backend.expectOne('/api/v1/me'));
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    const rotated = { ...verifiedActor, csrf_token: 'fresh-goal-ai-authority' };
+    session.flush(rotated);
+    await validation;
+    await shown(fixture, 'We couldn’t get a suggestion.');
+    expect(texts).toEqual([]);
+    expect(expired).toEqual([]);
+    const request = await start();
+    expect(request.request.headers.get('x-csrf-token')).toBe(rotated.csrf_token);
+    request.flush({ code: 'ai_unavailable' }, { status: 503, statusText: 'Unavailable' });
+    await shown(fixture, 'AI assistance isn’t available');
+  });
+  it('rechecks a known job after the real same-actor session boundary evicts private cache, without displaying unvalidated advice', async () => {
+    await ready();
+    const validation = client.query(sessionOptions(TestBed.inject(HttpClient), client));
+    (await vi.waitFor(() => backend.expectOne('/api/v1/me'))).flush(verifiedActor);
+    await validation;
+    const read = await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${job().id}`));
+    await shown(fixture, 'Checking your AI job…');
+    expect(host(fixture).textContent).not.toContain(
+      'Please help me understand LEFT JOIN with NULLs.',
+    );
+    expect(texts).toEqual([]);
+    read.flush(
+      job({
+        state: 'succeeded',
+        result: { suggestion: 'Freshly validated advice' },
+        poll_after_ms: null,
+      }),
+    );
+    await shown(fixture, 'Freshly validated advice');
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    expect(texts).toEqual([]);
+  });
+  it('locks stale Check and duplicate Cancel while cancellation is pending, and does not clear uncertainty after a failed manual read', async () => {
+    await admit(
+      job({
+        created_at: new Date(Date.now() - 10_000).toISOString(),
+        deadline: new Date(Date.now() - 1000).toISOString(),
+      }),
+    );
+    await shown(fixture, 'Automatic checking has stopped');
+    const check = button('Check AI job');
+    const cancel = button('Cancel AI job');
+    cancel.click();
+    check.click();
+    cancel.click();
+    fixture.detectChanges();
+    const request = await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${job().id}/cancel`));
+    backend.expectNone(`/api/v1/ai/jobs/${job().id}`);
+    request.flush({ code: 'unavailable' }, { status: 503, statusText: 'Unavailable' });
+    await shown(fixture, 'Cancellation isn’t confirmed');
+    click(fixture, 'Check AI job');
+    (await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${job().id}`))).flush(
+      { code: 'unavailable' },
+      { status: 503, statusText: 'Unavailable' },
+    );
+    await vi.waitFor(() => {
+      expect(
+        client
+          .getQueryCache()
+          .findAll({ queryKey: ['account', verifiedActor.account_id, 'goal-assistance'] })
+          .some((query: Readonly<Query>) => query.state.status === 'error'),
+      ).toBe(true);
+    });
+    fixture.detectChanges();
+    expect(host(fixture).textContent).toContain('Cancellation isn’t confirmed');
+    expect(host(fixture).textContent).not.toContain('AI suggestion cancelled');
+    click(fixture, 'Check AI job');
+    (await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${job().id}`))).flush(
+      job({ state: 'failed', failure: 'timeout', poll_after_ms: null }),
+    );
+    await shown(fixture, 'Ask again');
+    expect(texts).toEqual([]);
+    expect(areas).toEqual([]);
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+  });
+  for (const status of [401, 403])
+    it(`retires a current goal cancellation denied with ${String(status)} through the actual actor-bound event`, async () => {
+      await admit();
+      click(fixture, 'Cancel AI job');
+      (await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${job().id}/cancel`))).flush(
+        { code: 'account_unavailable' },
+        { status, statusText: 'Denied' },
+      );
+      await vi.waitFor(() => {
+        expect(expired).toHaveLength(1);
+      });
+      expect(expired[0]?.actorId).toBe(verifiedActor.account_id);
+      expect(expired[0]?.failure.status).toBe(status);
+      expect(texts).toEqual([]);
+      expect(areas).toEqual([]);
+    });
+  for (const status of [200, 403])
+    it(`ignores an old goal cancel ${String(status)} when the actor input changes before the cache identity`, async () => {
+      await admit();
+      click(fixture, 'Cancel AI job');
+      const cancel = await vi.waitFor(() =>
+        backend.expectOne(`/api/v1/ai/jobs/${job().id}/cancel`),
+      );
+      const replacement = { ...verifiedActor, account_id: 'goal-ai-replacement' };
+      fixture.componentRef.setInput('actor', replacement);
+      fixture.detectChanges();
+      client.setQueryData(['session'], replacement);
+      cancel.flush(
+        status === 200
+          ? job({
+              state: 'succeeded',
+              result: { suggestion: 'Must not cross actor' },
+              poll_after_ms: null,
+            })
+          : { code: 'account_unavailable' },
+        { status, statusText: 'Result' },
+      );
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(host(fixture).textContent).not.toContain('Must not cross actor');
+      expect(expired).toEqual([]);
+      expect(texts).toEqual([]);
+      expect(areas).toEqual([]);
+      expect(
+        client.getQueryCache().findAll({ queryKey: ['account', verifiedActor.account_id] }),
+      ).toHaveLength(0);
+      backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    });
+  it('blocks a queued Ask again after the parent has already advanced the draft revision', async () => {
+    const first = await start();
+    first.flush(job({ state: 'failed', failure: 'timeout', poll_after_ms: null }));
+    await shown(fixture, 'Ask again');
+    const again = button('Ask again');
+    fixture.componentRef.setInput('draft', {
+      ...draft,
+      source: { ...draft.source, version: draft.source.version + 1 },
+    });
+    again.click();
+    fixture.detectChanges();
+    expect(host(fixture).textContent).toContain('You changed the goal after asking');
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    expect(texts).toEqual([]);
+  });
+  it('does not let an old Keep mine event discard a newly admitted request before its response', async () => {
+    const first = await start();
+    first.flush(job({ state: 'failed', failure: 'timeout', poll_after_ms: null }));
+    await shown(fixture, 'Ask again');
+    const keep = button('Keep mine');
+    button('Ask again').click();
+    keep.click();
+    fixture.detectChanges();
+    const request = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/ai/jobs', method: 'POST' }),
+    );
+    request.flush(job());
+    await shown(fixture, 'AI assistance · waiting');
+    expect(texts).toEqual([]);
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
   });
 });

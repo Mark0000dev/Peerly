@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Api } from '../../api.generated';
 import { appConfig } from '../../app.config';
 import { jpegBase64 } from '../../../../testing/image-fixture';
-import { identity, request } from './requests.fixtures';
+import { identity, request, page as requestsPage } from './requests.fixtures';
 import { RequestAvatar } from './request-avatar';
 
 @Component({
@@ -130,6 +130,36 @@ describe('Request current public photo ownership', () => {
     });
     await loaded();
     http.expectNone((item) => item.method !== 'GET');
+  });
+  it('does not interrupt a canonical Requests read already in progress when a photo version retires', async () => {
+    let finish: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const requests = new QueryObserver(client, {
+      queryKey: ['account', identity.account_id, 'requests', 'received'],
+      queryFn: async () => {
+        await pending;
+        return requestsPage;
+      },
+      retry: false,
+    });
+    const stop = requests.subscribe(() => undefined);
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    try {
+      expect(client.isFetching({ queryKey: ['account', identity.account_id, 'requests'] })).toBe(1);
+      (await read()).flush(new Blob(), { status: 404, statusText: 'Not Found' });
+      await failed();
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(requests.getCurrentResult().isFetching).toBe(true);
+      expect(host().querySelector('button')).toBeNull();
+      http.expectNone(photoUrl);
+    } finally {
+      finish?.();
+      await pending;
+      stop();
+      requests.destroy();
+    }
   });
   it('503 stays local and retries only after the explicit image control, once while fetching', async () => {
     const invalidate = vi.spyOn(client, 'invalidateQueries');

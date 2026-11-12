@@ -395,9 +395,10 @@ test('C02 confirmed sequence order and original context never ACK on GET', async
       message,
     ],
   });
-  let writes = 0;
+  let writes: readonly string[] = [];
   page.on('request', (request: Readonly<Request>) => {
-    if (request.method() !== 'GET') writes += 1;
+    if (request.method() !== 'GET')
+      writes = [...writes, `${request.method()} ${new URL(request.url()).pathname}`];
   });
   await open(page, true);
   await expect(page.getByRole('region', { name: 'Original accepted context' })).toContainText(
@@ -416,7 +417,13 @@ test('C02 confirmed sequence order and original context never ACK on GET', async
   await expect(items.nth(0)).toContainText(message.text);
   await expect(items.nth(1)).toContainText('My follow-up');
   await items.nth(1).scrollIntoViewIfNeeded();
-  expect(writes).toBe(0);
+  // Opening a thread records its study-prompt visit and mandatory telemetry.
+  // Neither authorizes a message write or an implicit read-position ACK.
+  const permittedVisits = [
+    `POST ${threadPath}/study-prompt-visits`,
+    'POST /api/v1/telemetry/events',
+  ];
+  expect(writes.filter((write) => !permittedVisits.includes(write))).toEqual([]);
   await checkpoint('thread-confirmed-sequence.png');
 });
 

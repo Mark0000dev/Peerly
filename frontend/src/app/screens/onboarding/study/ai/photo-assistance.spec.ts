@@ -1,3 +1,6 @@
+import { HttpClient } from '@angular/common/http';
+import { sessionOptions } from '../../../session';
+import type { Mutation, Query } from '@tanstack/angular-query-experimental';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import type { TestRequest } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -341,5 +344,214 @@ describe('O02 optional photo advice uses actual saved resource only', () => {
     fixture.destroy();
     expect(read.cancelled).toBe(true);
     expect(chosen).toBe(0);
+  });
+  it('blocks a queued admission when the saved photo starts checking, then asks only for the explicitly selected current resource', async () => {
+    button('Get photo tips').click();
+    fixture.componentRef.setInput('sourceChecking', true);
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      expect(
+        client
+          .getMutationCache()
+          .getAll()
+          .some((mutation: Readonly<Mutation>) => mutation.state.status === 'error'),
+      ).toBe(true);
+    });
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    const replacement = { ...photoSource, version: photoSource.version + 1 };
+    fixture.componentRef.setInput('source', replacement);
+    fixture.componentRef.setInput('sourceChecking', false);
+    await shown(fixture, 'You have a different saved photo');
+    const current = button('Get tips for this photo');
+    fixture.componentRef.setInput('sourceChecking', true);
+    current.click();
+    fixture.detectChanges();
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    fixture.componentRef.setInput('sourceChecking', false);
+    fixture.detectChanges();
+    const request = await start('Get tips for this photo');
+    expect(request.request.body).toEqual({ kind: 'assess_photo', source: replacement });
+    request.flush(photoJob({ source: replacement }));
+    await shown(fixture, 'AI photo tips · waiting');
+    expect(chosen).toBe(0);
+  });
+  it('does not dispatch a queued photo admission during real session revalidation and uses fresh CSRF only after a new explicit ask', async () => {
+    button('Get photo tips').click();
+    const validation = client.query(sessionOptions(TestBed.inject(HttpClient), client));
+    const session = await vi.waitFor(() => backend.expectOne('/api/v1/me'));
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    const rotated = { ...verifiedActor, csrf_token: 'fresh-photo-ai-authority' };
+    session.flush(rotated);
+    await validation;
+    await shown(fixture, 'We couldn’t get photo tips.');
+    expect(expired).toEqual([]);
+    expect(chosen).toBe(0);
+    const request = await start();
+    expect(request.request.headers.get('x-csrf-token')).toBe(rotated.csrf_token);
+    request.flush({ code: 'ai_unavailable' }, { status: 503, statusText: 'Unavailable' });
+    await shown(fixture, 'Photo tips aren’t available');
+  });
+  it('cold-checks the known photo job after actual same-actor session cache eviction without exposing the previous advice', async () => {
+    await ready();
+    const validation = client.query(sessionOptions(TestBed.inject(HttpClient), client));
+    (await vi.waitFor(() => backend.expectOne('/api/v1/me'))).flush(verifiedActor);
+    await validation;
+    const read = await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${photoJob().id}`));
+    await shown(fixture, 'Checking your photo tips…');
+    expect(host(fixture).textContent).not.toContain('Advice only');
+    expect(chosen).toBe(0);
+    read.flush(photoJob({ state: 'succeeded', result, poll_after_ms: null }));
+    await shown(fixture, 'Advice only');
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    expect(chosen).toBe(0);
+  });
+  it('blocks stale manual Check and duplicate Cancel while cancelling and retains uncertainty when the manual read fails', async () => {
+    const admission = await start();
+    admission.flush(
+      photoJob({
+        created_at: new Date(Date.now() - 10_000).toISOString(),
+        deadline: new Date(Date.now() - 1000).toISOString(),
+      }),
+    );
+    await shown(fixture, 'Automatic checking has stopped');
+    const check = button('Check photo tips job');
+    const cancel = button('Cancel photo tips');
+    cancel.click();
+    check.click();
+    cancel.click();
+    fixture.detectChanges();
+    const request = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/ai/jobs/${photoJob().id}/cancel`),
+    );
+    backend.expectNone(`/api/v1/ai/jobs/${photoJob().id}`);
+    request.flush({ code: 'unavailable' }, { status: 503, statusText: 'Unavailable' });
+    await shown(fixture, 'Cancellation isn’t confirmed');
+    click(fixture, 'Check photo tips job');
+    (await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${photoJob().id}`))).flush(
+      { code: 'unavailable' },
+      { status: 503, statusText: 'Unavailable' },
+    );
+    await vi.waitFor(() => {
+      expect(
+        client
+          .getQueryCache()
+          .findAll({ queryKey: ['account', verifiedActor.account_id, 'photo-assistance'] })
+          .some((query: Readonly<Query>) => query.state.status === 'error'),
+      ).toBe(true);
+    });
+    fixture.detectChanges();
+    expect(host(fixture).textContent).toContain('Cancellation isn’t confirmed');
+    expect(host(fixture).textContent).not.toContain('Photo tips cancelled');
+    click(fixture, 'Check photo tips job');
+    (await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${photoJob().id}`))).flush(
+      photoJob({ state: 'succeeded', result, poll_after_ms: null }),
+    );
+    await shown(fixture, 'Advice only');
+    expect(chosen).toBe(0);
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+  });
+  for (const status of [401, 403])
+    it(`reports current photo cancellation denial ${String(status)} for the actual owning actor`, async () => {
+      const admission = await start();
+      admission.flush(photoJob());
+      await shown(fixture, 'AI photo tips · waiting');
+      click(fixture, 'Cancel photo tips');
+      (await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${photoJob().id}/cancel`))).flush(
+        { code: 'account_unavailable' },
+        { status, statusText: 'Denied' },
+      );
+      await vi.waitFor(() => {
+        expect(expired).toHaveLength(1);
+      });
+      expect(expired[0]?.actorId).toBe(verifiedActor.account_id);
+      expect(expired[0]?.failure.status).toBe(status);
+      expect(chosen).toBe(0);
+    });
+  for (const status of [200, 403])
+    it(`ignores old photo cancellation ${String(status)} when actor input retires ownership before cached session changes`, async () => {
+      const admission = await start();
+      admission.flush(photoJob());
+      await shown(fixture, 'AI photo tips · waiting');
+      click(fixture, 'Cancel photo tips');
+      const cancel = await vi.waitFor(() =>
+        backend.expectOne(`/api/v1/ai/jobs/${photoJob().id}/cancel`),
+      );
+      const replacement = { ...verifiedActor, account_id: 'photo-ai-replacement' };
+      fixture.componentRef.setInput('actor', replacement);
+      fixture.detectChanges();
+      client.setQueryData(['session'], replacement);
+      cancel.flush(
+        status === 200
+          ? photoJob({ state: 'succeeded', result, poll_after_ms: null })
+          : { code: 'account_unavailable' },
+        { status, statusText: 'Result' },
+      );
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(host(fixture).textContent).not.toContain('Advice only');
+      expect(expired).toEqual([]);
+      expect(chosen).toBe(0);
+      expect(
+        client.getQueryCache().findAll({ queryKey: ['account', verifiedActor.account_id] }),
+      ).toHaveLength(0);
+      backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    });
+  it('blocks a captured terminal Ask again while the current saved photo is checking', async () => {
+    const admission = await start();
+    admission.flush(photoJob({ state: 'failed', failure: 'timeout', poll_after_ms: null }));
+    await shown(fixture, 'Ask for photo tips again');
+    const again = button('Ask for photo tips again');
+    fixture.componentRef.setInput('sourceChecking', true);
+    again.click();
+    fixture.detectChanges();
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+    expect(chosen).toBe(0);
+    fixture.componentRef.setInput('sourceChecking', false);
+    fixture.detectChanges();
+    const request = await start('Ask for photo tips again');
+    request.flush(photoJob());
+    await shown(fixture, 'AI photo tips · waiting');
+  });
+  it('rejects a stale Choose event after actual cached-job refetch failure and restores only explicitly rechecked advice', async () => {
+    await ready();
+    const choose = button('Choose another photo');
+    const refresh = client.refetchQueries({
+      queryKey: ['account', verifiedActor.account_id, 'photo-assistance'],
+    });
+    (await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${photoJob().id}`))).flush(
+      { code: 'unavailable' },
+      { status: 503, statusText: 'Unavailable' },
+    );
+    await refresh;
+    choose.click();
+    fixture.detectChanges();
+    expect(chosen).toBe(0);
+    await shown(fixture, 'We couldn’t check these photo tips');
+    click(fixture, 'Check photo tips again');
+    (await vi.waitFor(() => backend.expectOne(`/api/v1/ai/jobs/${photoJob().id}`))).flush(
+      photoJob({ state: 'succeeded', result, poll_after_ms: null }),
+    );
+    await shown(fixture, 'Advice only');
+    click(fixture, 'Choose another photo');
+    expect(chosen).toBe(1);
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
+  });
+  it('does not let an old dismiss event retire an explicitly requested replacement photo job', async () => {
+    await ready();
+    const replacement = { ...photoSource, version: photoSource.version + 1 };
+    fixture.componentRef.setInput('source', replacement);
+    await shown(fixture, 'You have a different saved photo');
+    const dismiss = button('Dismiss earlier tips');
+    button('Get tips for this photo').click();
+    dismiss.click();
+    fixture.detectChanges();
+    const request = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/ai/jobs', method: 'POST' }),
+    );
+    expect(request.request.body).toEqual({ kind: 'assess_photo', source: replacement });
+    request.flush(photoJob({ source: replacement }));
+    await shown(fixture, 'AI photo tips · waiting');
+    expect(chosen).toBe(0);
+    backend.expectNone({ url: '/api/v1/ai/jobs', method: 'POST' });
   });
 });

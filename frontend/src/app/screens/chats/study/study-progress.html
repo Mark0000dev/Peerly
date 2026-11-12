@@ -3,34 +3,48 @@
     <ng-container [ngTemplateOutlet]="studyContent" />
   </section>
 }
-<ng-template #feedbackDialog>
-  <ng-container [ngTemplateOutlet]="studyContent" />
+<ng-template #feedbackDialog let-dialogId="id" let-appearance="appearance">
+  <ng-container
+    #feedbackContent
+    [ngTemplateOutlet]="studyContent"
+    [ngTemplateOutletContext]="{ $implicit: dialogId, fullscreen: appearance === 'fullscreen' }"
+  />
 </ng-template>
-<ng-template #studyContent>
+<ng-template #studyContent let-dialogId let-fullscreen="fullscreen">
   @if (view() !== 'hidden') {
     <section
       aria-label="Study progress"
       class="study"
       [class.feedback-layout]="view() !== 'checkin'"
+      [class.fullscreen-feedback]="fullscreen === true"
     >
       <header>
-        <div>
-          @if (view() === 'checkin') {
+        @if (view() === 'checkin') {
+          <div>
             <h2>Study progress</h2>
-          }
-          @if (view() !== 'checkin') {
-            @if (peerLabel(); as peer) {
-              <p>{{ peer }}</p>
+            @if (contextLabel(); as context) {
+              <p>{{ context }}</p>
             }
-          }
-          @if (contextLabel(); as context) {
-            <p>{{ context }}</p>
-          }
-        </div>
-        <button tuiButton type="button" appearance="flat" size="m" (click)="close()">Close</button>
+          </div>
+          <button tuiButton type="button" appearance="flat" size="m" (click)="close()">
+            Close
+          </button>
+        } @else {
+          <h2 class="feedback-title" [id]="dialogId">Feedback</h2>
+        }
       </header>
 
       <div class="study-body">
+        @if (view() !== 'checkin') {
+          <div class="feedback-context">
+            @if (peerLabel(); as peer) {
+              <p>{{ peer }}</p>
+            }
+            @if (contextLabel(); as context) {
+              <p>{{ context }}</p>
+            }
+          </div>
+        }
         @if (command.isError || readError) {
           <div role="alert">
             <p>{{ errorText }}</p>
@@ -280,15 +294,16 @@
                       >
                     </div>
                   </fieldset>
-                  <tui-textfield>
-                    <label tuiLabel for="study-team-note">Note for the team · optional</label>
+                  <label tuiLabel for="study-team-note">Note for the team · optional</label>
+                  <tui-textfield [tuiTextfieldCleaner]="false">
                     <textarea
                       id="study-team-note"
                       tuiTextarea
                       formControlName="note"
                       [readOnly]="locked"
                       aria-describedby="study-note-help"
-                      rows="3"
+                      [minRows]="3"
+                      [maxRows]="3"
                     ></textarea>
                   </tui-textfield>
                   <p id="study-note-help" class="note-help">
@@ -342,28 +357,28 @@
           }
         }
       </div>
-      @if (
-        view() === 'feedback' &&
-        feedback.isSuccess &&
-        !needsConfirmation &&
-        feedback.data.can_submit
-      ) {
+      @if (view() === 'feedback') {
         <footer>
-          <button
-            tuiButton
-            tuiButtonVertical
-            type="submit"
-            [attr.form]="feedbackFormId"
-            size="m"
-            [disabled]="locked || feedback.isFetching || draftChanged"
-          >
-            {{
-              feedback.data.current !== null
-                ? 'Update feedback'
-                : publication === 'private_only'
-                  ? 'Send to the team'
-                  : 'Save feedback'
-            }}
+          @if (feedback.isSuccess && !needsConfirmation && feedback.data.can_submit) {
+            <button
+              tuiButton
+              tuiButtonVertical
+              type="submit"
+              [attr.form]="feedbackFormId"
+              size="m"
+              [disabled]="locked || feedback.isFetching || draftChanged"
+            >
+              {{
+                feedback.data.current !== null
+                  ? 'Update feedback'
+                  : publication === 'private_only'
+                    ? 'Send to the team'
+                    : 'Save feedback'
+              }}
+            </button>
+          }
+          <button tuiButton type="button" appearance="flat" size="m" (click)="close()">
+            Close
           </button>
         </footer>
       }

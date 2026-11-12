@@ -565,7 +565,7 @@ describe('C01/C02 canonical reads and account boundaries', () => {
     if (!(toggle instanceof HTMLButtonElement)) throw new Error('Missing context disclosure');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(host().querySelectorAll('h1')).toHaveLength(1);
-    expect(host().querySelector('h1')?.textContent).toBe(peer.display_name);
+    expect(host().querySelector('h1')?.textContent.trim()).toBe(peer.display_name);
     toggle.click();
     await vi.waitFor(() => {
       fixture.detectChanges();

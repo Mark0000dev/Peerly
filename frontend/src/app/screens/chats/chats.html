@@ -182,7 +182,9 @@
               <section class="accepted-context" aria-label="Original accepted context">
                 <tui-accordion size="s">
                   <button tuiAccordion type="button" aria-label="Original accepted context">
-                    Original request · {{ contextSubject(conversation.original_context) }}
+                    <span class="context-label">
+                      Original request · {{ contextSubject(conversation.original_context) }}
+                    </span>
                   </button>
                   <tui-expand>
                     <h3>Original accepted context · read only</h3>
