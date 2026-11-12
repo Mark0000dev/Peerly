@@ -127,7 +127,7 @@ async function differences(page, left, right, regions) {
   );
 }
 
-async function ready(page) {
+async function ready(page, selector) {
   await page.waitForFunction(
     () =>
       document.fonts.status === 'loaded' &&
@@ -142,6 +142,28 @@ async function ready(page) {
         return !finite || ['finished', 'idle'].includes(animation.playState);
       }),
   );
+  // Route headings and fonts can be ready while a newly selected SVG is still
+  // downloading/decoding. Await the actual picture image, not an arbitrary delay.
+  await page.locator(selector).evaluateAll(async (images) => {
+    if (images.length === 0) throw new Error('No actual mascot image');
+    const decoding = Promise.all(
+      images.map((image) => {
+        if (!(image instanceof HTMLImageElement)) throw new Error('Expected a mascot image');
+        return image.decode();
+      }),
+    );
+    let deadline;
+    try {
+      await Promise.race([
+        decoding,
+        new Promise((_, reject) => {
+          deadline = setTimeout(() => reject(new Error('Mascot SVG decode timed out')), 10_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(deadline);
+    }
+  });
   await page.evaluate(() => new Promise(requestAnimationFrame));
 }
 async function geometry(page, selector) {
@@ -170,7 +192,7 @@ async function centerVisibleMascot(image) {
 }
 
 async function capture(page, project, mode, kind, selector) {
-  await ready(page);
+  await ready(page, selector);
   const boxes = await geometry(page, selector);
   if (boxes.length === 0) throw new Error('No actual mascot image');
   if (boxes.some((box) => box.selectedSource.endsWith('-still.svg') !== (mode === 'reduce')))
