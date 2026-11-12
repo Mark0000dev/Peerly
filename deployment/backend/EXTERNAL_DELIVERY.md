@@ -63,6 +63,66 @@ The notice cutoff is an explicit review boundary, not a runtime send filter. Old
 pending or unmaterialized live support sources require review; do not move the
 cutoff just to hide them or seed old support cases as new notices.
 
+## Explicit Umami-only partial milestone
+
+When product-support destination approval is still pending, use the separate
+closed schema2 manifest. It contains no Telegram target, token, dummy recipient
+or support cutoff:
+
+```json
+{
+  "schema_version": 2,
+  "mode": "umami_only",
+  "database": "peerly_staging",
+  "database_schema": "public",
+  "migration_revision": "0060_report_triage",
+  "backend_image": "ghcr.io/mark0000dev/peerly-backend@sha256:REPLACE_VERIFIED_DIGEST",
+  "umami": {
+    "revision": 1,
+    "origin": "https://analytics.example.test",
+    "website_id": "REPLACE_ACTUAL_STAGING_WEBSITE_UUID"
+  }
+}
+```
+
+Use the same plan/register/check commands and fresh, privately reviewed plan.
+The mode/schema, image, exact Umami target, helper version and complete snapshot
+are bound into approval hashes. Registration passes exactly one entry to the
+same existing guarded transaction writer. The legacy schema1 both-target manifest
+and its review requirements remain supported; old plans require fresh planning
+when this helper version changes.
+
+Partial mode validates global source-capture/rotation invariants and the selected
+Umami schedule, work and revision. It reports the omitted support schedule and
+actual deferred support inventory (unmaterialized sources, pending unbound/bound
+notices, unsettled deliveries, unresolved attempts and registered historical
+targets). No support cutoff is invented: old_support_notices is null because no
+historical support send boundary is approved. Omitting support configuration does
+not clear, rebind, discard, claim or acknowledge those records. A blocked omitted
+support sink does not imply that Umami is blocked. Existing support registrations,
+if any, remain historical metadata and are not runtime configuration.
+
+The existing worker supports Umami-only settings: configure actual Umami fields
+and leave TELEGRAM_SUPPORT entirely absent. Its actual destination registry returns
+None for support; the existing worker skips that sink before claiming. Live support
+captures can still materialize into durable pending, destination-unbound notices;
+no attempt or destination binding is created by an unconfigured worker. Umami
+can drain its own eligible work without dropping or starving retained support.
+No runtime/queue policy or delivery-source routing is changed by this helper.
+
+Later full registration uses a fresh schema1 plan with the actual approved product
+support destination and explicit support-cutoff/backlog review. Historical deferred
+notices continue to trigger the existing review guard. Do not move cutoffs, clear
+attempts or retime sources to obtain a pass. Existing exact Umami registration
+remains an immutable idempotent match. Registering Telegram metadata alone does not
+configure or activate a running Umami-only worker. Elapsed time does not approve
+the missing destination or authorize historical Telegram delivery.
+
+A partial metadata check/provider acceptance is only a milestone. Full BE-DELIVERY
+acceptance still requires BOTH real sinks, proper recipient/links, monitoring,
+bounded failure/replay behavior and provider receipts. No support recipient is
+inferred from the technical PeerlyDev alert destination.
+
 ## Commands
 
 From the repository root, with the authorized DB connection already configured:
@@ -100,7 +160,7 @@ backend/.venv/bin/python -m deployment.backend.external_delivery_activation chec
   --input /path/to/targets.json > /path/to/readiness-metadata.json
 ```
 
-Check additionally requires both exact registrations. `metadata_checks_passed`
+Check additionally requires every exact registration selected by the manifest. `metadata_checks_passed`
 means only the checked metadata matches. Output explicitly states that activation,
 credentials, provider acceptance and worker start are not verified/authorized.
 Current aggregate pending-source counts are reported, not drained or discarded.
@@ -129,7 +189,7 @@ fingerprints as recovery. There is no automatic retry, provider probe or start.
 ## Separate worker activation
 
 The normal worker command remains `python -m studymate.external_delivery_worker`.
-It needs the actual `UMAMI__REVISION`, `UMAMI__ORIGIN`, `UMAMI__WEBSITE_ID`, and
+For both-sink activation it needs the actual `UMAMI__REVISION`, `UMAMI__ORIGIN`, `UMAMI__WEBSITE_ID`, and
 `TELEGRAM_SUPPORT__REVISION`, `__CHAT_ID`, `__OPERATOR_ORIGIN`, `__TOKEN`, with optional
 `__TOPIC_ID`. The token is supplied privately to the worker, never this manifest.
 Configure actual observability origin/environment/release and the reviewed bounded

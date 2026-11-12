@@ -9,11 +9,11 @@ import stat
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Literal, Never
+from typing import Annotated, Literal, Never
 from uuid import UUID
 
 from deployment.backend.canonical_backfill import guard_database
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
@@ -76,6 +76,33 @@ class Targets(Closed):
     telegram_support: SupportTarget
 
 
+class UmamiOnlyTargets(Closed):
+    schema_version: Literal[2]
+    mode: Literal["umami_only"]
+    database: Literal["peerly_staging"]
+    database_schema: Literal["public"]
+    migration_revision: Literal["0060_report_triage"]
+    backend_image: str = Field(pattern=r"^ghcr\.io/mark0000dev/peerly-backend@sha256:[0-9a-f]{64}$")
+    umami: UmamiTarget
+
+
+type ActivationTargets = Annotated[
+    Targets | UmamiOnlyTargets, Field(discriminator="schema_version")
+]
+TARGETS_CODEC = TypeAdapter(ActivationTargets)
+
+
+class DeferredSupport(Closed):
+    sources_pending: int = Field(ge=0)
+    pending_unbound: int = Field(ge=0)
+    pending_bound: int = Field(ge=0)
+    unsettled_deliveries: int = Field(ge=0)
+    unresolved_attempts: int = Field(ge=0)
+    registered_destinations: int = Field(ge=0)
+    attempts_total: int = Field(ge=0)
+    succeeded_deliveries: int = Field(ge=0)
+
+
 class Registered(Closed):
     sink: SinkName
     revision: int
@@ -98,13 +125,14 @@ class Snapshot(Closed):
     unsettled_deliveries: int = Field(ge=0)
     unresolved_attempts: int = Field(ge=0)
     pending_other_revision: int = Field(ge=0)
-    old_support_notices: int = Field(ge=0)
+    old_support_notices: int | None = Field(ge=0)
+    deferred_support: DeferredSupport | None = None
     pending_sources: int = Field(ge=0)
 
 
 class Plan(Closed):
     status: Literal["planned"] = "planned"
-    targets: Targets
+    targets: ActivationTargets
     targets_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     helper_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -115,7 +143,7 @@ def helper_digest() -> str:
     return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 
-def targets_digest(targets: Targets) -> str:
+def targets_digest(targets: ActivationTargets) -> str:
     return hashlib.sha256(
         json.dumps(targets.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
@@ -131,7 +159,7 @@ def plan_digest(plan: Plan) -> str:
     ).hexdigest()
 
 
-def build_plan(targets: Targets, snapshot: Snapshot) -> Plan:
+def build_plan(targets: ActivationTargets, snapshot: Snapshot) -> Plan:
     content: dict[str, object] = {
         "status": "planned",
         "targets": targets.model_dump(mode="json"),
@@ -153,24 +181,28 @@ def sink_name(value: str) -> SinkName:
     raise ActivationRejectedError("unknown_sink")
 
 
-def registrations(targets: Targets) -> tuple[DestinationRegistration, ...]:
-    umami, support = targets.umami, targets.telegram_support
-    configurations = (
+def registrations(targets: ActivationTargets) -> tuple[DestinationRegistration, ...]:
+    umami = targets.umami
+    configurations: tuple[UmamiConfig | TelegramConfig, ...] = (
         UmamiConfig(DestinationRef(Sink.UMAMI, umami.revision), umami.origin, umami.website_id),
-        TelegramConfig(
-            DestinationRef(Sink.TELEGRAM_SUPPORT, support.revision),
-            support.chat_id,
-            support.operator_origin,
-            topic_id=support.topic_id,
-        ),
     )
+    if isinstance(targets, Targets):
+        support = targets.telegram_support
+        configurations += (
+            TelegramConfig(
+                DestinationRef(Sink.TELEGRAM_SUPPORT, support.revision),
+                support.chat_id,
+                support.operator_origin,
+                topic_id=support.topic_id,
+            ),
+        )
     return tuple(
         DestinationRegistration(value.destination, target_fingerprint(value))
         for value in configurations
     )
 
 
-def target_states(targets: Targets, snapshot: Snapshot) -> tuple[str, ...]:
+def target_states(targets: ActivationTargets, snapshot: Snapshot) -> tuple[str, ...]:
     states: list[str] = []
     for item in registrations(targets):
         existing = tuple(
@@ -187,27 +219,39 @@ def target_states(targets: Targets, snapshot: Snapshot) -> tuple[str, ...]:
     return tuple(states)
 
 
-def require_snapshot(targets: Targets, snapshot: Snapshot, *, registered: bool) -> None:
+def _require_mode_snapshot(targets: ActivationTargets, snapshot: Snapshot) -> None:
     dates = (
-        targets.support_notice_not_before,
         snapshot.captured_at,
         *(row.cooldown_until for row in snapshot.schedules if row.cooldown_until is not None),
     )
+    if isinstance(targets, Targets):
+        dates += (targets.support_notice_not_before,)
     if any(at.utcoffset() is None for at in dates):
         raise ActivationRejectedError("timezone_required")
-    if targets.support_notice_not_before > snapshot.captured_at:
-        raise ActivationRejectedError("future_support_cutoff")
+    if isinstance(targets, Targets):
+        if targets.support_notice_not_before > snapshot.captured_at:
+            raise ActivationRejectedError("future_support_cutoff")
+        if snapshot.old_support_notices is None:
+            raise ActivationRejectedError("support_cutoff_review_required")
+    elif snapshot.old_support_notices is not None or snapshot.deferred_support is None:
+        raise ActivationRejectedError("deferred_support_inventory_required")
+
+
+def require_snapshot(targets: ActivationTargets, snapshot: Snapshot, *, registered: bool) -> None:
+    _require_mode_snapshot(targets, snapshot)
     if not snapshot.capture_triggers_verified:
         raise ActivationRejectedError("capture_trigger_mismatch")
     if {row.sink for row in snapshot.schedules} != {"umami", "telegram_support"} or {
         row.turn for row in snapshot.schedules
     } != {0, 1}:
         raise ActivationRejectedError("sink_schedule_mismatch")
-    if any(row.blocked for row in snapshot.schedules):
+    selected = {item.destination.sink.value for item in registrations(targets)}
+    selected_schedules = tuple(row for row in snapshot.schedules if row.sink in selected)
+    if any(row.blocked for row in selected_schedules):
         raise ActivationRejectedError("blocked_sink_requires_review")
     if any(
         row.cooldown_until is not None and row.cooldown_until > snapshot.captured_at
-        for row in snapshot.schedules
+        for row in selected_schedules
     ):
         raise ActivationRejectedError("sink_cooldown_active")
     if snapshot.unsettled_deliveries or snapshot.unresolved_attempts:
@@ -299,7 +343,43 @@ async def capture_triggers_verified(session: AsyncSession) -> bool:
     return True
 
 
-async def read_snapshot(session: AsyncSession, targets: Targets) -> Snapshot:
+async def read_deferred_support(session: AsyncSession) -> DeferredSupport:
+    row = (
+        (
+            await session.execute(
+                text("""
+        SELECT
+          (SELECT count(*) FROM external_delivery_sources
+            WHERE source_kind='support_case' AND mode='live'
+              AND materialized_at IS NULL) AS sources_pending,
+          (SELECT count(*) FROM external_deliveries WHERE sink='telegram_support'
+            AND state='pending' AND destination_revision IS NULL) AS pending_unbound,
+          (SELECT count(*) FROM external_deliveries WHERE sink='telegram_support'
+            AND state='pending' AND destination_revision IS NOT NULL) AS pending_bound,
+          (SELECT count(*) FROM external_deliveries WHERE sink='telegram_support'
+            AND state IN ('leased','retry','dead')) AS unsettled_deliveries,
+          (SELECT count(*) FROM external_delivery_attempts a
+            JOIN external_deliveries d ON d.id=a.delivery_id
+            WHERE d.sink='telegram_support' AND d.state<>'succeeded'
+              AND (a.ended_at IS NULL OR a.outcome IN ('ambiguous','lease_expired')))
+            AS unresolved_attempts,
+          (SELECT count(*) FROM external_delivery_destinations
+            WHERE sink='telegram_support') AS registered_destinations,
+          (SELECT count(*) FROM external_delivery_attempts a
+            JOIN external_deliveries d ON d.id=a.delivery_id
+            WHERE d.sink='telegram_support') AS attempts_total,
+          (SELECT count(*) FROM external_deliveries
+            WHERE sink='telegram_support' AND state='succeeded') AS succeeded_deliveries
+    """)
+            )
+        )
+        .mappings()
+        .one()
+    )
+    return DeferredSupport(**dict(row))
+
+
+async def read_snapshot(session: AsyncSession, targets: ActivationTargets) -> Snapshot:
     registered = await read_registered(session)
     schedules = tuple(
         (
@@ -314,30 +394,38 @@ async def read_snapshot(session: AsyncSession, targets: Targets) -> Snapshot:
                 text("""
         SELECT clock_timestamp() AS captured_at,
           (SELECT count(*) FROM external_deliveries
-           WHERE state IN ('leased','retry','dead')) AS unsettled_deliveries,
+           WHERE state IN ('leased','retry','dead')
+             AND (:include_support OR sink='umami')) AS unsettled_deliveries,
           (SELECT count(*) FROM external_delivery_attempts a
            JOIN external_deliveries d ON d.id=a.delivery_id
-           WHERE d.state<>'succeeded'
+           WHERE d.state<>'succeeded' AND (:include_support OR d.sink='umami')
              AND (a.ended_at IS NULL OR a.outcome IN ('ambiguous','lease_expired')))
              AS unresolved_attempts,
           (SELECT count(*) FROM external_deliveries
            WHERE state='pending' AND destination_revision IS NOT NULL
              AND ((sink='umami' AND destination_revision<>:umami_revision)
-               OR (sink='telegram_support' AND destination_revision<>:support_revision)))
+               OR (:include_support AND sink='telegram_support'
+                    AND destination_revision<>:support_revision)))
              AS pending_other_revision,
-          ((SELECT count(*) FROM external_delivery_sources WHERE materialized_at IS NULL
+          CASE WHEN :include_support THEN ((SELECT count(*) FROM external_delivery_sources
+            WHERE materialized_at IS NULL
             AND source_kind='support_case' AND mode='live' AND captured_at<:cutoff)
            +(SELECT count(*) FROM external_deliveries d
              JOIN external_delivery_sources s ON s.id=d.source_id
              WHERE d.sink='telegram_support' AND d.state IN ('pending','retry','leased')
-               AND s.captured_at<:cutoff)) AS old_support_notices,
+               AND s.captured_at<:cutoff)) ELSE NULL END AS old_support_notices,
           (SELECT count(*) FROM external_delivery_sources WHERE materialized_at IS NULL)
             AS pending_sources
     """),
                 {
                     "umami_revision": targets.umami.revision,
-                    "support_revision": targets.telegram_support.revision,
-                    "cutoff": targets.support_notice_not_before,
+                    "include_support": isinstance(targets, Targets),
+                    "support_revision": targets.telegram_support.revision
+                    if isinstance(targets, Targets)
+                    else None,
+                    "cutoff": targets.support_notice_not_before
+                    if isinstance(targets, Targets)
+                    else None,
                 },
             )
         )
@@ -357,6 +445,9 @@ async def read_snapshot(session: AsyncSession, targets: Targets) -> Snapshot:
             for row in schedules
         ),
         capture_triggers_verified=await capture_triggers_verified(session),
+        deferred_support=await read_deferred_support(session)
+        if isinstance(targets, UmamiOnlyTargets)
+        else None,
     )
 
 
@@ -380,7 +471,7 @@ async def register_plan(session: AsyncSession, plan: Plan) -> Snapshot:
     return final
 
 
-def read_model(path: Path, model: type[Targets] | type[Plan]) -> Targets | Plan:
+def read_model(path: Path, *, plan: bool) -> ActivationTargets | Plan:
     descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         metadata = os.fstat(descriptor)
@@ -393,13 +484,13 @@ def read_model(path: Path, model: type[Targets] | type[Plan]) -> Targets | Plan:
         raw = os.read(descriptor, MAX_INPUT + 1)
         if len(raw) > MAX_INPUT:
             raise ActivationRejectedError("input_too_large")
-        return model.model_validate_json(raw)
+        return Plan.model_validate_json(raw) if plan else TARGETS_CODEC.validate_json(raw)
     finally:
         os.close(descriptor)
 
 
 async def run(
-    command: Literal["plan", "register", "check"], value: Targets | Plan
+    command: Literal["plan", "register", "check"], value: ActivationTargets | Plan
 ) -> dict[str, object]:
     url = os.environ.get("DATABASE_URL", "")
     parsed = make_url(url)
@@ -434,7 +525,7 @@ async def run(
                 targets, snapshot = value.targets, await register_plan(session, value)
                 result: dict[str, object] = {"status": "targets_registered"}
             else:
-                if not isinstance(value, Targets):
+                if not isinstance(value, (Targets, UmamiOnlyTargets)):
                     raise ActivationRejectedError("targets_manifest_required")
                 targets = value
                 snapshot = await read_snapshot(session, targets)
@@ -447,6 +538,10 @@ async def run(
             if command != "plan":
                 result.update(
                     targets_sha256=targets_digest(targets),
+                    configured_sinks=[
+                        item.destination.sink.value for item in registrations(targets)
+                    ],
+                    full_delivery_acceptance=False,
                     snapshot=snapshot.model_dump(mode="json"),
                     activation_authorized=False,
                     credentials_verified=False,
@@ -470,8 +565,9 @@ def main() -> int:
         parser.add_argument("command", choices=("plan", "register", "check"))
         parser.add_argument("--input", type=Path, required=True)
         args = parser.parse_args()
-        model = Plan if args.command == "register" else Targets
-        result = asyncio.run(run(args.command, read_model(args.input, model)))
+        result = asyncio.run(
+            run(args.command, read_model(args.input, plan=args.command == "register"))
+        )
     except ActivationRejectedError as error:
         result = {"status": "rejected", "code": error.code}
         code = 1
