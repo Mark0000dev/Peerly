@@ -48,6 +48,28 @@ Reads/polls do not acknowledge a human view or automatically confirm freshness.
 Some reads intentionally retain audit/disclosure/expiry facts; do not assume GET
 means a database read-only transaction. All current authority is revalidated.
 
+## Operator retained identity links
+
+`GET /api/v1/operator/accounts/{account_id}/identity-links` inspects one retained
+account aggregate with the existing live operator role/session checks and atomic
+`READ_ACCOUNT` audit. No student-facing identity access is granted. It returns
+the target's stored Google and institutional claims, including retirement and
+revocation facts, and at most50 distinct other accounts directly sharing its
+stored Google issuer/subject or institutional email. Matching flags identify the
+actual direct claim sources. Shared claims do not assert that accounts belong to
+one person; no transitive identity graph or automatic merge is performed.
+
+The opaque cursor binds the actual operator/grant, target, immutable target-claim
+keys and fixed source-created cutoff. Accounts sort by created_at then UUID,
+both descending. A newly added target claim invalidates the old continuation;
+restart the read rather than silently changing its scope. Retirement, lifecycle
+and returned claim metadata are current stored facts, not an historical database
+snapshot at `as_of`. Deleted, banned and retired source records remain available
+to the privileged operator. Empty existing accounts return200; absent accounts
+are audited before404. Invalid cursors return422 and current authority failures
+remain401/403. Private responses use no-store/no-referrer. No OTP, session/login
+secrets, signed media ticket or inferred verification method is returned or logged.
+
 ## Photos and disclosure
 
 A public Requests peer with a current photo_version may use existing

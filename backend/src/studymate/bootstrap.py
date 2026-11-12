@@ -114,6 +114,7 @@ from studymate.application.operator.connection_requests import (
 from studymate.application.operator.conversation_index import ReadOperatorConversations
 from studymate.application.operator.goals import ReadOperatorGoalHistory, ReadOperatorGoals
 from studymate.application.operator.help_history import ReadOperatorHelpHistory
+from studymate.application.operator.identity_links import ReadOperatorIdentityLinks
 from studymate.application.operator.lifecycle_history import ReadOperatorLifecycleHistory
 from studymate.application.operator.media_read import ReadOperatorProfileMedia
 from studymate.application.operator.membership_verification import (
@@ -319,6 +320,12 @@ from studymate.infrastructure.operator.help_history_cursors import (
 from studymate.infrastructure.operator.help_history_transactions import (
     SqlOperatorHelpHistoryUnitOfWork,
 )
+from studymate.infrastructure.operator.identity_links_cursors import (
+    FernetOperatorIdentityLinksCursorCodec,
+)
+from studymate.infrastructure.operator.identity_links_transactions import (
+    SqlOperatorIdentityLinksUnitOfWork,
+)
 from studymate.infrastructure.operator.lifecycle_history_cursors import (
     FernetOperatorLifecycleHistoryCursorCodec,
 )
@@ -518,6 +525,10 @@ from studymate.presentation.operator.goal_router import (
 from studymate.presentation.operator.help_history_router import (
     OperatorHelpHistoryHttpServices,
     operator_help_history_router,
+)
+from studymate.presentation.operator.identity_links_router import (
+    OperatorIdentityLinksHttpServices,
+    operator_identity_links_router,
 )
 from studymate.presentation.operator.lifecycle_history_router import (
     OperatorLifecycleHistoryHttpServices,
@@ -1616,6 +1627,15 @@ def _operator_routers(
                 ReadOperatorMessageOperation(
                     SqlOperatorMessageOperationsUnitOfWork(sessions, record_operator_audit), hasher
                 ),
+            )
+        ),
+        operator_identity_links_router(
+            OperatorIdentityLinksHttpServices(
+                ReadOperatorIdentityLinks(
+                    SqlOperatorIdentityLinksUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    FernetOperatorIdentityLinksCursorCodec.from_key(key),
+                )
             )
         ),
         operator_lifecycle_history_router(
