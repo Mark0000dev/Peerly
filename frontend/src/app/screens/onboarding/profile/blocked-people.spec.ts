@@ -5,7 +5,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appConfig } from '../../../app.config';
 import { verifiedActor } from '../onboarding.fixtures';
-import { click, shown } from '../testing-host';
+import { click, host, shown } from '../testing-host';
 import { BlockedPeople } from './blocked-people';
 
 const person = {
@@ -46,6 +46,81 @@ describe('owner block list command boundary', () => {
     read.flush({ people: [person], next_cursor: null });
     await shown(fixture, person.display_name);
   }
+  it('shows a page-specific empty state without claiming nobody has ever been blocked', async () => {
+    const read = await vi.waitFor(() => backend.expectOne('/api/v1/me/blocks'));
+    expect(host(fixture).textContent).not.toContain('No blocked people on this page.');
+    read.flush({ people: [], next_cursor: 'another-page' });
+    await shown(fixture, 'No blocked people on this page.');
+    expect(host(fixture).querySelector('peerly-mascot img')?.getAttribute('src')).toBe(
+      'assets/brand/mascot-rest.svg',
+    );
+    expect(host(fixture).querySelector('peerly-mascot img')?.getAttribute('alt')).toBe('');
+    expect(host(fixture).querySelector('[aria-label="Blocked people on this page"]')).toBeNull();
+    expect(host(fixture).textContent).toContain(
+      'You can block someone from their profile or chat menu.',
+    );
+    expect(host(fixture).textContent).not.toContain('You haven’t blocked anyone');
+    expect(host(fixture).textContent).toContain('Next page');
+    backend.expectNone((request) => request.method !== 'GET');
+  });
+  it('displays only the actual block date without inferring a past connection', async () => {
+    await load();
+    expect(
+      host(fixture)
+        .querySelector('[aria-label="Blocked people on this page"]')
+        ?.querySelectorAll('li'),
+    ).toHaveLength(1);
+    expect(host(fixture).querySelector('peerly-mascot')).toBeNull();
+    const date = host(fixture).querySelector('time');
+    expect(date?.getAttribute('datetime')).toBe(person.block.changed_at);
+    expect(date?.textContent).toBe('7 Nov 2026');
+    expect(host(fixture).textContent).not.toContain('you were connected');
+    backend.expectNone((request) => request.method !== 'GET');
+  });
+  it.each([
+    {
+      name: 'deleted account',
+      deleted: true,
+      display_name: 'Old private name',
+      expected: 'Deleted account',
+    },
+    { name: 'unnamed account', deleted: false, display_name: null, expected: 'Peerly student' },
+    {
+      name: 'long student name',
+      deleted: false,
+      display_name: 'Alexandria'.repeat(20),
+      expected: 'Alexandria'.repeat(20),
+    },
+  ])(
+    'preserves $name presentation without fabricating a missing block date',
+    async ({
+      deleted,
+      display_name,
+      expected,
+    }: Readonly<{
+      readonly name: string;
+      readonly deleted: boolean;
+      readonly display_name: string | null;
+      readonly expected: string;
+    }>) => {
+      const read = await vi.waitFor(() => backend.expectOne('/api/v1/me/blocks'));
+      read.flush({
+        people: [
+          { ...person, deleted, display_name, block: { ...person.block, changed_at: null } },
+        ],
+        next_cursor: null,
+      });
+      await shown(fixture, expected);
+      expect(host(fixture).querySelector('time')).toBeNull();
+      if (deleted) expect(host(fixture).textContent).not.toContain('Old private name');
+      expect(
+        Array.from(host(fixture).querySelectorAll('button')).some(
+          (button: Readonly<HTMLButtonElement>) => button.textContent.trim() === 'Unblock',
+        ),
+      ).toBe(true);
+      backend.expectNone((request) => request.method !== 'GET');
+    },
+  );
   it('uses server CAS and replays only the identical uncertain unblock', async () => {
     await load();
     click(fixture, 'Unblock');

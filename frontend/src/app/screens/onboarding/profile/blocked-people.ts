@@ -1,4 +1,5 @@
 import { HttpClient } from '@angular/common/http';
+import { DatePipe } from '@angular/common';
 import {
   ChangeDetectorRef,
   Component,
@@ -9,8 +10,10 @@ import {
   signal,
 } from '@angular/core';
 import type { OnChanges } from '@angular/core';
-import { TuiButton, TuiLink, TuiCell } from '@taiga-ui/core';
+import { TuiButton, TuiLink, TuiCell, TuiTitle } from '@taiga-ui/core';
 import { TuiAvatar } from '@taiga-ui/kit';
+import { TuiBlockStatus, TuiCardLarge } from '@taiga-ui/layout';
+import { Mascot } from '../../mascot';
 import {
   CancelledError,
   MutationObserver,
@@ -71,7 +74,17 @@ function isBlocks(value: unknown): value is Api['schemas']['OwnBlocksResponse'] 
 }
 @Component({
   selector: 'peerly-blocked-people',
-  imports: [TuiButton, TuiLink, TuiAvatar, TuiCell],
+  imports: [
+    DatePipe,
+    TuiButton,
+    TuiLink,
+    TuiAvatar,
+    TuiCell,
+    TuiTitle,
+    TuiBlockStatus,
+    TuiCardLarge,
+    Mascot,
+  ],
   templateUrl: './blocked-people.html',
   styleUrl: './blocked-people.less',
 })

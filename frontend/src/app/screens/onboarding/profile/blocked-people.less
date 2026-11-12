@@ -3,10 +3,29 @@
   min-inline-size: 0;
 }
 
+section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+section > p {
+  margin: 0;
+}
+
+section > button {
+  justify-self: start;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
 ul {
   list-style: none;
-  padding: 0;
-  margin-block: 1rem;
+  margin: 0;
 }
 
 li {
@@ -18,4 +37,14 @@ li {
   flex: 1;
   min-inline-size: 0;
   overflow-wrap: anywhere;
+}
+
+.empty-blocks {
+  margin-block: 1.5rem;
+}
+
+li button {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: var(--tui-height-s);
 }

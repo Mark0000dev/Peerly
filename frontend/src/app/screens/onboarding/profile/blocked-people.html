@@ -13,39 +13,59 @@
   }
   @if (result.data; as list) {
     @if (list.people.length === 0) {
-      <p>No blocked people on this page.</p>
-    }
-    <ul>
-      @for (person of list.people; track person.block.person_id) {
-        <li tuiCell="m">
-          <span tuiAvatar="@tui.user" [round]="true" size="m" aria-hidden="true"></span>
-          <span class="person">{{
-            person.deleted ? 'Deleted account' : (person.display_name ?? 'Peerly student')
-          }}</span>
-          <button
-            tuiLink
-            type="button"
-            [disabled]="locked || action.isError || result.isFetching"
-            (click)="unblock(person)"
-          >
-            Unblock
-          </button>
-        </li>
-      }
-    </ul>
-    @if (list.next_cursor !== null) {
-      <button
-        tuiLink
-        type="button"
-        [disabled]="locked || action.isError || result.isFetching"
-        (click)="next()"
+      <tui-block-status
+        class="empty-blocks"
+        size="l"
+        role="region"
+        aria-label="No blocked people on this page"
       >
-        Next page
-      </button>
+        <peerly-mascot tuiSlot="top" name="rest" />
+        <h2>No blocked people on this page.</h2>
+        <p>You can block someone from their profile or chat menu.</p>
+      </tui-block-status>
+    } @else {
+      <ul tuiCardLarge="compact" appearance="floating" aria-label="Blocked people on this page">
+        @for (person of list.people; track person.block.person_id) {
+          <li tuiCell="m">
+            <span tuiAvatar="@tui.user" [round]="true" size="m" aria-hidden="true"></span>
+            <span tuiTitle class="person">
+              {{ person.deleted ? 'Deleted account' : (person.display_name ?? 'Peerly student') }}
+              @if (person.block.changed_at; as changedAt) {
+                <span tuiSubtitle>
+                  Blocked
+                  <time [attr.datetime]="changedAt">{{ changedAt | date: 'd MMM y' : 'UTC' }}</time>
+                </span>
+              }
+            </span>
+            <button
+              tuiButton
+              appearance="flat"
+              size="s"
+              type="button"
+              [disabled]="locked || action.isError || result.isFetching"
+              (click)="unblock(person)"
+            >
+              Unblock
+            </button>
+          </li>
+        }
+      </ul>
     }
-    <button tuiLink type="button" [disabled]="locked || action.isError" (click)="first()">
-      First page
-    </button>
+    <nav aria-label="Blocked people pages">
+      @if (list.next_cursor !== null) {
+        <button
+          tuiLink
+          type="button"
+          [disabled]="locked || action.isError || result.isFetching"
+          (click)="next()"
+        >
+          Next page
+        </button>
+      }
+      <button tuiLink type="button" [disabled]="locked || action.isError" (click)="first()">
+        First page
+      </button>
+    </nav>
   }
   @if (action.isPending) {
     <p role="status">Unblocking…</p>
