@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from studymate.application.profiles.onboarding import ProfileSetupSnapshot
 from studymate.domain.onboarding import OnboardingActivation, ProfileLifecycle
+from studymate.infrastructure.operator.photo_review_condition import photo_replacement_required
 from studymate.infrastructure.persistence.discovery_exposure import (
     initialize_discovery_exposure,
     read_discovery_exposure,
@@ -55,6 +56,7 @@ async def read_setup_snapshot(session: AsyncSession, account_id: UUID) -> Profil
         await read_lifecycle(session, account_id),
         await read_discovery_exposure(session, account_id),
         await read_freshness_policy(session, await SqlIdentityTransaction(session).now()),
+        bool(await session.scalar(select(photo_replacement_required(account_id)))),
     )
 
 

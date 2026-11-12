@@ -51,6 +51,10 @@ from studymate.infrastructure.operator.models import (
     OperatorAccessRevisionRecord,
     OperatorAuditRecord,
 )
+from studymate.infrastructure.operator.photo_review_models import (
+    OperatorPhotoReviewIntentRecord,
+    OperatorPhotoReviewRecord,
+)
 from studymate.infrastructure.persistence.base import Base
 from studymate.infrastructure.persistence.block_models import (
     BlockIntentRecord,
@@ -138,6 +142,10 @@ from studymate.infrastructure.persistence.report_models import (
     ProfileReportRecord,
 )
 from studymate.infrastructure.persistence.transport_cleanup_models import TransportCleanupRecord
+from studymate.infrastructure.report_moderation.models import (
+    ReportReviewIntentRecord,
+    ReportReviewRevisionRecord,
+)
 from studymate.infrastructure.requests.models import REQUEST_MODELS
 from studymate.infrastructure.requests.view_models import (
     RequestDisclosureRecord,
@@ -181,6 +189,10 @@ MODELS: tuple[type[Base], ...] = (
     OperatorAuditRecord,
     OperatorMembershipVerificationRecord,
     OperatorMembershipIntentRecord,
+    OperatorPhotoReviewRecord,
+    OperatorPhotoReviewIntentRecord,
+    ReportReviewRevisionRecord,
+    ReportReviewIntentRecord,
     *REQUEST_MODELS,
     RequestDisclosureRecord,
     RequestViewAcknowledgementRecord,

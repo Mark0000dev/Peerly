@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from studymate.domain.changes import ChangeHint, ChangeResource
 from studymate.infrastructure.changes.academic import academic_hints
 from studymate.infrastructure.changes.lifecycle import lifecycle_hints
+from studymate.infrastructure.changes.photo_review import photo_review_hints
 from studymate.infrastructure.feedback.models import PeerFeedbackRecord
 from studymate.infrastructure.persistence.conversation_models import ConversationRecord
 from studymate.infrastructure.persistence.message_models import MessageOperationRecord
@@ -171,9 +172,12 @@ async def project_change_hints(
     )
     academic = await academic_hints(session, events)
     lifecycle = await lifecycle_hints(session, events)
+    photo_reviews = await photo_review_hints(session, events)
     return {
         event.id: lifecycle[event.id]
         if event.id in lifecycle
+        else photo_reviews[event.id]
+        if event.id in photo_reviews
         else academic[event.id]
         if event.id in academic
         else tuple(

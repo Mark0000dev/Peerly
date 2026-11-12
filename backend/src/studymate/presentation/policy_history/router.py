@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from studymate.application.policy_history.read import PolicyHistoryPosition, ReadPolicyHistory
 from studymate.domain.registration import PolicyKind
-from studymate.presentation.problems import problem
+from studymate.presentation.problems import ProblemResponse, problem
 from studymate.presentation.registration_models import PolicyReferenceResponse, policy_reference
 
 MAX_CURSOR_LENGTH = 256
@@ -60,7 +60,7 @@ def decode_position(kind: PolicyKind, token: str) -> PolicyHistoryPosition:
 
 
 def policy_history_router(read: ReadPolicyHistory) -> APIRouter:
-    router = APIRouter()
+    router = APIRouter(responses={422: {"model": ProblemResponse}})
 
     @router.get("/policies/{kind}/versions", response_model=PolicyHistoryResponse)
     async def history(

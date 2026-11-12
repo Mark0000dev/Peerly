@@ -23,6 +23,12 @@ class CommandHandler:
 @pytest.mark.parametrize(
     ("path", "body", "content_type", "status"),
     [
+        ("/api/v1/operator/accounts/person/photo-reviews", b"{}", "text/plain", 415),
+        ("/api/v1/operator/accounts/person/photo-reviews", b"x" * 8193, "application/json", 413),
+        ("/api/v1/operator/accounts/person/photo-reviews", b"{}", "application/json", 204),
+        ("/api/v1/operator/reports/report/reviews", b"{}", "text/plain", 415),
+        ("/api/v1/operator/reports/report/reviews", b"x" * 8193, "application/json", 413),
+        ("/api/v1/operator/reports/report/reviews", b"{}", "application/json", 204),
         ("/api/v1/ai/jobs", b"{}", "text/plain", 415),
         ("/api/v1/reports", b"{}", "text/plain", 415),
         ("/api/v1/reports", b"x" * 8193, "application/json", 413),

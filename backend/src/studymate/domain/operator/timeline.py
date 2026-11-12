@@ -34,6 +34,8 @@ class OperatorEventKind(StrEnum):
     AI_COMPLETED = "ai_job.completed"
     EXPOSURE_CONFIRMED = "discovery.exposure_confirmed"
     REPORT_CREATED = "report.created"
+    REPORT_REVIEWED = "report.reviewed"
+    PHOTO_REVIEWED = "photo.reviewed"
     BLOCK_CHANGED = "block.changed"
     DECK_DECISION_CHANGED = "discovery.pass_changed"
     REQUEST_CHANGED = "request.changed"
@@ -62,6 +64,8 @@ class OperatorSourceKind(StrEnum):
     SUBJECT = "subject"
     AI_JOB = "ai_job"
     PROFILE_REPORT = "profile_report"
+    REPORT_REVIEW = "report_review_revision"
+    PHOTO_REVIEW = "photo_review_revision"
     BLOCK = "block_revision"
     DECK_DECISION = "private_pass_revision"
     REQUEST = "request_revision"
@@ -80,6 +84,8 @@ class OperatorSourceKind(StrEnum):
 VERSIONED_SOURCES = frozenset(
     {
         OperatorSourceKind.LIFECYCLE,
+        OperatorSourceKind.REPORT_REVIEW,
+        OperatorSourceKind.PHOTO_REVIEW,
         OperatorSourceKind.PROFILE,
         OperatorSourceKind.HELP,
         OperatorSourceKind.PHOTO,
@@ -202,6 +208,8 @@ class OperatorEventFacts:
 
 
 EVENT_SOURCES = {
+    OperatorEventKind.REPORT_REVIEWED: OperatorSourceKind.REPORT_REVIEW,
+    OperatorEventKind.PHOTO_REVIEWED: OperatorSourceKind.PHOTO_REVIEW,
     OperatorEventKind.ACCOUNT_LIFECYCLE_CHANGED: OperatorSourceKind.LIFECYCLE,
     OperatorEventKind.GOAL_SAVED: OperatorSourceKind.GOAL,
     OperatorEventKind.GOAL_COMPLETED: OperatorSourceKind.GOAL,

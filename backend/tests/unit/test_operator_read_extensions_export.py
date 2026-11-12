@@ -12,3 +12,10 @@ async def test_public_policy_and_retained_lifecycle_routes_are_real_root_contrac
     assert '"PolicyHistoryResponse"' in schema
     assert '"OperatorLifecycleHistoryResponse"' in schema
     assert '"OperatorMessageOperationsResponse"' in schema
+
+
+async def test_every_validation_response_uses_the_safe_closed_problem_contract() -> None:
+    schema = json.dumps(await build_schema(), sort_keys=True)
+    assert '"HTTPValidationError"' not in schema
+    assert '"ValidationError"' not in schema
+    assert '"ProblemResponse"' in schema

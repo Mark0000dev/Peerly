@@ -129,6 +129,7 @@ from studymate.application.operator.peer_feedback import (
     ReadOperatorFeedbackHistory,
     ReadOperatorFeedbackRemovals,
 )
+from studymate.application.operator.photo_review import ReadPhotoReviewContext, ReviewPhoto
 from studymate.application.operator.photo_uploads import (
     ReadOperatorPhotoHistory,
     ReadOperatorPhotoUploads,
@@ -149,8 +150,11 @@ from studymate.application.profiles.basics import ReadOwnProfile, SaveOwnProfile
 from studymate.application.profiles.goals import CompleteOwnGoal, ReadOwnGoal, SaveOwnGoal
 from studymate.application.profiles.help_subjects import ReadOwnHelpSubjects, SaveOwnHelpSubjects
 from studymate.application.profiles.onboarding import ReadOnboardingStatus
+from studymate.application.profiles.photo_review import ReadOwnPhotoReview
 from studymate.application.profiles.reference_data import ReadProfileReferenceData
 from studymate.application.profiles.visibility import ChangeOwnVisibility
+from studymate.application.report_moderation.history import ReadReportReviewHistory
+from studymate.application.report_moderation.review import ReviewReport
 from studymate.application.requests.actions import (
     AcceptRequest,
     DeclineRequest,
@@ -318,6 +322,8 @@ from studymate.infrastructure.operator.message_operations_transactions import (
     SqlOperatorMessageOperationsUnitOfWork,
 )
 from studymate.infrastructure.operator.photo_cursors import FernetOperatorPhotoCursorCodec
+from studymate.infrastructure.operator.photo_review_owner import SqlOwnPhotoReviewUnitOfWork
+from studymate.infrastructure.operator.photo_review_transactions import SqlPhotoReviewUnitOfWork
 from studymate.infrastructure.operator.photo_transactions import SqlOperatorPhotoUnitOfWork
 from studymate.infrastructure.operator.profile_history_cursors import (
     FernetOperatorProfileHistoryCursorCodec,
@@ -367,6 +373,8 @@ from studymate.infrastructure.persistence.product_events import (
     record_notification_preference_event,
     record_operator_audit,
     record_peer_feedback,
+    record_photo_review_event,
+    record_report_review_event,
     record_request_outcome,
     record_request_viewed,
     record_study_outcome,
@@ -379,6 +387,8 @@ from studymate.infrastructure.persistence.registration import SqlRegistrationUni
 from studymate.infrastructure.persistence.transport_cleanup import SqlTransportCleanupUnitOfWork
 from studymate.infrastructure.persistence.visibility import SqlVisibilityUnitOfWork
 from studymate.infrastructure.policy_history.read import SqlPolicyHistoryUnitOfWork
+from studymate.infrastructure.report_moderation.cursors import FernetReportReviewHistoryCursorCodec
+from studymate.infrastructure.report_moderation.transactions import SqlReportModerationUnitOfWork
 from studymate.infrastructure.requests.cursors import FernetRequestCursorCodec
 from studymate.infrastructure.requests.expiry import SqlRequestExpiryUnitOfWork
 from studymate.infrastructure.requests.expiry_loop import run_expiry_loop
@@ -489,6 +499,11 @@ from studymate.presentation.operator.message_operations_router import (
     OperatorMessageOperationsHttpServices,
     operator_message_operations_router,
 )
+from studymate.presentation.operator.photo_review_router import (
+    PhotoReviewHttpServices,
+    operator_photo_review_router,
+    own_photo_review_router,
+)
 from studymate.presentation.operator.photo_router import (
     OperatorPhotoHttpServices,
     operator_photo_router,
@@ -515,6 +530,10 @@ from studymate.presentation.policy_history.router import policy_history_router
 from studymate.presentation.problems import ProblemResponse
 from studymate.presentation.profiles import ProfileServices, profile_router
 from studymate.presentation.registration import RegistrationServices, registration_router
+from studymate.presentation.report_moderation.router import (
+    ReportModerationHttpServices,
+    report_moderation_router,
+)
 from studymate.presentation.request_correlation import RequestCorrelation
 from studymate.presentation.request_errors import validation_problem
 from studymate.presentation.requests.router import RequestHttpServices, requests_router
@@ -1111,6 +1130,7 @@ def _student_routers(
         _chat_image_router(sessions, auth_services, intent_fingerprinter, media_storage),
         *_operator_routers(configuration, sessions, intent_fingerprinter, media_storage),
         _operator_membership_router(sessions, auth_services, intent_fingerprinter),
+        *_human_review_routers(configuration, sessions, auth_services, intent_fingerprinter),
         *_student_support_routers(sessions, auth_services, intent_fingerprinter),
     )
 
@@ -1914,3 +1934,38 @@ async def run_external_delivery_worker(
             async with asyncio.TaskGroup() as tasks:
                 tasks.create_task(queue_signals.run(SqlDeliveryQueueReader(sessions), stop))
                 tasks.create_task(worker.run(stop))
+
+
+def _human_review_routers(
+    configuration: AuthenticationConfiguration,
+    sessions: async_sessionmaker[AsyncSession],
+    auth_services: AuthenticationServices,
+    fingerprinter: IntentFingerprinter,
+) -> tuple[APIRouter, ...]:
+    hasher = Sha256SessionHasher()
+    photo = SqlPhotoReviewUnitOfWork(sessions, record_operator_audit, record_photo_review_event)
+    reports = SqlReportModerationUnitOfWork(
+        sessions, record_operator_audit, record_report_review_event
+    )
+    key = bytes.fromhex(configuration.envelope_key.get_secret_value())
+    return (
+        operator_photo_review_router(
+            PhotoReviewHttpServices(
+                ReadPhotoReviewContext(photo, hasher),
+                ReviewPhoto(photo, hasher, fingerprinter),
+                auth_services.signer,
+                auth_services.browser,
+            )
+        ),
+        own_photo_review_router(ReadOwnPhotoReview(SqlOwnPhotoReviewUnitOfWork(sessions), hasher)),
+        report_moderation_router(
+            ReportModerationHttpServices(
+                ReviewReport(reports, hasher, fingerprinter),
+                ReadReportReviewHistory(
+                    reports, hasher, FernetReportReviewHistoryCursorCodec.from_key(key)
+                ),
+                auth_services.signer,
+                auth_services.browser,
+            )
+        ),
+    )

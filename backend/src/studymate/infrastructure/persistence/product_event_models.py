@@ -375,6 +375,45 @@ EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE.replace(
 )
 
 
+BEFORE_HUMAN_REVIEW_EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE
+_HUMAN_REVIEW_COLUMNS = (
+    "report_review_id",
+    "report_review_report_id",
+    "report_review_version",
+    "report_review_action",
+    "photo_review_id",
+    "photo_review_version",
+    "photo_review_action",
+)
+_HUMAN_REVIEW_LEGACY_COLUMNS = (
+    *_REVISION_SOURCE_COLUMNS,
+    *_LIFECYCLE_SOURCE_COLUMNS,
+    "notification_preference_version",
+    "support_case_id",
+    "support_case_version",
+)
+_REPORT_REVIEW_EMPTY_REFERENCES = " AND ".join(
+    f"{column} IS NULL" for column in (*_HUMAN_REVIEW_LEGACY_COLUMNS, *_HUMAN_REVIEW_COLUMNS[4:])
+)
+_PHOTO_REVIEW_EMPTY_REFERENCES = " AND ".join(
+    f"{column} IS NULL" for column in (*_HUMAN_REVIEW_LEGACY_COLUMNS, *_HUMAN_REVIEW_COLUMNS[:4])
+)
+HUMAN_REVIEW_EVENT_REFERENCE_SHAPE = (
+    f"(({BEFORE_HUMAN_REVIEW_EVENT_REFERENCE_SHAPE}) AND "
+    + " AND ".join(f"{column} IS NULL" for column in _HUMAN_REVIEW_COLUMNS)
+    + ") OR (kind='report.reviewed' AND report_review_report_id IS NOT NULL "
+    "AND report_review_id IS NOT NULL AND report_review_version IS NOT NULL "
+    "AND report_review_version>0 AND report_review_action IS NOT NULL "
+    "AND report_review_action IN ('dismiss','escalate') AND "
+    f"{_REPORT_REVIEW_EMPTY_REFERENCES}) OR (kind='photo.reviewed' "
+    "AND photo_review_id IS NOT NULL AND photo_review_version IS NOT NULL "
+    "AND photo_review_version>0 AND photo_review_action IS NOT NULL "
+    "AND photo_review_action IN ('require_replacement','approve_replacement') AND "
+    f"{_PHOTO_REVIEW_EMPTY_REFERENCES})"
+)
+EVENT_REFERENCE_SHAPE = HUMAN_REVIEW_EVENT_REFERENCE_SHAPE
+
+
 class ProductEventRecord(Base):
     __tablename__ = "product_events"
     __table_args__ = (
@@ -590,6 +629,37 @@ class ProductEventRecord(Base):
             ["visibility_revisions.account_id", "visibility_revisions.version"],
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            [
+                "report_review_id",
+                "report_review_report_id",
+                "report_review_version",
+                "account_id",
+                "report_review_action",
+            ],
+            [
+                "operator_report_review_revisions.id",
+                "operator_report_review_revisions.report_id",
+                "operator_report_review_revisions.version",
+                "operator_report_review_revisions.operator_id",
+                "operator_report_review_revisions.action",
+            ],
+            ondelete="RESTRICT",
+            name="fk_product_events_report_review_source",
+            use_alter=True,
+        ),
+        ForeignKeyConstraint(
+            ["photo_review_id", "photo_review_version", "account_id", "photo_review_action"],
+            [
+                "operator_photo_review_revisions.id",
+                "operator_photo_review_revisions.version",
+                "operator_photo_review_revisions.operator_id",
+                "operator_photo_review_revisions.action",
+            ],
+            ondelete="RESTRICT",
+            name="fk_product_events_photo_review_source",
+            use_alter=True,
+        ),
         CheckConstraint("schema_version = 1", name="known_schema_version"),
         CheckConstraint("occurrence_key ~ '^[A-Za-z0-9:_-]{1,100}$'", name="occurrence_key_shape"),
         CheckConstraint(EVENT_REFERENCE_SHAPE, name="event_reference_shape"),
@@ -610,6 +680,13 @@ class ProductEventRecord(Base):
     )
     id: Mapped[UUID] = mapped_column(primary_key=True)
     account_id: Mapped[UUID] = mapped_column(ForeignKey("accounts.id", ondelete="RESTRICT"))
+    report_review_id: Mapped[UUID | None] = mapped_column()
+    report_review_report_id: Mapped[UUID | None] = mapped_column()
+    report_review_version: Mapped[int | None] = mapped_column()
+    report_review_action: Mapped[str | None] = mapped_column(String(32))
+    photo_review_id: Mapped[UUID | None] = mapped_column()
+    photo_review_version: Mapped[int | None] = mapped_column()
+    photo_review_action: Mapped[str | None] = mapped_column(String(32))
     lifecycle_revision_id: Mapped[UUID | None] = mapped_column()
     lifecycle_account_id: Mapped[UUID | None] = mapped_column()
     lifecycle_version: Mapped[int | None] = mapped_column()

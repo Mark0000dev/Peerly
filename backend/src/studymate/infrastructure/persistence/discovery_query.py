@@ -9,6 +9,7 @@ from studymate.application.discovery.cursors import DiscoveryCursor, DiscoveryVi
 from studymate.domain.discovery import DiscoveryMode
 from studymate.domain.discovery_context import DiscoveryContext
 from studymate.domain.discovery_order import MAX_FRESHNESS_BUCKET
+from studymate.infrastructure.operator.photo_review_condition import photo_replacement_required
 from studymate.infrastructure.persistence.block_models import (
     BlockRecord,
     BlockRevisionRecord,
@@ -269,6 +270,7 @@ class DiscoveryQuery:
                 AccountRecord.id != self.context.account_id,
                 AccountRecord.banned_at.is_(None),
                 AccountRecord.deleted_at.is_(None),
+                ~photo_replacement_required(AccountRecord.id),
                 InstitutionalBindingRecord.revoked_at.is_(None),
                 ProfileRevisionRecord.display_name.is_not(None),
                 VisibilityRevisionRecord.hidden_at.is_(None),

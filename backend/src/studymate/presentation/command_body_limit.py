@@ -44,6 +44,18 @@ def _operator_membership_verification(scope: Scope) -> bool:
             return False
 
 
+def _operator_human_review(scope: Scope) -> bool:
+    if scope["type"] != "http" or scope["method"] != "POST":
+        return False
+    match scope["path"].split("/"):
+        case ["", "api", "v1", "operator", "accounts", account_id, "photo-reviews"]:
+            return bool(account_id)
+        case ["", "api", "v1", "operator", "reports", report_id, "reviews"]:
+            return bool(report_id)
+        case _:
+            return False
+
+
 class JsonCommandBodyLimit:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -75,6 +87,7 @@ class JsonCommandBodyLimit:
                 and not _operator_ban(scope)
                 and not _operator_support_status(scope)
                 and not _operator_membership_verification(scope)
+                and not _operator_human_review(scope)
             )
         ):
             await self.app(scope, receive, send)
@@ -83,6 +96,7 @@ class JsonCommandBodyLimit:
             _operator_ban(scope)
             or _operator_support_status(scope)
             or _operator_membership_verification(scope)
+            or _operator_human_review(scope)
             or (
                 scope["path"].startswith("/api/v1/conversations/")
                 and scope["path"].endswith(
@@ -205,6 +219,7 @@ class JsonCommandBodyLimit:
             or _operator_ban(scope)
             or _operator_support_status(scope)
             or _operator_membership_verification(scope)
+            or _operator_human_review(scope)
             or scope["path"]
             in {
                 "/api/v1/reports",

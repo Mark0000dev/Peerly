@@ -13,6 +13,7 @@ from studymate.domain.time import require_aware
 
 class RestoreRequirement(StrEnum):
     PHOTO = "photo"
+    PHOTO_REVIEW = "photo_review"
     STUDY_CONTEXT = "study_context"
 
 
@@ -35,6 +36,7 @@ class StudentProfileState:
     help_subjects: HelpSubjects
     completed_at: datetime | None = None
     hidden_at: datetime | None = None
+    photo_replacement_required: bool = False
 
     def __post_init__(self) -> None:
         if self.goal is not None and self.goal.account_id != self.account_id:
@@ -55,6 +57,8 @@ class StudentProfileState:
         missing: list[RestoreRequirement] = []
         if not self.photo_ready:
             missing.append(RestoreRequirement.PHOTO)
+        if self.photo_replacement_required:
+            missing.append(RestoreRequirement.PHOTO_REVIEW)
         if not self.has_study_context:
             missing.append(RestoreRequirement.STUDY_CONTEXT)
         return tuple(missing)
@@ -105,6 +109,7 @@ def profile_capabilities(
         identity.can_use_student_features
         and profile.hidden_at is None
         and profile.photo_ready
+        and not profile.photo_replacement_required
         and profile.has_study_context
     )
     restore = profile.exposure_requirements if profile.hidden_at is not None else ()

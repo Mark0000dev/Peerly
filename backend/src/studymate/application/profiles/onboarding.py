@@ -34,6 +34,7 @@ class ProfileSetupSnapshot:
     lifecycle: ProfileLifecycle | None
     exposure: DiscoveryExposure | None = None
     freshness_policy: DiscoveryFreshnessPolicy = field(default_factory=DiscoveryFreshnessPolicy)
+    photo_replacement_required: bool = False
 
     def state(self) -> StudentProfileState:
         return StudentProfileState(
@@ -47,6 +48,7 @@ class ProfileSetupSnapshot:
             else HelpSubjects(),
             completed_at=self.lifecycle.completed_at if self.lifecycle is not None else None,
             hidden_at=self.lifecycle.hidden_at if self.lifecycle is not None else None,
+            photo_replacement_required=self.photo_replacement_required,
         )
 
 

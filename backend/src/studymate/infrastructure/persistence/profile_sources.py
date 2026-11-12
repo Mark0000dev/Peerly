@@ -22,6 +22,7 @@ from studymate.domain.profiles import (
     ProfileRevision,
 )
 from studymate.domain.study_context import HelpRevision, HelpSubject, HelpSubjects
+from studymate.infrastructure.operator.photo_review_condition import read_photo_replacement_accounts
 from studymate.infrastructure.persistence.block_models import (
     BlockRecord,
     BlockRevisionRecord,
@@ -124,6 +125,7 @@ async def read_profile_sources(
     ids = _bounded(account_ids)
     if not ids:
         return {}
+    photo_replacements = await read_photo_replacement_accounts(session, ids)
     rows = (
         await session.execute(
             select(
@@ -246,6 +248,7 @@ async def read_profile_sources(
             if exposure is not None
             else None,
             policy,
+            account_id in photo_replacements,
         )
         result[account_id] = DiscoveryProfileSource(
             setup,

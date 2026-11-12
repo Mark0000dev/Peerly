@@ -21,8 +21,10 @@ from studymate.domain.notification_preferences.state import NotificationPreferen
 from studymate.domain.onboarding import OnboardingActivation, ProfileLifecycle
 from studymate.domain.operator.audit import OperatorAudit
 from studymate.domain.operator.membership_verification import ManualMembershipVerification
+from studymate.domain.operator.photo_review import PhotoReviewRevision
 from studymate.domain.profiles import ProfileRevision
 from studymate.domain.relationships import BlockRevision
+from studymate.domain.report_moderation.reviews import ReportReviewRevision
 from studymate.domain.reports import ProfileReport
 from studymate.domain.requests.states import ConnectionRequest, RequestState
 from studymate.domain.requests.views import RequestViewReceipt
@@ -689,4 +691,58 @@ async def record_support_event(
             support_case_version=receipt.version,
         ),
         foreground=False,
+    )
+
+
+async def record_report_review_event(session: AsyncSession, source: ReportReviewRevision) -> None:
+    """Canonical human decision only; private reason stays in its business source.
+
+    Main0059 metadata/DDL integration must precede mounting this new producer.
+    The original operator, event ID/time and correlation are durable source facts,
+    not the later caller/reader's foreground activity or ambient trace.
+    """
+    await _append(
+        session,
+        ProductEventRecord(
+            id=source.event_id,
+            account_id=source.operator.account_id,
+            kind="report.reviewed",
+            schema_version=1,
+            occurrence_key=source.occurrence_key,
+            occurred_at=source.reviewed_at,
+            report_review_report_id=source.report_id,
+            report_review_id=source.id,
+            report_review_version=source.version,
+            report_review_action=source.action.value,
+            request_id=source.origin.http_request_id,
+            action_id=source.origin.action_id,
+            trace_id=source.origin.trace_id,
+            span_id=source.origin.span_id,
+        ),
+        foreground=False,
+        capture_origin=False,
+    )
+
+
+async def record_photo_review_event(session: AsyncSession, source: PhotoReviewRevision) -> None:
+    """0059 human source only; no private reason or target foreground activity."""
+    await _append(
+        session,
+        ProductEventRecord(
+            id=source.id,
+            account_id=source.operator_id,
+            kind="photo.reviewed",
+            schema_version=1,
+            occurrence_key=f"photo-review:{source.id}",
+            occurred_at=source.decided_at,
+            photo_review_id=source.id,
+            photo_review_version=source.version,
+            photo_review_action=source.action.value,
+            request_id=source.origin.http_request_id,
+            action_id=source.origin.action_id,
+            trace_id=source.origin.trace_id,
+            span_id=source.origin.span_id,
+        ),
+        foreground=False,
+        capture_origin=False,
     )

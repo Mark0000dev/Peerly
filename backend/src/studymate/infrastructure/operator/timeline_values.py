@@ -197,10 +197,31 @@ def journal_event_source(
     return source
 
 
+def review_event_source(
+    row: ProductEventRecord, kind: OperatorEventKind
+) -> OperatorEventSource | None:
+    if kind == OperatorEventKind.REPORT_REVIEWED:
+        return OperatorEventSource(
+            OperatorSourceKind.REPORT_REVIEW,
+            required_id(row.report_review_id),
+            row.account_id,
+            version=row.report_review_version,
+        )
+    if kind == OperatorEventKind.PHOTO_REVIEWED:
+        return OperatorEventSource(
+            OperatorSourceKind.PHOTO_REVIEW,
+            required_id(row.photo_review_id),
+            row.account_id,
+            version=row.photo_review_version,
+        )
+    return None
+
+
 def event_value(row: ProductEventRecord) -> OperatorTimelineEvent:
     kind = OperatorEventKind(row.kind)
     source = (
-        profile_event_source(row, kind)
+        review_event_source(row, kind)
+        or profile_event_source(row, kind)
         or contact_event_source(row, kind)
         or journal_event_source(row, kind)
     )
