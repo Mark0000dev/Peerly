@@ -284,18 +284,23 @@ class SqlAiTransaction(SqlIdentityTransaction):
         )
         for record in expired:
             await terminal_event(self.session, record, at)
-        queued = (
-            await self.session.scalars(
-                select(func.count()).select_from(AiJobRecord).where(AiJobRecord.state == "queued")
-            )
-        ).one()
-        interactive = (
-            await self.session.scalars(
-                select(func.count())
-                .select_from(AiJobRecord)
-                .where(
-                    AiJobRecord.state == "queued", AiJobRecord.kind != AiKind.TRIAGE_REPORT.value
+        # One snapshot under the existing slot lock; actor scope applies only to
+        # outstanding work, while global capacity and reserve include every actor.
+        queued, interactive, outstanding = (
+            await self.session.execute(
+                select(
+                    func.count().filter(AiJobRecord.state == "queued"),
+                    func.count().filter(
+                        AiJobRecord.state == "queued",
+                        AiJobRecord.kind != AiKind.TRIAGE_REPORT.value,
+                    ),
+                    func.count().filter(
+                        AiJobRecord.actor_id == actor_id,
+                        AiJobRecord.state.in_(("queued", "running")),
+                    ),
                 )
+                .select_from(AiJobRecord)
+                .where(AiJobRecord.state.in_(("queued", "running")))
             )
         ).one()
         internal = kind_of(task) == AiKind.TRIAGE_REPORT
@@ -303,15 +308,6 @@ class SqlAiTransaction(SqlIdentityTransaction):
             not internal and interactive >= self.policy.queue_limit - self.policy.internal_reserve
         ):
             raise AiUnavailableError
-        outstanding = (
-            await self.session.scalars(
-                select(func.count())
-                .select_from(AiJobRecord)
-                .where(
-                    AiJobRecord.actor_id == actor_id, AiJobRecord.state.in_(("queued", "running"))
-                )
-            )
-        ).one()
         if outstanding >= self.policy.student_outstanding:
             raise AiQuotaError
         budget = await self.session.get(AiBudgetRecord, actor_id)
