@@ -1,0 +1,204 @@
+{
+  "service": "peerly-external-delivery-worker",
+  "private_canary": "PRIVATE_EXTERNAL_CANARY",
+  "accepted": [
+    {
+      "name": "worker.external.cycles",
+      "kind": "sum",
+      "value": 12,
+      "attributes": {
+        "storage": "available"
+      },
+      "unit": ""
+    },
+    {
+      "name": "worker.external.storage.available",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {},
+      "unit": ""
+    },
+    {
+      "name": "worker.external.cycle.age",
+      "kind": "gauge",
+      "value": 2,
+      "attributes": {},
+      "unit": "s"
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 3,
+      "attributes": {
+        "sink": "umami",
+        "state": "pending"
+      },
+      "unit": ""
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 2,
+      "attributes": {
+        "sink": "telegram_support",
+        "state": "retry"
+      },
+      "unit": ""
+    },
+    {
+      "name": "worker.external.queue.oldest_due",
+      "kind": "gauge",
+      "value": 600,
+      "attributes": {
+        "sink": "umami"
+      },
+      "unit": "s"
+    },
+    {
+      "name": "worker.external.queue.blocked",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {
+        "sink": "umami",
+        "reason": "credentials_unavailable"
+      },
+      "unit": ""
+    },
+    {
+      "name": "worker.external.queue.sample.fresh",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {},
+      "unit": ""
+    },
+    {
+      "name": "worker.external.queue.sample.age",
+      "kind": "gauge",
+      "value": 3,
+      "attributes": {},
+      "unit": "s"
+    },
+    {
+      "name": "worker.external.sources.pending",
+      "kind": "gauge",
+      "value": 5,
+      "attributes": {},
+      "unit": ""
+    },
+    {
+      "name": "worker.external.sources.oldest",
+      "kind": "gauge",
+      "value": 700,
+      "attributes": {},
+      "unit": "s"
+    },
+    {
+      "name": "db.pool.checked_out",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {
+        "pool": "worker_external"
+      },
+      "unit": ""
+    },
+    {
+      "name": "db.pool.configured_size",
+      "kind": "gauge",
+      "value": 1,
+      "attributes": {
+        "pool": "worker_external"
+      },
+      "unit": ""
+    },
+    {
+      "name": "db.query.duration",
+      "kind": "histogram",
+      "value": 0.25,
+      "attributes": {
+        "pool": "worker_external",
+        "operation": "select",
+        "outcome": "success"
+      },
+      "unit": "s"
+    }
+  ],
+  "rejected": [
+    {
+      "name": "worker.external.unknown",
+      "kind": "gauge",
+      "value": 901,
+      "attributes": {}
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 902,
+      "attributes": {
+        "sink": "telegram_dev",
+        "state": "pending"
+      },
+      "unit": ""
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 903,
+      "attributes": {
+        "sink": "umami",
+        "state": "leased"
+      },
+      "unit": ""
+    },
+    {
+      "name": "worker.external.queue.blocked",
+      "kind": "gauge",
+      "value": 904,
+      "attributes": {
+        "sink": "umami",
+        "reason": "PRIVATE_EXTERNAL_CANARY"
+      },
+      "unit": ""
+    },
+    {
+      "name": "worker.external.cycles",
+      "kind": "sum",
+      "value": 905,
+      "attributes": {
+        "storage": "PRIVATE_EXTERNAL_CANARY"
+      },
+      "unit": ""
+    },
+    {
+      "name": "worker.external.queue.depth",
+      "kind": "gauge",
+      "value": 906,
+      "attributes": {
+        "sink": "PRIVATE_EXTERNAL_CANARY",
+        "state": "pending"
+      },
+      "unit": ""
+    },
+    {
+      "name": "worker.external.sources.pending",
+      "kind": "gauge",
+      "value": 907,
+      "attributes": {},
+      "service": "studymate-api",
+      "unit": ""
+    },
+    {
+      "name": "worker.external.sources.pending",
+      "kind": "gauge",
+      "value": 908,
+      "attributes": {},
+      "service": "peerly-developer-alert-worker",
+      "unit": ""
+    }
+  ],
+  "diagnostic": {
+    "event": "ai_runtime_failure",
+    "ai_runtime_phase": "physical_cleanup",
+    "ai_runtime_code": "physical_stop_uncertain",
+    "ai_runtime_failure_role": "cleanup"
+  }
+}

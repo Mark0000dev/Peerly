@@ -1,0 +1,19 @@
+# TEMPLATE ONLY. Parent creates a separate private config; never use these placeholders.
+[raw]
+type = s3
+provider = Other
+endpoint = https://REPLACE_APPROVED_CLOUD_RU_ORIGIN
+region = REPLACE_ACTUAL_REGION
+access_key_id = REPLACE_PARENT_SCOPED_CLOUD_KEY
+secret_access_key = REPLACE_PARENT_SCOPED_CLOUD_SECRET
+force_path_style = true
+no_check_bucket = true
+no_head = false
+
+[encrypted]
+type = crypt
+remote = raw:peerly-archive/crypt-v1
+filename_encryption = standard
+directory_name_encryption = true
+password = REPLACE_PARENT_NATIVE_OBSCURED_CRYPT_PASSWORD
+password2 = REPLACE_PARENT_NATIVE_OBSCURED_DISTINCT_SALT

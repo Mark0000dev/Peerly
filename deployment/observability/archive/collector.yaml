@@ -1,0 +1,55 @@
+# Merge AFTER collector/collector.yaml (and optional remote-write.yaml).
+# Exporter arrays replace the base arrays: keep hot sinks AND archive fanout.
+extensions:
+  file_storage/archive:
+    directory: /var/lib/otelcol-archive/queue
+    create_directory: true
+    fsync: true
+    # Per bbolt database, not aggregate filesystem quota; two signal queues.
+    max_size: 67108864
+    compaction:
+      on_start: false
+      on_rebound: false
+      rebound_needed_threshold_mib: 32
+      rebound_trigger_threshold_mib: 8
+exporters:
+  awss3/archive:
+    marshaler: otlp_json
+    timeout: 10s
+    s3uploader:
+      region: ${env:PEERLY_ARCHIVE_S3_REGION}
+      endpoint: ${env:PEERLY_ARCHIVE_S3_ENDPOINT}
+      s3_bucket: ${env:PEERLY_ARCHIVE_S3_BUCKET}
+      s3_prefix: ${env:PEERLY_ARCHIVE_S3_PREFIX}
+      s3_partition_format: '%Y/%m/%d/%H/%M'
+      s3_partition_timezone: UTC
+      file_prefix: peerly-
+      unique_key_func_name: uuidv7
+      compression: gzip
+      storage_class: STANDARD
+      s3_force_path_style: ${env:PEERLY_ARCHIVE_S3_FORCE_PATH_STYLE:-false}
+      disable_ssl: false
+      # No nested retry loop: Collector owns durable retry between bounded attempts.
+      retry_mode: standard
+      retry_max_attempts: 1
+      retry_max_backoff: 1s
+    sending_queue:
+      enabled: true
+      num_consumers: 1
+      sizer: bytes
+      queue_size: 16777216
+      storage: file_storage/archive
+      block_on_overflow: false
+      wait_for_result: false
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 60s
+      max_elapsed_time: 0s
+service:
+  extensions: [health_check, file_storage, file_storage/archive]
+  pipelines:
+    logs:
+      exporters: [otlp_http/loki, awss3/archive]
+    traces:
+      exporters: [otlp_http/tempo, awss3/archive]

@@ -1,0 +1,8 @@
+# LAST supplement for base + remote-write + archive + crypt overlays.
+services:
+  collector:
+    command:
+      - --config=/etc/otelcol/collector.yaml
+      - --config=/etc/otelcol/remote-write.yaml
+      - --config=/etc/otelcol/archive.yaml
+      - --config=/etc/otelcol/archive-crypt.yaml

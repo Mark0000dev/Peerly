@@ -1,0 +1,9 @@
+# Load after immutable archive/collector.yaml. Internal HTTP is ONLY on archive_crypto.
+exporters:
+  awss3/archive:
+    s3uploader:
+      endpoint: http://archive-crypt:8080
+      region: us-east-1
+      s3_bucket: ingest
+      s3_force_path_style: true
+      disable_ssl: true

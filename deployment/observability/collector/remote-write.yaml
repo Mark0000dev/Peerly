@@ -9,7 +9,7 @@ exporters:
     timeout: 5s
     external_labels:
       deployment_environment_name: ${env:PEERLY_ENVIRONMENT}
-    translation_strategy: UnderscoreEscapingWithoutSuffixes
+    translation_strategy: UnderscoreEscapingWithSuffixes
     resource_to_telemetry_conversion:
       enabled: true
     remote_write_queue:

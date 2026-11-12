@@ -1,0 +1,41 @@
+# Standalone on the existing monitoring host; no application mounts or public ports.
+services:
+  log-gateway:
+    image: nginxinc/nginx-unprivileged:stable-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
+    user: '101:101'
+    entrypoint: [nginx]
+    command: [-c, /etc/nginx/peerly-gateway.conf, -g, 'daemon off;']
+    volumes:
+      - ./monitoring.conf:/etc/nginx/peerly-gateway.conf:ro
+      - ${PEERLY_LOG_HTPASSWD_FILE:?Set protected log-writer htpasswd file}:/etc/nginx/logs.htpasswd:ro
+    networks: [monitoring, proxy]
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: ${PEERLY_MONITORING_PROXY_NETWORK:?Set existing monitoring-host ingress network}
+      traefik.http.routers.peerly-staging-log-ingest.rule: Host(`${PEERLY_MONITORING_HOST:?Set actual TLS monitoring hostname}`) && Path(`/peerly-ingest/staging/logs/v1/logs`)
+      traefik.http.routers.peerly-staging-log-ingest.entrypoints: ${PEERLY_MONITORING_HTTPS_ENTRYPOINT:?Set actual HTTPS entrypoint}
+      traefik.http.routers.peerly-staging-log-ingest.tls: 'true'
+      traefik.http.routers.peerly-staging-log-ingest.priority: '250'
+      traefik.http.routers.peerly-staging-log-ingest.middlewares: peerly-staging-log-auth
+      traefik.http.routers.peerly-staging-log-ingest.service: peerly-staging-log-ingest
+      traefik.http.middlewares.peerly-staging-log-auth.basicauth.users: ${PEERLY_LOG_BASIC_USERS:?Set separate private log-writer bcrypt user entry}
+      traefik.http.middlewares.peerly-staging-log-auth.basicauth.removeheader: 'false'
+      traefik.http.services.peerly-staging-log-ingest.loadbalancer.server.port: '8080'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=16m,uid=101,gid=101']
+    mem_limit: 32m
+    cpus: 0.1
+    pids_limit: 32
+    restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: 2m, max-file: '2'}
+networks:
+  monitoring:
+    external: true
+    name: ${PEERLY_MONITORING_NETWORK:?Set existing Loki network}
+  proxy:
+    external: true
+    name: ${PEERLY_MONITORING_PROXY_NETWORK}

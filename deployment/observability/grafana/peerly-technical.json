@@ -33,7 +33,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "query": "label_values(http_server_requests, deployment_environment_name)",
+        "query": "label_values(http_server_requests_total{job=\"peerly-app-metrics\"}, deployment_environment_name)",
         "refresh": 1,
         "includeAll": true,
         "allValue": ".*",
@@ -59,7 +59,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (http_route) (rate(http_server_requests{deployment_environment_name=~\"$environment\",http_route!=\"/api/v1/events\"}[$__rate_interval]))",
+          "expr": "sum by (http_route) (rate(http_server_requests_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\",http_route!=\"/api/v1/events\",http_route!~\"^/api/(health|ready)$\"}[$__rate_interval]))",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -93,7 +93,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_server_requests{deployment_environment_name=~\"$environment\",http_response_status_code=~\"5..\",http_route!=\"/api/v1/events\"}[$__rate_interval])) / sum(rate(http_server_requests{deployment_environment_name=~\"$environment\",http_route!=\"/api/v1/events\"}[$__rate_interval]))",
+          "expr": "sum(rate(http_server_requests_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\",http_response_status_code=~\"5..\",http_route!=\"/api/v1/events\",http_route!~\"^/api/(health|ready)$\"}[$__rate_interval])) / sum(rate(http_server_requests_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\",http_route!=\"/api/v1/events\",http_route!~\"^/api/(health|ready)$\"}[$__rate_interval]))",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -127,7 +127,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95,sum by (le,http_route) (rate(http_server_request_duration_bucket{deployment_environment_name=~\"$environment\",http_route!=\"/api/v1/events\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95,sum by (le,http_route) (rate(http_server_request_duration_seconds_bucket{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\",http_route!=\"/api/v1/events\",http_route!~\"^/api/(health|ready)$\"}[$__rate_interval])))",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -161,7 +161,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (outcome) (rate(worker_email_steps{deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (outcome) (rate(worker_email_steps_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -195,7 +195,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (worker,outcome) (rate(worker_media_steps{deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (worker,outcome) (rate(worker_media_steps_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -229,7 +229,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (outcome) (rate(worker_requests_expiry_steps{deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (outcome) (rate(worker_requests_expiry_steps_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -263,7 +263,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (maintenance,outcome) (rate(worker_changes_steps{deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
+          "expr": "sum by (maintenance,outcome) (rate(worker_changes_steps_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -297,7 +297,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "worker_ai_queue_depth{deployment_environment_name=~\"$environment\"}",
+          "expr": "(worker_ai_queue_depth{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_ai_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"studymate-ai-worker\",deployment_environment_name=~\"$environment\"} == 1)",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -312,7 +312,8 @@
           "displayMode": "table",
           "placement": "bottom"
         }
-      }
+      },
+      "description": "Fresh queue samples only; absent/stale is unknown, never zero. Separate freshness/age panels expose sampler health."
     },
     {
       "id": 9,
@@ -331,7 +332,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "worker_ai_queue_oldest{deployment_environment_name=~\"$environment\"}",
+          "expr": "(worker_ai_queue_oldest_seconds{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_ai_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"studymate-ai-worker\",deployment_environment_name=~\"$environment\"} == 1)",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -346,7 +347,8 @@
           "displayMode": "table",
           "placement": "bottom"
         }
-      }
+      },
+      "description": "Fresh queue samples only; absent/stale is unknown, never zero. Separate freshness/age panels expose sampler health."
     },
     {
       "id": 10,
@@ -365,7 +367,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "worker_ai_circuit_open{deployment_environment_name=~\"$environment\"}",
+          "expr": "(worker_ai_circuit_open{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_ai_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"studymate-ai-worker\",deployment_environment_name=~\"$environment\"} == 1)",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -380,7 +382,8 @@
           "displayMode": "table",
           "placement": "bottom"
         }
-      }
+      },
+      "description": "Fresh queue samples only; absent/stale is unknown, never zero. Separate freshness/age panels expose sampler health."
     },
     {
       "id": 11,
@@ -399,7 +402,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "otelcol_exporter_queue_size / otelcol_exporter_queue_capacity",
+          "expr": "otelcol_exporter_queue_size{job=\"peerly-collector\",deployment_environment_name=~\"$environment\"} / otelcol_exporter_queue_capacity{job=\"peerly-collector\",deployment_environment_name=~\"$environment\"}",
           "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
         }
       ],
@@ -419,7 +422,7 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Tempo filesystem free (requires actual exporter wiring)",
+      "title": "Namespace filesystem free fraction \u2014 root and Tempo WAL",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -433,8 +436,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "node_filesystem_avail_bytes{peerly_storage=\"tempo\"} / node_filesystem_size_bytes{peerly_storage=\"tempo\"}",
-          "legendFormat": "{{http_route}}{{outcome}}{{worker}}{{maintenance}}"
+          "expr": "sum without (state) (system_filesystem_usage_bytes{job=\"peerly-app-metrics\",service_name=\"peerly-collector-capacity\",deployment_environment_name=~\"$environment\",mountpoint=\"/\",state=\"free\"}) / sum without (state) (system_filesystem_usage_bytes{job=\"peerly-app-metrics\",service_name=\"peerly-collector-capacity\",deployment_environment_name=~\"$environment\",mountpoint=\"/\"})",
+          "legendFormat": "root overlay"
+        },
+        {
+          "refId": "B",
+          "expr": "sum without (state) (system_filesystem_usage_bytes{job=\"peerly-app-metrics\",service_name=\"peerly-collector-capacity\",deployment_environment_name=~\"$environment\",mountpoint=\"/var/tempo-capacity\",state=\"free\"}) / sum without (state) (system_filesystem_usage_bytes{job=\"peerly-app-metrics\",service_name=\"peerly-collector-capacity\",deployment_environment_name=~\"$environment\",mountpoint=\"/var/tempo-capacity\"})",
+          "legendFormat": "Tempo backing filesystem"
         }
       ],
       "fieldConfig": {
@@ -448,7 +456,813 @@
           "displayMode": "table",
           "placement": "bottom"
         }
-      }
+      },
+      "description": "Only collector overlay backing filesystem and readonly Tempo data statfs; no host CPU/RAM or other mountpoints. Free excludes reserved bytes."
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "AI occupied slot \u2014 fresh samples only",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(worker_ai_slot_occupied{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_ai_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"studymate-ai-worker\",deployment_environment_name=~\"$environment\"} == 1)",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "AI queue sample freshness (0 = unknown/stale)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "worker_ai_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"studymate-ai-worker\",deployment_environment_name=~\"$environment\"}",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "AI queue sample age",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "worker_ai_queue_sample_age_seconds{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Absent before first sample. Age is freshness metadata, not queue age."
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Database query p95 by pool and operation",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95,sum by (le,pool,operation) (rate(db_query_duration_seconds_bucket{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval])))",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Database checked-out connections",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 64,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "db_pool_checked_out{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Database configured BASE pool size",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 64,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "db_pool_configured_size{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Configured base size only: not maximum including overflow, pool wait or open-connection count."
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "SSE active transport connections",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 72,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sse_connections_active{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "SSE closed transports by reason",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 72,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (rate(sse_connections_closed_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "SSE delivered frames by kind",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 80,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (kind) (rate(sse_frames_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "SSE publication-to-send p95 lag",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 80,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95,sum by (le) (rate(sse_delivery_lag_seconds_bucket{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval])))",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Successful transport delivery lag, not canonical occurrence age or human read receipt."
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "SSE send p95 duration by outcome",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 88,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95,sum by (le,outcome) (rate(sse_send_duration_seconds_bucket{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval])))",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "SSE reset frames",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 88,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(sse_resets_total{job=\"peerly-app-metrics\",deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Namespace root and Tempo available bytes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 96,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "system_filesystem_usage_bytes{job=\"peerly-app-metrics\",service_name=\"peerly-collector-capacity\",deployment_environment_name=~\"$environment\",state=\"free\"}",
+          "legendFormat": "{{pool}} {{operation}} {{outcome}} {{reason}} {{kind}} {{mountpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "External delivery pending/retry/dead by sink",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 96,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(worker_external_queue_depth{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"} == 1)",
+          "legendFormat": "{{sink}} {{state}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Fresh atomic exact counts only; failed/expired snapshots are unknown. No app technical-alert producer or developer Telegram sink. Excludes leased/succeeded and unmaterialized captures."
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "External delivery oldest due by sink",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 104,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(worker_external_queue_oldest_due_seconds{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"} == 1)",
+          "legendFormat": "{{sink}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Age of due pending/retry work only; not a provider receipt. Fresh atomic exact counts only; failed/expired snapshots are unknown. No app technical-alert producer or developer Telegram sink."
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "External delivery blocked reason",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 104,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(worker_external_queue_blocked{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"} == 1)",
+          "legendFormat": "{{sink}} {{reason}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "One-hot finite failure codes; zero means this reason is not set in a fresh sample. Fresh atomic exact counts only; failed/expired snapshots are unknown. No app technical-alert producer or developer Telegram sink."
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "External capture sources awaiting materialization",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 112,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(worker_external_sources_pending{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"} == 1)",
+          "legendFormat": "pending source captures"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Unmaterialized source captures, independent of sink delivery rows. Fresh atomic exact counts only; failed/expired snapshots are unknown. No app technical-alert producer or developer Telegram sink."
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "External oldest unmaterialized source",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 112,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(worker_external_sources_oldest_seconds{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"} == 1)",
+          "legendFormat": "oldest source"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "A routing stall must remain visible even with zero delivery rows. Fresh atomic exact counts only; failed/expired snapshots are unknown. No app technical-alert producer or developer Telegram sink."
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "External queue sample freshness (0 = unknown)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 120,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "worker_external_queue_sample_fresh{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}",
+          "legendFormat": "sample freshness"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Every5s,250ms total read budget,15s TTL; failure immediately invalidates values. Never infer zero from missing/stale."
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "External queue sample age since last success",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 120,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "worker_external_queue_sample_age_seconds{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}",
+          "legendFormat": "sample age"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Last-success age remains after failure; absent before any successful sample. This is not queue due age."
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "External completed cycles by storage result",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 128,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (storage) (rate(worker_external_cycles_total{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}[$__rate_interval]))",
+          "legendFormat": "{{storage}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Completed worker steps, not send attempts, provider success, or a standalone process heartbeat."
+    },
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "External current last-cycle storage availability",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 128,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(worker_external_storage_available{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}) and on (job,instance,service_name,service_version,deployment_environment_name) (worker_external_cycle_age_seconds{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"} <= 30)",
+          "legendFormat": "storage available"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Unknown before first completion, hidden if the last completed-cycle age exceeds30s. Independent of sampler freshness."
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "External age since last completed cycle",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 136,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "worker_external_cycle_age_seconds{job=\"peerly-app-metrics\",service_name=\"peerly-external-delivery-worker\",deployment_environment_name=~\"$environment\"}",
+          "legendFormat": "last cycle age"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "description": "Progress diagnostic from the actual last completed step, not human delivery/read status. Missing is unknown; exporter expiry bounds stale series."
     }
   ],
   "description": "Actual source metric names with explicit underscore/no-suffix collector translation. Missing data is unknown; DB-pool/SSE gauges are not implemented. Import chooses an existing private Prometheus datasource; JSON is not live dashboard acceptance."

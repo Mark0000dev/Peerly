@@ -1,0 +1,8 @@
+# Command-only supplement when using base + remote-write.compose.yml + archive.compose.yml.
+# Apply THIS LAST so Compose's command replacement preserves all three Collector configs.
+services:
+  collector:
+    command:
+      - --config=/etc/otelcol/collector.yaml
+      - --config=/etc/otelcol/remote-write.yaml
+      - --config=/etc/otelcol/archive.yaml
