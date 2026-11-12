@@ -1,0 +1,3 @@
+# Root-owned location; install the ONE dedicated public key, never a developer key.
+# This placeholder is deliberately not a usable key.
+restrict,command="/usr/local/libexec/peerly-release-ssh" ssh-ed25519 REPLACE_WITH_DEDICATED_PUBLIC_KEY

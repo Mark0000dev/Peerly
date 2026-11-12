@@ -1,10 +1,12 @@
 name: Staging release quality
 
 on:
+  workflow_call:
   pull_request:
     branches: [main]
     paths:
       - deployment/staging/release/**
+      - deployment/staging/release_ssh/**
       - backend/pyproject.toml
       - backend/uv.lock
       - backend/.python-version
@@ -16,6 +18,7 @@ on:
     branches: [main]
     paths:
       - deployment/staging/release/**
+      - deployment/staging/release_ssh/**
       - backend/pyproject.toml
       - backend/uv.lock
       - backend/.python-version
@@ -50,12 +53,14 @@ jobs:
         run: uv sync --locked --python 3.12 --project backend --no-install-project
       - name: Full inherited Ruff selectors and formatting
         run: |
-          backend/.venv/bin/ruff check deployment/staging/release
-          backend/.venv/bin/ruff format --check deployment/staging/release
+          backend/.venv/bin/ruff check deployment/staging/release deployment/staging/release_ssh
+          backend/.venv/bin/ruff format --check deployment/staging/release deployment/staging/release_ssh
       - name: Inherited strict mypy for every helper and test module
-        run: backend/.venv/bin/mypy --config-file backend/pyproject.toml deployment/staging/release
+        run: backend/.venv/bin/mypy --config-file backend/pyproject.toml deployment/staging/release deployment/staging/release_ssh
+      - name: Verify the exact trusted-main tool manifest
+        run: backend/.venv/bin/python -m deployment.staging.release_ssh.manifest --check
       - name: All offline release regressions, without providers or deployment inputs
-        run: backend/.venv/bin/python -m pytest -c backend/pyproject.toml deployment/staging/release/tests -q
+        run: backend/.venv/bin/python -m pytest -c backend/pyproject.toml deployment/staging/release/tests deployment/staging/release_ssh/tests -q
       - name: Verify and run the exact official actionlint release
         shell: bash
         run: |

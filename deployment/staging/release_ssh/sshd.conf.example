@@ -1,0 +1,18 @@
+# MERGE only after parent checks effective sshd -T -C for this dedicated user.
+# Never overwrite global host SSH configuration. No actual installation implied.
+Match User peerly-release
+    AuthenticationMethods publickey
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    AuthorizedKeysFile /etc/ssh/authorized_keys/peerly-release
+    ForceCommand /usr/local/libexec/peerly-release-ssh
+    DisableForwarding yes
+    AllowTcpForwarding no
+    AllowAgentForwarding no
+    X11Forwarding no
+    PermitTTY no
+    PermitTunnel no
+    PermitUserEnvironment no
+    PermitUserRC no
+    MaxSessions 1
+Match all

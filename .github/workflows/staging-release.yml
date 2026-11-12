@@ -2,31 +2,27 @@ name: Internal staging release
 
 on:
   workflow_run:
-    workflows: [Backend, Frontend image]
+    workflows: [Backend, Frontend image, Staging release quality]
     types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact full selected main SHA (original promoted SHA for rollback)
+        description: Exact selected main image SHA; original promotion SHA for recovery
         required: true
         type: string
       operation:
-        description: Explicit application operation, never schema downgrade
         type: choice
         options: [promote, rollback, reconcile]
         default: promote
-      compatible_schema:
-        description: Explicit reviewed application rollback compatibility, must be 0060_report_triage
-        required: false
+      recovery_attempt:
+        description: Original promotion run-attempt, recovery only
         type: string
       reconcile_attempt:
-        description: Exact unresolved attempt to acknowledge; rollback/reconcile only
-        required: false
+        description: Exact unresolved run-attempt acknowledgment
         type: string
-      recovery_attempt:
-        description: Prior durable attempt directory name, rollback only
-        required: false
+      compatible_schema:
+        description: Explicit reviewed compatibility, recovery only (0060_report_triage)
         type: string
 
 permissions:
@@ -39,7 +35,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  quality:
+    name: Release tool quality
     if: >-
       github.repository == 'Mark0000dev/Peerly' && github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
@@ -47,92 +44,41 @@ jobs:
         github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_branch == 'main' &&
         github.event.workflow_run.head_repository.full_name == 'Mark0000dev/Peerly'))
-    # Dedicated trusted runner: Python3.12, uv0.13.7 and Docker Compose installed;
-    # no Docker socket/mutation authority is used by the local renderer.
-    # Parent manual deploys MUST take the same durable stack4.lock on this host.
-    runs-on: [self-hosted, linux, peerly-staging-release]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/staging-release-quality.yml
+  promote:
+    needs: quality
+    name: Promote internal staging through restricted SSH
+    if: >-
+      github.repository == 'Mark0000dev/Peerly' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == 'Mark0000dev/Peerly'))
+    runs-on: ubuntu-24.04
+    # Mark MUST enforce custom deployment branch policy main-only, no tags.
+    # This if/main check is NOT a substitute for environment secret admission.
     environment: internal-staging
-    timeout-minutes: 20
-    env:
-      SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
-      OPERATION: ${{ inputs.operation || 'promote' }}
-      COMPATIBLE_SCHEMA: ${{ inputs.compatible_schema }}
-      RECONCILE_ATTEMPT: ${{ inputs.reconcile_attempt }}
-      RECOVERY_ATTEMPT: ${{ inputs.recovery_attempt }}
-      PEERLY_GITHUB_TOKEN: ${{ github.token }}
-      PEERLY_GHCR_USERNAME: ${{ github.actor }}
-      PEERLY_GHCR_TOKEN: ${{ github.token }}
-      PEERLY_PORTAINER_ORIGIN: ${{ secrets.PEERLY_PORTAINER_ORIGIN }}
-      PEERLY_PORTAINER_API_KEY: ${{ secrets.PEERLY_PORTAINER_API_KEY }}
-      PEERLY_STAGING_METRICS_ORIGIN: ${{ secrets.PEERLY_STAGING_METRICS_ORIGIN }}
-      PEERLY_STAGING_METRICS_PASSWORD: ${{ secrets.PEERLY_STAGING_METRICS_PASSWORD }}
-      PEERLY_SMOKE_SESSION: ${{ secrets.PEERLY_SMOKE_SESSION }}
-      PEERLY_SMOKE_ACCOUNT_ID: ${{ secrets.PEERLY_SMOKE_ACCOUNT_ID }}
-      PEERLY_STAGING_DATABASE_NAME: ${{ vars.PEERLY_STAGING_DATABASE_NAME }}
-      PEERLY_CANONICAL_AI_CONTAINER_ID: ${{ vars.PEERLY_CANONICAL_AI_CONTAINER_ID }}
-      PEERLY_RELEASE_STATE_DIR: ${{ vars.PEERLY_RELEASE_STATE_DIR }}
+    timeout-minutes: 25
     steps:
-      - name: Fetch trusted bootstrap and exact main source without actions or Git
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(uv --version)" = 'uv 0.13.7'
-          python3 - <<'PY'
-          import base64, http.client, json, os, pathlib, re, subprocess, sys, tempfile
-          sha = os.environ['SOURCE_SHA']
-          if re.fullmatch('[0-9a-f]{40}', sha) is None:
-              raise SystemExit('invalid source')
-          def get(path):
-              c = http.client.HTTPSConnection('api.github.com', timeout=20)
-              try:
-                  c.request('GET', '/repos/Mark0000dev/Peerly' + path, headers={
-                      'Authorization': 'Bearer ' + os.environ['PEERLY_GITHUB_TOKEN'],
-                      'Accept': 'application/vnd.github+json', 'User-Agent': 'peerly-release'})
-                  r = c.getresponse()
-                  body = r.read(1048577)
-                  if r.status != 200 or len(body) > 1048576:
-                      raise SystemExit('bootstrap response rejected')
-                  return json.loads(body)
-              finally:
-                  c.close()
-          # Rollback executes the current trusted main tool, while selecting the
-          # original image SHA in CLI. Never execute arbitrary input branch code.
-          tool_sha = get('/branches/main')['commit']['sha']
-          data = get('/contents/deployment/staging/release/bootstrap.py?ref=' + tool_sha)
-          private = pathlib.Path(tempfile.mkdtemp(prefix='peerly-release-', dir=os.environ['RUNNER_TEMP']))
-          bootstrap = private / 'bootstrap.py'
-          bootstrap.write_bytes(base64.b64decode(data['content']))
-          result = subprocess.run([sys.executable, str(bootstrap), tool_sha, str(private / 'source')], check=False)
-          if result.returncode:
-              raise SystemExit('source bootstrap failed')
-          with open(os.environ['GITHUB_ENV'], 'a') as stream:
-              stream.write('RELEASE_SOURCE=' + str(private / 'source') + '\n')
-          PY
-
-      - name: Install only the existing locked tool environment
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv sync --locked --python 3.12 --project "$RELEASE_SOURCE/backend" --no-install-project
-
-      - name: Require inherited package quality before any provider operation
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$RELEASE_SOURCE"
-          backend/.venv/bin/ruff check deployment/staging/release
-          backend/.venv/bin/ruff format --check deployment/staging/release
-          backend/.venv/bin/mypy --config-file backend/pyproject.toml deployment/staging/release
-          backend/.venv/bin/python -m pytest -c backend/pyproject.toml deployment/staging/release/tests -q
-
-      - name: Select completed gates and perform one locked staging attempt
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$RELEASE_SOURCE"
-          backend/.venv/bin/python -m deployment.staging.release.cli \
-            --sha "$SOURCE_SHA" --attempt "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --operation "$OPERATION" \
-            --recovery "$PEERLY_RELEASE_STATE_DIR/$RECOVERY_ATTEMPT/recovery.private.json" \
-            --compatible-schema "$COMPATIBLE_SCHEMA" --reconcile-attempt "$RECONCILE_ATTEMPT"
-      # No private Env/snapshot, session, response bodies or provider logs are uploaded.
-      # Authoritative receipt/journal stays in the dedicated runner's private state dir.
+      - name: Check out trusted main client without persistent credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6 existing project pin
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Submit one closed operation over pinned restricted SSH
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
+          OPERATION: ${{ inputs.operation || 'promote' }}
+          RECOVERY_ATTEMPT: ${{ inputs.recovery_attempt }}
+          RECONCILE_ATTEMPT: ${{ inputs.reconcile_attempt }}
+          COMPATIBLE_SCHEMA: ${{ inputs.compatible_schema }}
+          PEERLY_STAGING_SSH_HOST: ${{ vars.PEERLY_STAGING_SSH_HOST }}
+          PEERLY_STAGING_SSH_KNOWN_HOSTS: ${{ secrets.PEERLY_STAGING_SSH_KNOWN_HOSTS }}
+          PEERLY_STAGING_SSH_PRIVATE_KEY: ${{ secrets.PEERLY_STAGING_SSH_PRIVATE_KEY }}
+        run: python3 -m deployment.staging.release_ssh.client
+      # No source scripts, deployment inputs, Env snapshots or artifacts uploaded.
+      # No self-hosted runner or Portainer/provider key is available to this job.
