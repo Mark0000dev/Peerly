@@ -116,6 +116,92 @@ test('D02 real public projection and labelled safety menu', async ({
   await checkpoint('person-safety-menu.png');
 });
 
+for (const { width, textScale, label } of [
+  { width: 390, textScale: '100%', label: '390' },
+  { width: 360, textScale: '100%', label: '360' },
+  { width: 320, textScale: '200%', label: '320-text200' },
+]) {
+  test(`D02 frames 1 and 2 ${label} keep real content reachable above the request footer`, async ({
+    page,
+    checkpoint,
+  }: Context) => {
+    await base(page);
+    await page.route('**/api/v1/people/*/feedback-summary', async (route) => {
+      await route.fulfill({
+        json: {
+          state: 'available',
+          responses: 5,
+          yes: 4,
+          maybe: 1,
+          no: 0,
+          publicly_visible: true,
+        } satisfies Api['schemas']['AvailableFeedbackSummaryResponse'],
+      });
+    });
+    await page.setViewportSize({ width, height: 844 });
+    await open(page);
+    await page.evaluate((scale: string) => {
+      document.documentElement.style.setProperty('font-size', scale);
+    }, textScale);
+    const review = page.getByRole('link', { name: 'Review request', exact: true });
+    const photo = page.getByRole('img', { name: `Photo of ${person.display_name}`, exact: true });
+    const content = page.locator('.profile-content');
+    const footer = page.locator('.profile-actions');
+    for (const surface of [
+      page.getByRole('article', { name: 'Academic profile', exact: true }),
+      page.locator('.feedback-surface'),
+    ]) {
+      expect(
+        await surface.evaluate(
+          (element: Readonly<HTMLElement>) => element.scrollHeight <= element.clientHeight,
+        ),
+      ).toBe(true);
+    }
+    await expect(review).toBeInViewport();
+    await assertFullTextFits(review);
+    await assertNaturalWordWrapping(review);
+    await expect(page.locator('.profile-relevance')).toHaveText('Can help with SQL');
+    expect(
+      await photo.evaluate((element: Readonly<HTMLImageElement>) => {
+        const box = element.getBoundingClientRect();
+        return box.width / box.height;
+      }),
+    ).toBeCloseTo(16 / 9, 4);
+    expect(
+      await content.evaluate(
+        (element: Readonly<HTMLElement>) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await checkpoint(`person-d02-frame1-${label}.png`, {
+      fullPage: false,
+    });
+    const feedback = page.getByRole('region', { name: 'Peer feedback', exact: true });
+    await expect(feedback).toContainText('4 of 5 partners would study together again.');
+    await feedback
+      .getByText('From connected partners who reported studying together.')
+      .scrollIntoViewIfNeeded();
+    await expect(
+      feedback.getByText('From connected partners who reported studying together.'),
+    ).toBeInViewport();
+    await expect(review).toBeInViewport();
+    await assertBelow(feedback, footer);
+    const academic = page.getByRole('article', { name: 'Academic profile', exact: true });
+    await expect(academic).toContainText('Software Engineering · Year 3');
+    await expect(academic).toContainText('English, Japanese');
+    await checkpoint(`person-d02-frame2-${label}.png`, {
+      fullPage: false,
+    });
+    await page.getByRole('button', { name: 'How peer feedback works' }).click();
+    await expect(feedback).toContainText('Names and notes are never shown');
+    await expect(review).toBeInViewport();
+    await page.getByRole('link', { name: 'Back to Discover', exact: true }).focus();
+    await expect(page.getByRole('link', { name: 'Back to Discover', exact: true })).toBeFocused();
+  });
+}
+
 test('D02 loading resolves to a profile', async ({ page, checkpoint }: Context) => {
   await base(page);
   let release: () => void = () => {
@@ -232,6 +318,8 @@ test('D02 read failure has safe recovery and supports sparse profiles', async ({
   await page.getByRole('button', { name: 'Refresh current status' }).click();
   await expect(page.getByRole('heading', { name: person.display_name })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'About', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('article', { name: 'Academic profile', exact: true })).toHaveCount(0);
+  await expect(page.locator('.profile-relevance')).toHaveCount(0);
   await checkpoint('person-sparse-profile.png');
 });
 
@@ -484,9 +572,9 @@ test('D02 320px reflow and 200 percent text with keyboard dialog dismissal', asy
   const help = academic.locator('section').filter({
     has: page.getByRole('heading', { name: 'Can help with', level: 3, exact: true }),
   });
-  const subjects = help.locator('.profile-values p');
+  const subjects = help.locator('.help-subject');
   await expect(subjects).toHaveCount(person.help_subjects.subjects.length);
-  await assertBelow(subjects.nth(0), subjects.nth(1));
+  await assertNaturalWordWrapping(help.locator('.profile-values'));
   const review = page.getByRole('link', { name: 'Review request', exact: true });
   await assertNaturalWordWrapping(review);
   await assertFullTextFits(review);
