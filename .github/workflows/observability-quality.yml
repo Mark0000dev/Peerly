@@ -6,10 +6,15 @@ on:
     paths:
       - deployment/observability/**
       - .github/workflows/observability-quality.yml
+      - backend/pyproject.toml
+      - backend/uv.lock
   push:
+    branches: [main]
     paths:
       - deployment/observability/**
       - .github/workflows/observability-quality.yml
+      - backend/pyproject.toml
+      - backend/uv.lock
 
 permissions:
   contents: read
@@ -35,10 +40,10 @@ jobs:
       - name: Backend selectors, formatting, strict types and storage rules
         working-directory: backend
         run: |
-          uv run --no-sync ruff check --config pyproject.toml ../deployment/observability
-          uv run --no-sync ruff format --check --config pyproject.toml ../deployment/observability
+          uv run --no-sync ruff check --config ../deployment/observability/pyproject.toml --extend-per-file-ignores "../deployment/observability/tests/test_ai_log_relay.py:S101" ../deployment/observability
+          uv run --no-sync ruff format --check --config ../deployment/observability/pyproject.toml ../deployment/observability
           uv run --no-sync mypy --config-file pyproject.toml --strict ../deployment/observability
-          uv run --no-sync pytest -c pyproject.toml ../deployment/observability/tests/test_storage_budget.py
+          uv run --no-sync pytest -c pyproject.toml ../deployment/observability/tests/test_storage_budget.py ../deployment/observability/tests/test_ai_log_relay.py
       - name: One bounded credential-free Docker native protocol proof
         run: backend/.venv/bin/python deployment/observability/validate.py --output /tmp/peerly-observability-proof
       - name: Encrypted archive outage, recovery and offline restore proof
