@@ -42,7 +42,9 @@ jobs:
       - name: One bounded credential-free Docker native protocol proof
         run: backend/.venv/bin/python deployment/observability/validate.py --output /tmp/peerly-observability-proof
       - name: Encrypted archive outage, recovery and offline restore proof
-        run: node deployment/observability/archive/crypt/prove.mjs
+        run: |
+          docker pull rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466
+          node deployment/observability/archive/crypt/prove.mjs
       - name: Validate dedicated alert routing without provider access
         shell: bash
         run: |
