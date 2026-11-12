@@ -1,3 +1,4 @@
+import { applicationOrigin, isBusinessWrite } from '../../../../testing/readonly-requests.mts';
 import { assertStudentNavigationInViewport } from '../../../../testing/student-navigation';
 import { assertNaturalWordWrapping, assertFullTextFits } from '../../../../testing/readable-text';
 import { jpegBase64 } from '../../../../testing/image-fixture';
@@ -117,14 +118,10 @@ for (const { mode, reason, appearance, context, contextLabel, caption } of [
     page,
     checkpoint,
   }: Context) => {
+    const expectedOrigin = applicationOrigin(test.info().project.use.baseURL);
     let writes = 0;
     page.on('request', (request) => {
-      // Technical observations are genuine readonly telemetry, not a social decision.
-      if (
-        request.method() !== 'GET' &&
-        new URL(request.url()).pathname !== '/api/v1/telemetry/events'
-      )
-        writes += 1;
+      if (isBusinessWrite(request.method(), request.url(), expectedOrigin)) writes += 1;
     });
     await account(page);
     await page.route('**/api/v1/me/goal', async (route) => route.fulfill({ json: ownGoal }));

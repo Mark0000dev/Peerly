@@ -1,3 +1,4 @@
+import { applicationOrigin, isBusinessWrite } from '../../../../testing/readonly-requests.mts';
 import { assertFullTextFits, assertNaturalWordWrapping } from '../../../../testing/readable-text';
 import { assertStudentNavigationInViewport } from '../../../../testing/student-navigation';
 import { jpegBase64 } from '../../../../testing/image-fixture';
@@ -170,6 +171,39 @@ function releaseHeld(release: (() => void) | undefined): void {
   if (release === undefined) throw new Error('Missing controlled request');
   release();
 }
+async function listViewport(page: Readonly<Page>, width: number, text200: boolean): Promise<void> {
+  await page.setViewportSize({ width, height: 800 });
+  if (!text200) return;
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      document.documentElement.style.setProperty('font-size', '200%');
+    });
+  });
+}
+async function openPreview(page: Readonly<Page>, keyboard: boolean): Promise<void> {
+  const link = page.getByRole('link', { name: 'Maya Lim', exact: true });
+  if (!keyboard) {
+    await link.locator('.row-metadata').click();
+    return;
+  }
+  await link.focus();
+  await page.keyboard.press('Enter');
+}
+async function compactPreview(page: Readonly<Page>): Promise<void> {
+  const geometry = await page
+    .locator('.conversation-row')
+    .first()
+    .evaluate((row: Readonly<HTMLElement>) => {
+      const preview = row.querySelector('.row-preview');
+      const heading = row.querySelector('h2');
+      if (preview === null || heading === null) throw new Error('Missing actual chat row content');
+      return {
+        preview: preview.getBoundingClientRect().height,
+        heading: heading.getBoundingClientRect().height,
+      };
+    });
+  expect(geometry.preview).toBeLessThanOrEqual(geometry.heading);
+}
 function contextForPeer(personId: string): Api['schemas']['AcademicContextResponse'] {
   const help = context.recipient_help;
   if (help === null) throw new Error('Missing actual-mode fixture help source');
@@ -245,14 +279,14 @@ test('C01 actual list unread empty accepted and masked peers', async ({
   });
   await open(page);
   await expect(page.getByText('1 unread', { exact: true })).toBeVisible();
-  await expect(page.getByText('Connected · no messages yet')).toHaveCount(2);
+  await expect(page.getByText('Connected about Databases')).toHaveCount(2);
   await expect(page.getByRole('heading', { name: 'Profile unavailable' })).toBeVisible();
   await expect(page.getByText('Read-only conversation')).toBeVisible();
   await assertStudentNavigationInViewport(page, 'Chats');
   await expect(page.locator('app-chats')).toHaveCSS('background-color', 'rgb(250, 246, 239)');
   await expect(page.locator('.conversation-rows')).toHaveCSS(
     'background-color',
-    'rgb(255, 255, 255)',
+    'rgb(250, 246, 239)',
   );
   await expect(page.locator('tui-badge-notification')).toHaveText('1 unread');
   await expect(page.locator('.row-metadata time').first()).toHaveAttribute(
@@ -277,6 +311,88 @@ test('C01 actual list unread empty accepted and masked peers', async ({
   await checkpoint('chat-list-narrow-text200.png');
 });
 
+for (const viewport of [
+  { width: 360, text200: false },
+  { width: 320, text200: false },
+  { width: 320, text200: true },
+] as const) {
+  test(`C01 original whole-row link and long preview at ${String(viewport.width)}px text200=${String(viewport.text200)}`, async ({
+    page,
+    checkpoint,
+  }: Scenario) => {
+    await listViewport(page, viewport.width, viewport.text200);
+    const longText = 'Confirmed discussion about JOIN examples.\nAnother paragraph. '.repeat(30);
+    expect(longText.length).toBeLessThanOrEqual(2000);
+    const longMessage = { ...message, text: longText };
+    await setup(
+      page,
+      {
+        ...conversations,
+        conversations: [{ ...summary, last_message: longMessage }],
+      },
+      conversation,
+      { ...history, messages: [longMessage] },
+    );
+    await page.route(`**${threadPath}/study-prompt-visits`, (route: Readonly<Route>) =>
+      route.fulfill({ json: { outcome: 'no_offer' } }),
+    );
+    await open(page);
+    const link = page.getByRole('link', { name: 'Maya Lim', exact: true });
+    await expect(link).toBeVisible();
+    const preview = page.locator('.row-preview').first();
+    await expect(preview).toContainText(longText);
+    await compactPreview(page);
+    await expect(preview).toBeInViewport({ ratio: 1 });
+    await expect(link).toHaveAccessibleDescription(/Databases.*1 unread/);
+    await expect(link.locator('button, a')).toHaveCount(0);
+    await expect(page.getByText('1 unread', { exact: true })).toBeVisible();
+    await assertStudentNavigationInViewport(page, 'Chats');
+    await checkpoint(
+      `c01-long-preview-${String(viewport.width)}-text200-${String(viewport.text200)}.png`,
+    );
+    await openPreview(page, viewport.text200);
+    await expect(page).toHaveURL(new RegExp(`conversation=${conversation.conversation_id}`));
+    await expect(
+      page.getByRole('region', { name: 'Selected conversation', exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Confirmed messages', exact: true })).toContainText(
+      longText,
+    );
+    await checkpoint(
+      `c01-long-preview-opened-${String(viewport.width)}-text200-${String(viewport.text200)}.png`,
+    );
+  });
+}
+
+test('C01 failed-avatar retry is separate from the native conversation link', async ({
+  page,
+  checkpoint,
+}: Scenario) => {
+  await setup(page, {
+    ...conversations,
+    conversations: [{ ...summary, peer: { ...peer, photo_version: 1 } }],
+  });
+  let avatarReads = 0;
+  await page.route(`**${threadPath}/participant/avatar/1`, (route: Readonly<Route>) => {
+    avatarReads += 1;
+    return route.fulfill({ status: 503, json: { code: 'unavailable' } });
+  });
+  await open(page);
+  const link = page.getByRole('link', { name: 'Maya Lim', exact: true });
+  const retry = page.getByRole('button', { name: 'Retry chat photo', exact: true });
+  await expect(retry).toBeVisible();
+  await expect(link.locator('button, a')).toHaveCount(0);
+  await checkpoint('c01-avatar-retry-outside-link.png');
+  await retry.click();
+  await expect.poll(() => avatarReads).toBe(2);
+  await expect(retry).toBeEnabled();
+  await expect(
+    page.getByRole('region', { name: 'Selected conversation', exact: true }),
+  ).toHaveCount(0);
+  await expect(page).toHaveURL(/\/chats$/);
+  await checkpoint('c01-avatar-retry-stays-list.png');
+});
+
 test('C01 loading then actual empty state has real Requests recovery', async ({
   page,
   checkpoint,
@@ -299,7 +415,11 @@ test('C01 loading then actual empty state has real Requests recovery', async ({
     'href',
     '/requests',
   );
-  await expect(page.locator('.empty-chats .empty-icon')).toHaveAttribute('aria-hidden', 'true');
+  const art = page.getByRole('region', { name: 'No conversations', exact: true }).locator('img');
+  await expect(art).toHaveAttribute('alt', '');
+  await expect
+    .poll(() => art.evaluate((image: Readonly<HTMLImageElement>) => image.naturalWidth))
+    .toBeGreaterThan(0);
   await expect(page.getByRole('link', { name: 'View requests', exact: true })).toHaveAttribute(
     'data-appearance',
     'secondary',
@@ -395,10 +515,11 @@ test('C02 confirmed sequence order and original context never ACK on GET', async
       message,
     ],
   });
+  const expectedOrigin = applicationOrigin(test.info().project.use.baseURL);
   let writes: readonly string[] = [];
   page.on('request', (request: Readonly<Request>) => {
-    if (request.method() !== 'GET')
-      writes = [...writes, `${request.method()} ${new URL(request.url()).pathname}`];
+    if (isBusinessWrite(request.method(), request.url(), expectedOrigin))
+      writes = [...writes, `${request.method()} ${request.url()}`];
   });
   await open(page, true);
   await expect(page.getByRole('region', { name: 'Original accepted context' })).toContainText(
@@ -419,10 +540,7 @@ test('C02 confirmed sequence order and original context never ACK on GET', async
   await items.nth(1).scrollIntoViewIfNeeded();
   // Opening a thread records its study-prompt visit and mandatory telemetry.
   // Neither authorizes a message write or an implicit read-position ACK.
-  const permittedVisits = [
-    `POST ${threadPath}/study-prompt-visits`,
-    'POST /api/v1/telemetry/events',
-  ];
+  const permittedVisits = [`POST ${expectedOrigin}${threadPath}/study-prompt-visits`];
   expect(writes.filter((write) => !permittedVisits.includes(write))).toEqual([]);
   await checkpoint('thread-confirmed-sequence.png');
 });
@@ -1290,12 +1408,13 @@ test('C01 image-only preview is truthful and opening the list does not fetch an 
   page,
   checkpoint,
 }: Scenario) => {
+  const expectedOrigin = applicationOrigin(test.info().project.use.baseURL);
   let privateReads = 0;
   let writes = 0;
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (url.pathname.includes('/images/')) privateReads += 1;
-    if (request.method() !== 'GET' && url.pathname.startsWith('/api/')) writes += 1;
+    if (isBusinessWrite(request.method(), request.url(), expectedOrigin)) writes += 1;
   });
   await setup(page, {
     ...conversations,

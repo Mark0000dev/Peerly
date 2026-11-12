@@ -167,7 +167,7 @@ tui-app-bar h1 {
 
 .conversation-content {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 0.75rem;
   inline-size: 100%;
@@ -188,5 +188,36 @@ tui-app-bar h1 {
 
 .conversation-rows {
   display: grid;
-  background: var(--tui-background-base);
+  background: var(--tui-background-base-alt);
+}
+
+.conversation-link {
+  display: block;
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+
+.conversation-link-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+@container chat-list (width < 20em) {
+  .conversation-link-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.preview-line {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-line .message-text {
+  white-space: inherit;
 }
