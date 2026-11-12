@@ -25,7 +25,12 @@ TOKEN = "123456:synthetic_PRIVATE_TOKEN"  # noqa: S105 - synthetic marker, no pr
 
 
 def umami() -> UmamiConfig:
-    return UmamiConfig(DestinationRef(Sink.UMAMI, 1), "https://analytics.example.test", uuid4())
+    return UmamiConfig(
+        DestinationRef(Sink.UMAMI, 1),
+        "https://analytics.example.test",
+        uuid4(),
+        hostname="app.example.test",
+    )
 
 
 def telegram() -> TelegramConfig:

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -9,6 +10,8 @@ from uuid import UUID
 from studymate.domain.external_delivery.delivery import DestinationRef
 from studymate.domain.external_delivery.sources import Sink
 
+MIN_APPLICATION_HOSTNAME = 3
+MAX_APPLICATION_HOSTNAME = 100
 MIN_VISIBLE_ASCII = 33
 DELETE_ASCII = 127
 MAX_CHAT_ID = (1 << 52) - 1
@@ -40,14 +43,30 @@ def require_origin(value: str) -> None:
         raise ValueError("External destination requires a configured HTTPS origin")
 
 
+def require_hostname(value: str) -> None:
+    if (
+        not MIN_APPLICATION_HOSTNAME <= len(value) <= MAX_APPLICATION_HOSTNAME
+        or re.fullmatch(
+            r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?", value
+        )
+        is None
+    ):
+        raise ValueError("Umami requires a canonical application DNS hostname")
+
+
 @dataclass(frozen=True, slots=True)
 class UmamiConfig:
     destination: DestinationRef
     origin: str
     website_id: UUID
+    # None remains usable for pure target fingerprint registration. Sending
+    # requires an explicit hostname; no localhost/collector-origin fallback.
+    hostname: str | None = None
 
     def __post_init__(self) -> None:
         require_origin(self.origin)
+        if self.hostname is not None:
+            require_hostname(self.hostname)
         if self.destination.sink != Sink.UMAMI:
             raise ValueError("Umami destination requires its registered sink")
 

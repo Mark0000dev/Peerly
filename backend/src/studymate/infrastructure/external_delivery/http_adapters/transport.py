@@ -21,6 +21,7 @@ MAX_BYTES = 16 * 1024
 MAX_RETRY_DIGITS = 10
 MAX_RETRY_HEADER = 128
 USER_AGENT = "Peerly-Delivery/1.0"
+UMAMI_USER_AGENT = "Peerly/1.0 (application event relay; automated service, no browser identity)"
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +85,7 @@ async def post(
     payload: dict[str, Json],
     *,
     seconds: float = HTTP_DEADLINE_SECONDS,
+    user_agent: str = USER_AGENT,
 ) -> HttpReply | DeliveryResult:
     deadline = min(HTTP_DEADLINE_SECONDS, seconds)
     encoded = json.dumps(
@@ -99,7 +101,7 @@ async def post(
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Accept-Encoding": "identity",
-            "User-Agent": USER_AGENT,
+            "User-Agent": user_agent,
         },
         extensions={"timeout": dict.fromkeys(("connect", "read", "write", "pool"), deadline)},
     )

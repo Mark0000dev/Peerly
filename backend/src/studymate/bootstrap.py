@@ -2016,6 +2016,7 @@ def _external_destination_configs(
                 DestinationRef(Sink.UMAMI, configuration.revision),
                 configuration.origin,
                 configuration.website_id,
+                hostname=configuration.hostname,
             )
         )
     if settings.telegram_support is not None:

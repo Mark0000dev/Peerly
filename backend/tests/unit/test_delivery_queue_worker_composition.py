@@ -74,6 +74,7 @@ async def test_root_sampler_drains_before_sdk_shutdown_and_is_absent_without_tel
         _env_file=None,
         database_url=SecretStr("postgresql+asyncpg://test:synthetic@127.0.0.1:1/worker_test"),
         umami=UmamiDeliveryConfiguration(
+            hostname="app.example.test",
             revision=1,
             origin="https://analytics.test",
             website_id=uuid4(),

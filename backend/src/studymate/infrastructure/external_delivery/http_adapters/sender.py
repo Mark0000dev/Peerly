@@ -28,6 +28,7 @@ from studymate.infrastructure.external_delivery.http_adapters.projections import
     umami_payload,
 )
 from studymate.infrastructure.external_delivery.http_adapters.transport import (
+    UMAMI_USER_AGENT,
     HttpReply,
     parse_object,
     post,
@@ -136,7 +137,9 @@ class ExternalHttpSender:
         if remaining <= 0:
             return DeliveryResult(ResultKind.AMBIGUOUS, FailureCode.LEASE_EXPIRED)
         configuration = self._destinations.get(lease.destination)
-        if configuration is None:
+        if configuration is None or (
+            isinstance(configuration, UmamiConfig) and configuration.hostname is None
+        ):
             return DeliveryResult(ResultKind.PERMANENT, FailureCode.DESTINATION)
         if isinstance(configuration, UmamiConfig):
             if (
@@ -149,6 +152,7 @@ class ExternalHttpSender:
                 configuration.origin + "/api/send",
                 umami_payload(lease, configuration),
                 seconds=remaining,
+                user_agent=UMAMI_USER_AGENT,
             )
             return result if isinstance(result, DeliveryResult) else umami_result(result)
         token = configuration.token

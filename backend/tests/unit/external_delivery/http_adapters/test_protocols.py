@@ -30,6 +30,7 @@ from studymate.infrastructure.external_delivery.http_adapters import (
 )
 from studymate.infrastructure.external_delivery.http_adapters.transport import (
     MAX_BYTES,
+    UMAMI_USER_AGENT,
     retry_seconds,
 )
 
@@ -68,7 +69,13 @@ async def test_umami_native_shape_and_identified_event_not_session_or_dedupe_cla
     assert "server.goal.saved" in request.content.decode()
     assert str(job.source_id) in request.content.decode()
     assert b'"id":' in request.content
-    assert request.headers["user-agent"] == "Peerly-Delivery/1.0"
+    assert request.headers["user-agent"] == UMAMI_USER_AGENT
+    payload = body["payload"]
+    assert isinstance(payload, dict)
+    assert payload["hostname"] == config.hostname
+    assert payload["browser"] == "service"
+    assert payload["os"] == "server"
+    assert payload["device"] == "server"
     assert all(key not in request.headers for key in ("cookie", "authorization", "x-forwarded-for"))
     assert b"userAgent" not in request.content
     assert b'"ip"' not in request.content

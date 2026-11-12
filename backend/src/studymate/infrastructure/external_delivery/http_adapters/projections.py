@@ -103,9 +103,12 @@ def umami_payload(lease: DeliveryLease, configuration: UmamiConfig) -> dict[str,
     payload = lease.payload
     if not isinstance(payload, UmamiEvent) or payload.source.id != lease.source_id:
         raise ValueError("Umami payload lost its exact captured source")
+    if configuration.hostname is None:
+        raise ValueError("Umami event projection requires an explicit application hostname")
     captured = payload.source
     source = captured.source
     data: dict[str, Json] = {
+        "delivery_provenance": "automated_application_service",
         "source_id": str(captured.id),
         "source_event_id": str(source.id),
         "delivery_id": str(lease.delivery_id),
@@ -139,6 +142,10 @@ def umami_payload(lease: DeliveryLease, configuration: UmamiConfig) -> dict[str,
     data["source_time"] = at.astimezone(UTC).isoformat()
     result: dict[str, Json] = {
         "website": str(configuration.website_id),
+        "hostname": configuration.hostname,
+        "browser": "service",
+        "os": "server",
+        "device": "server",
         "name": name,
         "data": data,
         "url": url,

@@ -158,6 +158,7 @@ async def test_real_worker_registers_destination_and_releases_sql_before_control
         _env_file=None,
         database_url=SecretStr(database_url),
         umami=UmamiDeliveryConfiguration(
+            hostname="app.example.test",
             revision=1,
             origin="https://analytics.test",
             website_id=uuid4(),

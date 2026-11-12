@@ -384,11 +384,25 @@ class UmamiDeliveryConfiguration(BaseModel):
     revision: int = Field(ge=1)
     origin: str
     website_id: UUID
+    hostname: str = Field(min_length=3, max_length=100)
 
     @field_validator("origin")
     @classmethod
     def https_origin(cls, value: str) -> str:
         return MediaConfiguration.require_storage_origin(value)
+
+    @field_validator("hostname")
+    @classmethod
+    def canonical_hostname(cls, value: str) -> str:
+        if (
+            re.fullmatch(
+                r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?",
+                value,
+            )
+            is None
+        ):
+            raise ValueError("Umami requires a canonical application DNS hostname")
+        return value
 
 
 class SupportTelegramDeliveryConfiguration(BaseModel):

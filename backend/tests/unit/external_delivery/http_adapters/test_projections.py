@@ -164,6 +164,10 @@ def test_umami_target_identity_is_website_and_origin_not_delivery_revision() -> 
     assert target_fingerprint(config) == target_fingerprint(
         replace(config, destination=replace(config.destination, revision=2))
     )
+    assert target_fingerprint(config) == target_fingerprint(
+        replace(config, hostname="other.example.test")
+    )
+    assert target_fingerprint(config) == target_fingerprint(replace(config, hostname=None))
 
 
 def test_support_notice_links_to_actual_operator_support_case_route() -> None:

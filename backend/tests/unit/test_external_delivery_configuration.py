@@ -28,7 +28,10 @@ def test_destinations_require_explicit_targets_and_keep_credentials_out_of_ident
         _env_file=None,
         database_url=url,
         umami=UmamiDeliveryConfiguration(
-            revision=1, origin="https://analytics.test", website_id=uuid4()
+            hostname="app.example.test",
+            revision=1,
+            origin="https://analytics.test",
+            website_id=uuid4(),
         ),
         telegram_support=support,
     )

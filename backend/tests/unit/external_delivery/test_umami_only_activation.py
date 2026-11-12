@@ -205,7 +205,10 @@ def test_real_existing_worker_configuration_skips_support_without_a_dummy_target
         observability=None,
         telegram_support=None,
         umami=UmamiDeliveryConfiguration(
-            revision=1, origin="https://analytics.example.test", website_id=UUID(int=1)
+            hostname="app.example.test",
+            revision=1,
+            origin="https://analytics.example.test",
+            website_id=UUID(int=1),
         ),
     )
     configurations = _external_destination_configs(settings)

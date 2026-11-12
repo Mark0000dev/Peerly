@@ -189,11 +189,29 @@ fingerprints as recovery. There is no automatic retry, provider probe or start.
 ## Separate worker activation
 
 The normal worker command remains `python -m studymate.external_delivery_worker`.
-For both-sink activation it needs the actual `UMAMI__REVISION`, `UMAMI__ORIGIN`, `UMAMI__WEBSITE_ID`, and
+For both-sink activation it needs the actual `UMAMI__REVISION`, `UMAMI__ORIGIN`, `UMAMI__WEBSITE_ID`, `UMAMI__HOSTNAME`, and
 `TELEGRAM_SUPPORT__REVISION`, `__CHAT_ID`, `__OPERATOR_ORIGIN`, `__TOKEN`, with optional
 `__TOPIC_ID`. The token is supplied privately to the worker, never this manifest.
 Configure actual observability origin/environment/release and the reviewed bounded
 SDK queue; verify queue/freshness/blocked metrics through the existing collector.
+
+`UMAMI__HOSTNAME` is the explicit application website hostname, not the analytics
+collector origin. It is required for a sending worker: canonical lowercase DNS,
+labels at most63 characters, total at most100 (Umami3.3 hostname storage limit),
+without URL scheme/path/query/fragment/port, IP literal or trailing dot. There is
+no localhost or collector-origin fallback. The registration helper fingerprints
+only the actual destination origin+website, so hostname remains reviewed event
+provenance and never silently rebinds an existing destination revision. Metadata-only
+fingerprinting can omit it; sending cannot.
+
+Umami requests use the honest fixed automated event-relay identity and explicit
+service/server/server classification. These describe the delivery process, never
+a user's browser or device. No raw browser UA, IP or referrer is fabricated from
+client observations. Source actor/trust/timestamps remain unchanged; provider
+sessions describe relay transport context, not a count of human browser sessions.
+HTTP200 bot-filter replies remain permanent rejection, not delivery acceptance.
+Real provider event storage/hostname readback is still required after parent-owned
+activation; this code does not unblock old work or mutate historical attempts.
 
 Only after configuration, backlog, source/image, credentials, recipient approval,
 monitoring and explicit operational review may the worker be started separately.
