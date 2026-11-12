@@ -2,6 +2,9 @@ name: Native unsigned compile
 
 # PR compile gate and manual reruns after review. No deployment or store job.
 on:
+  # Native feature branches compile before PR integration, without deployment secrets.
+  push:
+    branches: ['work/native-*']
   pull_request:
     paths:
       - ".github/workflows/native-ios-unsigned.yml"
