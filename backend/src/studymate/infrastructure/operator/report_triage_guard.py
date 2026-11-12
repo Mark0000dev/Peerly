@@ -17,6 +17,7 @@ from studymate.infrastructure.operator.report_triage_models import (
     ReportTriageEvidenceRecord,
     ReportTriageSubmissionRecord,
 )
+from studymate.infrastructure.operator.report_triage_observation import observe_report_triage_source
 from studymate.infrastructure.operator.report_triage_sources import selected_report_preview
 from studymate.infrastructure.operator.report_triage_values import triage_snapshot_value
 from studymate.infrastructure.persistence.identity_claims import identity_lineage_banned
@@ -129,6 +130,8 @@ class SqlReportTriageSourceGuard:
     ) -> Failure | None:
         if not isinstance(job.task, TriageReport):
             return Failure.INVALID_INPUT
+        if not lock:
+            return await observe_report_triage_source(session, job)
         proof = await session.get(ReportTriageSubmissionRecord, job.id)
         if proof is None or proof.operator_id != job.actor_id:
             return Failure.ACCOUNT
