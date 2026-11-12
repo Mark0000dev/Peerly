@@ -245,5 +245,6 @@ jobs:
             frontend/playwright-report/
             frontend/test-results/
             frontend/coverage/
+            frontend/src/**/__screenshots__/*.spec.ts/*.png
           if-no-files-found: error
           retention-days: 14
