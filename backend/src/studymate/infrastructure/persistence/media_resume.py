@@ -73,5 +73,5 @@ class SqlPhotoResumeUnitOfWork:
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[PhotoResumeTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlPhotoResumeTransaction(session)
+        async with open_transaction(self.sessions, read_only=True) as session:
+            yield SqlPhotoResumeTransaction(session, shared_identity_locks=True)

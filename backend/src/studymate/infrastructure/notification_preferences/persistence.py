@@ -87,8 +87,11 @@ class SqlPreferenceTransaction(SqlIdentityTransaction):
 class SqlPreferenceUnitOfWork:
     sessions: async_sessionmaker[AsyncSession]
     record_event: PreferenceEventRecorder
+    shared_identity_locks: bool = False
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[SqlPreferenceTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlPreferenceTransaction(session, self.record_event)
+        async with open_transaction(self.sessions, read_only=self.shared_identity_locks) as session:
+            yield SqlPreferenceTransaction(
+                session, self.record_event, shared_identity_locks=self.shared_identity_locks
+            )

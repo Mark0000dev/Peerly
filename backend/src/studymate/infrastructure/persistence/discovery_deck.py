@@ -204,5 +204,5 @@ class SqlDiscoveryDeckUnitOfWork:
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[SqlDiscoveryDeckTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlDiscoveryDeckTransaction(session)
+        async with open_transaction(self.sessions, read_only=True) as session:
+            yield SqlDiscoveryDeckTransaction(session, shared_identity_locks=True)

@@ -234,8 +234,11 @@ class SqlRequestQueryTransaction(SqlIdentityTransaction):
 @dataclass(frozen=True, slots=True)
 class SqlRequestQueryUnitOfWork:
     sessions: async_sessionmaker[AsyncSession]
+    shared_identity_locks: bool = False
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[SqlRequestQueryTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlRequestQueryTransaction(session)
+        async with open_transaction(self.sessions, read_only=self.shared_identity_locks) as session:
+            yield SqlRequestQueryTransaction(
+                session, shared_identity_locks=self.shared_identity_locks
+            )

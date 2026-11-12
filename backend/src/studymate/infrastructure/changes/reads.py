@@ -101,7 +101,7 @@ class SqlChangeReadUnitOfWork:
     async def transaction(self) -> AsyncIterator[SqlChangeReadTransaction]:
         try:
             async with asyncio.timeout(CHANGE_READ_DEADLINE_SECONDS):
-                async with open_transaction(self.sessions) as session:
-                    yield SqlChangeReadTransaction(session)
+                async with open_transaction(self.sessions, read_only=True) as session:
+                    yield SqlChangeReadTransaction(session, shared_identity_locks=True)
         except TimeoutError:
             raise StorageUnavailableError from None

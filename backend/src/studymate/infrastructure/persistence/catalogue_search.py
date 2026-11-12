@@ -79,5 +79,5 @@ class SqlCatalogueUnitOfWork:
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[CatalogueTransaction]:
-        async with open_transaction(self.sessions) as session:
-            yield SqlCatalogueTransaction(session)
+        async with open_transaction(self.sessions, read_only=True) as session:
+            yield SqlCatalogueTransaction(session, shared_identity_locks=True)
