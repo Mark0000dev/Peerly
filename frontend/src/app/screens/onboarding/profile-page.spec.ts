@@ -138,6 +138,20 @@ describe('P01 actual profile shell session, canonical reads and editor lifetimes
     await mount();
     expect(host(fixture).textContent).toContain(ownGoal.goal.subject.label);
     expect(host(fixture).textContent).toContain(ownHelp.selection.subjects[0].label);
+    expect(host(fixture).querySelector('.verified')?.getAttribute('data-appearance')).toBe(
+      'sp-subject',
+    );
+    const details = host(fixture).querySelector('.profile-details');
+    if (details === null) throw new Error('Missing actual profile details');
+    expect(details.textContent.replace(/\s+/gu, ' ')).toContain('Computing · Year 1');
+    const goalTitle = host(fixture).querySelector('[aria-label="Your study goal"] h2');
+    expect(goalTitle?.textContent).toContain(ownGoal.goal.subject.label);
+    expect(goalTitle?.textContent).toContain(ownGoal.goal.topic);
+    const helpTitle = host(fixture).querySelector('[aria-label="You can help with"] h2');
+    expect(helpTitle?.textContent).toContain(ownHelp.selection.subjects[0].label);
+    expect(helpTitle?.textContent).toContain(ownHelp.selection.subjects[0].topic_note);
+    expect(host(fixture).querySelector('[aria-label="You can help with"] > p')).toBeNull();
+
     expect(host(fixture).querySelector('a[href="/profile/edit"]')).not.toBeNull();
     expect(await component.canLeave()).toBe(true);
     expect(confirm).not.toHaveBeenCalled();
@@ -184,6 +198,9 @@ describe('P01 actual profile shell session, canonical reads and editor lifetimes
     expect(host(fixture).querySelectorAll('a[href="/profile/edit"]')).toHaveLength(1);
     client.setQueryData(['account', verifiedActor.account_id, 'goal'], { goal: null });
     await shown(fixture, 'No active study goal yet.');
+    expect(
+      host(fixture).querySelector('[aria-label="Your study goal"] peerly-complete-goal'),
+    ).toBeNull();
     expect(host(fixture).querySelector('a[href="/profile/goal"]')?.textContent).toContain(
       'Set a study goal',
     );
@@ -209,6 +226,19 @@ describe('P01 actual profile shell session, canonical reads and editor lifetimes
   it('renders own feedback only for the actual activated capability and does not mirror its DTO', async () => {
     await mount(undefined, active);
     await shown(fixture, 'feedback');
+    const completion = host(fixture).querySelector('peerly-complete-goal');
+    expect(completion).not.toBeNull();
+    expect(host(fixture).querySelectorAll('app-own-feedback-summary')).toHaveLength(1);
+    client.setQueryData(['account', active.account_id, 'goal'], {
+      goal: { ...ownGoal.goal, shared_learning: true },
+    });
+    await shown(fixture, 'Open to studying together');
+    expect(host(fixture).querySelector('peerly-complete-goal')).toBe(completion);
+    expect(
+      host(fixture).querySelector('[aria-label="Your study goal"] [tuiSubtitle]')?.textContent,
+    ).toContain('Open to studying together');
+    backend.expectNone((request) => request.method !== 'GET');
+
     expect(client.getQueryData(['account', active.account_id, 'feedback-summary'])).toMatchObject({
       state: 'building',
       responses: 0,

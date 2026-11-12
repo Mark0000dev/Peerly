@@ -11,7 +11,7 @@ import { ownProfile, profileReference } from './profile/profile.fixtures';
 import type { Api } from '../../api.generated';
 import { ownGoal, goal } from './study/goal.fixtures';
 import { ownHelp } from './study/help.fixtures';
-import { complete } from './setup/setup.fixtures';
+import { complete, receipt } from './setup/setup.fixtures';
 
 interface Context {
   readonly page: Page;
@@ -98,6 +98,79 @@ test('P01 overview is actual profile/goal/help data and real settings navigation
   await checkpoint('own-profile-overview.png');
 });
 
+test('P01 compact original overview retains actual completion and capability-owned feedback', async ({
+  page,
+  checkpoint,
+}: Context) => {
+  await overview(page);
+  await page.route('**/api/v1/me', async (route) =>
+    route.fulfill({
+      json: {
+        ...verifiedActor,
+        registration: receipt,
+        capabilities: { ...verifiedActor.capabilities, can_use_student_features: true },
+      } satisfies Api['schemas']['IdentityResponse'],
+    }),
+  );
+  await page.route('**/api/v1/me/goal', async (route) =>
+    route.fulfill({
+      json: {
+        goal: { ...ownGoal.goal, shared_learning: true },
+      } satisfies Api['schemas']['OwnGoalResponse'],
+    }),
+  );
+  await page.route('**/api/v1/me/help-subjects', async (route) =>
+    route.fulfill({
+      json: {
+        selection: {
+          ...ownHelp.selection,
+          subjects: [
+            ...ownHelp.selection.subjects,
+            {
+              subject_id: '00000000-0000-0000-0000-000000000011',
+              label: 'Statistics',
+              topic_note: null,
+            },
+          ],
+        },
+      } satisfies Api['schemas']['OwnHelpResponse'],
+    }),
+  );
+  await page.route('**/api/v1/me/feedback-summary', async (route) =>
+    route.fulfill({
+      json: {
+        state: 'building',
+        responses: 0,
+        publicly_visible: true,
+      } satisfies Api['schemas']['BuildingFeedbackSummaryResponse'],
+    }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/profile');
+  await expect(page.getByRole('heading', { name: ownProfile.profile.display_name })).toBeVisible();
+  const goalRegion = page.getByRole('region', { name: 'Your study goal', exact: true });
+  await expect(goalRegion.locator('[tuiSubtitle]')).toContainText('Your active goal');
+  await expect(goalRegion.locator('[tuiSubtitle]')).toContainText('Open to studying together');
+  await expect(
+    goalRegion.getByRole('button', { name: 'Mark goal done', exact: true }),
+  ).toBeEnabled();
+  const helpRegion = page.getByRole('region', { name: 'You can help with', exact: true });
+  await expect(helpRegion.locator('h2')).toContainText('Calculus');
+  await expect(helpRegion.locator('h2')).toContainText('Limits');
+  await expect(helpRegion.locator('h2')).toContainText('Statistics');
+  await expect(helpRegion.locator(':scope > p')).toHaveCount(0);
+  await expect(page.locator('.verified')).toHaveAttribute('data-appearance', 'sp-subject');
+  await checkpoint('own-profile-compact-active-original.png', { fullPage: false });
+  const feedback = page.getByRole('region', { name: 'Your peer feedback', exact: true });
+  await feedback.scrollIntoViewIfNeeded();
+  await expect(feedback).toContainText('0 partners');
+  await expect(page.getByRole('link', { name: 'Delete account', exact: true })).toHaveAttribute(
+    'href',
+    '/account/delete',
+  );
+  await checkpoint('own-profile-compact-feedback-original.png', { fullPage: false });
+});
+
 test('P01 320px text200 keeps profile identity and editor heading readable', async ({
   page,
   checkpoint,
@@ -123,7 +196,7 @@ test('P01 320px text200 keeps profile identity and editor heading readable', asy
     await assertFullTextFits(action);
   }
   await assertNaturalWordWrapping(
-    page.getByRole('heading', { name: 'You can help with', exact: true }),
+    page.getByRole('region', { name: 'You can help with', exact: true }).locator('h2'),
   );
   await assertTextPaintNotClipped(page.getByText(goal.context, { exact: true }));
 
