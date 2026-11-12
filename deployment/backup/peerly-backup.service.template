@@ -1,0 +1,46 @@
+[Unit]
+Description=Peerly approved PG/media encrypted backup and bounded readback
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=peerly-backup
+Group=peerly-backup
+StateDirectory=peerly-backup
+StateDirectoryMode=0700
+WorkingDirectory=/usr/local/lib/peerly-backup
+Environment=PYTHONPATH=/usr/local/lib/peerly-backup
+LoadCredential=plan:/etc/peerly-backup/plan.json
+LoadCredential=source-request:/etc/peerly-backup/source-request.json
+LoadCredential=pgpass:/etc/peerly-backup/pgpass
+LoadCredential=rclone:/etc/peerly-backup/rclone.conf
+# For verify-full also configure LoadCredential=pg-ca:/etc/peerly-backup/pg-ca.pem
+ExecStart=/bin/sh /usr/local/lib/peerly-backup/deployment/backup/run-backup.sh
+TimeoutStartSec=35min
+TimeoutStopSec=10s
+KillMode=control-group
+Restart=no
+UMask=0077
+MemoryMax=512M
+CPUQuota=50%
+TasksMax=64
+LimitNOFILE=128
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=peerly-backup

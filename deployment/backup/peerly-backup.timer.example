@@ -1,0 +1,12 @@
+# PROPOSAL ONLY. Parent approves RPO/window and installs/enables separately.
+[Unit]
+Description=Proposed daily Peerly encrypted business backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+RandomizedDelaySec=15min
+Persistent=true
+Unit=peerly-backup.service
+
+[Install]
+WantedBy=timers.target

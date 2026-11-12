@@ -1,10 +1,11 @@
-name: Restore tooling quality
+name: Backup and restore tooling quality
 
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - deployment/restore/**
+      - deployment/backup/**
       - backend/pyproject.toml
       - backend/uv.lock
       - .github/workflows/restore-quality.yml
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - deployment/restore/**
+      - deployment/backup/**
       - backend/pyproject.toml
       - backend/uv.lock
       - .github/workflows/restore-quality.yml
@@ -37,8 +39,8 @@ jobs:
         run: uv sync --locked --python 3.12
       - name: Apply inherited lint, formatting and strict type rules
         run: |
-          uv run --no-sync ruff check --config ../deployment/restore/pyproject.toml ../deployment/restore
-          uv run --no-sync ruff format --check --config ../deployment/restore/pyproject.toml ../deployment/restore
-          uv run --no-sync mypy --config-file pyproject.toml --strict ../deployment/restore
+          uv run --no-sync ruff check --config ../deployment/restore/pyproject.toml ../deployment/restore ../deployment/backup
+          uv run --no-sync ruff format --check --config ../deployment/restore/pyproject.toml ../deployment/restore ../deployment/backup
+          uv run --no-sync mypy --config-file pyproject.toml --strict ../deployment/restore ../deployment/backup
       - name: Verify offline inventory, media and generated-command guards
-        run: uv run --no-sync pytest -c pyproject.toml ../deployment/restore/tests
+        run: uv run --no-sync pytest -c pyproject.toml ../deployment/restore/tests ../deployment/backup/tests

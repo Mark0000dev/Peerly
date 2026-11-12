@@ -1,0 +1,14 @@
+{
+  "state": "/var/lib/peerly-backup",
+  "capture_sha256": "REPLACE_EXACT_PUBLIC_9949FBA_CAPTURE_FILE_SHA256",
+  "rclone": "/usr/local/lib/peerly-backup/bin/rclone",
+  "rclone_sha256": "REPLACE_PINNED_ROOT_OWNED_RCLONE_1_76_0_BINARY_SHA256",
+  "key_generation": "REPLACE_APPROVED_BUSINESS_KEY_GENERATION",
+  "escrow_drill_reference": "REPLACE_ACTUAL_INDEPENDENT_KEY_RECOVERY_RECEIPT",
+  "max_spool_bytes": 3758096384,
+  "retention": {
+    "daily": 14,
+    "weekly": 8,
+    "monthly": 12
+  }
+}

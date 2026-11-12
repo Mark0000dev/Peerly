@@ -1,0 +1,37 @@
+# TEMPLATE ONLY: parent creates a PRIVATE systemd credential, never fills this public file.
+# Separate from telemetry archive namespace/keys. No new paid service is assumed.
+[media_s3]
+type = s3
+provider = Other
+env_auth = false
+endpoint = https://REPLACE_APPROVED_EXISTING_MEDIA_S3_ORIGIN
+region = REPLACE_REGION
+access_key_id = REPLACE_READ_ONLY_MEDIA_IDENTIFIER
+secret_access_key = REPLACE_READ_ONLY_MEDIA_SECRET
+force_path_style = true
+no_check_bucket = true
+no_head = false
+
+[source_media]
+type = alias
+remote = media_s3:REPLACE_APPROVED_MEDIA_BUCKET
+
+[backup_s3]
+type = s3
+provider = Other
+env_auth = false
+endpoint = https://REPLACE_APPROVED_EXISTING_BACKUP_S3_ORIGIN
+region = REPLACE_REGION
+access_key_id = REPLACE_PREFIX_SCOPED_BACKUP_IDENTIFIER
+secret_access_key = REPLACE_PREFIX_SCOPED_BACKUP_SECRET
+force_path_style = true
+no_check_bucket = true
+no_head = false
+
+[backup_crypt]
+type = crypt
+remote = backup_s3:REPLACE_APPROVED_BUCKET/business-backups/crypt-v1
+filename_encryption = standard
+directory_name_encryption = true
+password = REPLACE_NATIVE_OBSCURED_HIGH_ENTROPY_PASSWORD
+password2 = REPLACE_NATIVE_OBSCURED_DISTINCT_SALT
