@@ -251,6 +251,7 @@ class Runner:
     proof_id: str = field(default_factory=lambda: uuid4().hex)
     stopped: bool = True
     context: Path | None = None
+    job_directory: Path | None = None
 
     @property
     def cli(self) -> PinnedCli:
@@ -390,8 +391,11 @@ class Runner:
         context = self.configuration.workspaces / ("peerly-containment-" + self.proof_id)
         context.mkdir(mode=0o700)
         self.context = context
-        job = self.context / "job"
+        # Match production mkdtemp(root, prefix="peerly-ai-")/auth exactly.
+        # The unmounted control directory is a sibling, never a job ancestor.
+        job = self.configuration.workspaces / ("peerly-ai-" + self.proof_id)
         job.mkdir(mode=0o700)
+        self.job_directory = job
         auth = job / "auth"
         auth.mkdir(mode=0o700)
         outside = self.context / "outside-marker"
@@ -548,12 +552,17 @@ class Runner:
             failure = "cancelled"
         except (OSError, ValueError):
             failure = "configuration"
-        if self.context is not None and self.stopped:
-            try:
-                shutil.rmtree(self.context)
-            except OSError:
-                failure = "cleanup"
-        pending = self.context is not None and self.context.exists()
+        owned_directories = (self.job_directory, self.context)
+        if self.stopped:
+            for directory in owned_directories:
+                if directory is not None:
+                    try:
+                        shutil.rmtree(directory)
+                    except OSError:
+                        failure = "cleanup"
+        pending = any(
+            directory is not None and directory.exists() for directory in owned_directories
+        )
         return Diagnostic(
             result="PASS" if failure is None else "FAIL",
             proof_id=self.proof_id,

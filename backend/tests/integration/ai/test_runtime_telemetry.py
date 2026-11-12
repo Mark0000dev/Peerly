@@ -7,12 +7,13 @@ from uuid import uuid4
 import pytest
 from opentelemetry.metrics import CallbackOptions
 from opentelemetry.sdk.metrics import MeterProvider
-from sqlalchemy import text
+from sqlalchemy import delete, event, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 from studymate.application.ai.worker import ExecuteNextJob
 from studymate.application.idempotency import IntentKey
+from studymate.infrastructure.ai.models import AiSlotRecord
 from studymate.infrastructure.ai.queue import SqlAiQueue
 from studymate.infrastructure.ai.runtime.health import SqlRuntimeHealth
 from studymate.infrastructure.ai.runtime.supervisor import AiWorkerSupervisor
@@ -131,3 +132,62 @@ async def test_same_supervisor_observes_actual_queue_while_inference_releases_po
         await asyncio.gather(worker, sampler, return_exceptions=True)
         meter.shutdown()
         await engine.dispose()
+
+
+async def test_snapshot_uses_one_select_for_actual_queued_age_and_pause(
+    ai_engine: AsyncEngine,
+) -> None:
+    api = services(ai_engine)
+    owner = await actor(ai_engine)
+    source = await goal(ai_engine, owner)
+    await api.submit(owner.credential, submission(source), IntentKey(str(uuid4())))
+    engine = await pool_one(ai_engine)
+    reads: list[str] = []
+
+    def observe(*arguments: object) -> None:
+        statement = arguments[2]
+        if isinstance(statement, str) and statement.lstrip().upper().startswith("SELECT"):
+            reads.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", observe)
+    try:
+        queue = SqlAiQueue(async_sessionmaker(engine, expire_on_commit=False))
+        initial = await queue.snapshot()
+        assert initial.queued == 1
+        assert initial.oldest_seconds >= 0
+        assert not initial.occupied
+        assert not initial.circuit_open
+        assert len(reads) == 1
+        async with api.sessions.begin() as session:
+            await session.execute(
+                update(AiSlotRecord).values(
+                    paused_until=func.clock_timestamp() + text("interval '1 minute'"),
+                )
+            )
+        assert (await queue.snapshot()).circuit_open
+        async with api.sessions.begin() as session:
+            await session.execute(
+                update(AiSlotRecord).values(
+                    paused_until=func.clock_timestamp() - text("interval '1 minute'"),
+                )
+            )
+        assert not (await queue.snapshot()).circuit_open
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", observe)
+        await engine.dispose()
+
+
+async def test_snapshot_missing_singleton_preserves_empty_queue_without_extra_reads(
+    identity_engine: AsyncEngine,
+) -> None:
+    sessions = async_sessionmaker(identity_engine, expire_on_commit=False)
+    async with sessions.begin() as session:
+        await session.execute(delete(AiSlotRecord))
+    snapshot = await SqlAiQueue(sessions).snapshot()
+    assert snapshot.queued == 0
+    assert snapshot.oldest_seconds == 0
+    assert not snapshot.occupied
+    assert not snapshot.circuit_open
+    async with sessions() as session:
+        # The observer must not manufacture/recreate the missing singleton.
+        assert await session.scalar(select(func.count()).select_from(AiSlotRecord)) == 0

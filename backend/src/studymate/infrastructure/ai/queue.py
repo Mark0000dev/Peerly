@@ -144,24 +144,33 @@ class SqlAiQueue:
 
     async def snapshot(self) -> AiQueueSnapshot:
         async with open_transaction(self.sessions) as session:
-            count, oldest = (
+            counts = (
+                select(
+                    func.count(AiJobRecord.id).label("queued"),
+                    func.min(AiJobRecord.created_at).label("oldest"),
+                )
+                .where(AiJobRecord.state == "queued")
+                .subquery()
+            )
+            count, oldest, token, circuit, paused_until, at = (
                 await session.execute(
-                    select(func.count(AiJobRecord.id), func.min(AiJobRecord.created_at)).where(
-                        AiJobRecord.state == "queued"
+                    select(
+                        counts.c.queued,
+                        counts.c.oldest,
+                        AiSlotRecord.token,
+                        AiSlotRecord.circuit,
+                        AiSlotRecord.paused_until,
+                        func.clock_timestamp(),
                     )
+                    .select_from(counts)
+                    .outerjoin(AiSlotRecord, AiSlotRecord.id == 1)
                 )
             ).one()
-            slot = await session.get(AiSlotRecord, 1)
-            at = await SqlAiTransaction(session).now()
             return AiQueueSnapshot(
                 count,
                 _oldest_age(at, oldest),
-                slot is not None and slot.token is not None,
-                slot is not None
-                and (
-                    slot.circuit is not None
-                    or (slot.paused_until is not None and slot.paused_until > at)
-                ),
+                token is not None,
+                circuit is not None or (paused_until is not None and paused_until > at),
             )
 
     async def origin(self, job_id: UUID) -> ExecutionOrigin | None:

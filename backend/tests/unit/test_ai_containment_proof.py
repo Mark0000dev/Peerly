@@ -212,7 +212,9 @@ async def test_uncertain_physical_stop_retains_only_owned_context(tmp_path: Path
     assert not result.physical_groups_stopped
     assert instance.context is not None
     assert await asyncio.to_thread(instance.context.is_dir)
-    assert (instance.context / "job/auth/synthetic-marker").read_bytes() == proof.SYNTHETIC
+    assert instance.job_directory is not None
+    assert (instance.job_directory / "auth/synthetic-marker").read_bytes() == proof.SYNTHETIC
+    assert (instance.context / "outside-marker").read_bytes() == proof.SYNTHETIC
 
 
 async def test_context_collision_never_deletes_unowned_directory(tmp_path: Path) -> None:
@@ -407,3 +409,55 @@ async def test_otlp_controller_failure_is_finite_and_never_runs_probe(tmp_path: 
     ):
         await instance.connect_control()
     assert instance.context is None
+
+
+def test_probe_job_matches_actual_production_depth_and_control_marker_is_unmounted(
+    tmp_path: Path,
+) -> None:
+    instance = proof.Runner(proof.Configuration(40, workspaces=tmp_path))
+    job, auth, outside = instance.prepare()
+    assert job.parent == tmp_path
+    assert job.name.startswith("peerly-ai-")
+    assert auth == job / "auth"
+    assert instance.job_directory == job
+    assert instance.context is not None
+    assert outside.parent == instance.context
+    assert instance.context.parent == tmp_path
+    assert instance.context != job
+    assert not outside.is_relative_to(job)
+    command = instance.sandbox.command((str(proof.CLI), "--version"), job)
+    bind = command.index("--bind")
+    assert command[bind + 1 : bind + 3] == (str(job), str(job))
+    assert str(instance.context) not in command
+    assert outside.read_bytes() == proof.SYNTHETIC
+
+
+async def test_job_collision_cleans_only_new_control_directory(tmp_path: Path) -> None:
+    instance = runner(tmp_path)
+    unrelated = tmp_path / ("peerly-ai-" + instance.proof_id)
+    unrelated.mkdir()
+    marker = unrelated / "unowned-marker"
+    marker.write_text("synthetic-unowned")
+    result = await instance.run()
+    assert result.failure == "configuration"
+    assert instance.job_directory is None
+    assert instance.context is not None
+    assert not await asyncio.to_thread(instance.context.exists)
+    assert marker.read_text() == "synthetic-unowned"
+
+
+async def test_partial_auth_directory_failure_cleans_both_owned_siblings(tmp_path: Path) -> None:
+    instance = runner(tmp_path)
+    original_mkdir = Path.mkdir
+
+    def mkdir(path: Path, mode: int = 0o777, parents: bool = False, exist_ok: bool = False) -> None:
+        if path.name == "auth":
+            raise OSError("Synthetic auth directory creation failure")
+        original_mkdir(path, mode=mode, parents=parents, exist_ok=exist_ok)
+
+    with patch.object(Path, "mkdir", autospec=True, side_effect=mkdir):
+        result = await instance.run()
+    assert result.failure == "configuration"
+    assert not result.cleanup_pending
+    assert result.physical_groups_stopped
+    assert not await asyncio.to_thread(lambda: list(tmp_path.iterdir()))

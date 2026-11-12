@@ -223,3 +223,23 @@ async def test_bounded_batch_export_failure_cannot_replace_execution_result() ->
         assert exporter.attempts == 1
     finally:
         provider.shutdown()
+
+
+async def test_realistic_remote_latency_still_publishes_a_fresh_nonzero_sample(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def remote_latency(_self: SqlAiQueue) -> AiQueueSnapshot:
+        # Actual separate managed-PG probe took428ms before query consolidation.
+        # This delay exceeds the rejected250ms budget without changing SQL tests.
+        await asyncio.sleep(0.35)
+        return AiQueueSnapshot(7, 12.0, True, False)
+
+    monkeypatch.setattr(SqlAiQueue, "snapshot", remote_latency)
+    meter = MeterProvider(shutdown_on_exit=False)
+    try:
+        signals = AiQueueSignals(meter.get_meter("synthetic"))
+        assert await signals.sample(SqlAiQueue(async_sessionmaker()))
+        assert signals.depth(CallbackOptions())[0].value == QUEUED
+        assert signals.fresh(CallbackOptions())[0].value == 1
+    finally:
+        meter.shutdown()
