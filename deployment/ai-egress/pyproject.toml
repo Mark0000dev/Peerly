@@ -2,7 +2,7 @@
 extend = "../../backend/pyproject.toml"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101"] # Pytest assertions only, not runtime guards.
+"test_otlp_gateway.py" = ["S101"] # Exact pytest file; also matches from backend CI cwd.
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
