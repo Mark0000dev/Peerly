@@ -1,0 +1,78 @@
+name: Staging release quality
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - deployment/staging/release/**
+      - backend/pyproject.toml
+      - backend/uv.lock
+      - backend/.python-version
+      - .github/workflows/staging-release-quality.yml
+      - .github/workflows/staging-release.yml
+      - .github/workflows/backend.yml
+      - .github/workflows/frontend-image.yml
+  push:
+    branches: [main]
+    paths:
+      - deployment/staging/release/**
+      - backend/pyproject.toml
+      - backend/uv.lock
+      - backend/.python-version
+      - .github/workflows/staging-release-quality.yml
+      - .github/workflows/staging-release.yml
+      - .github/workflows/backend.yml
+      - .github/workflows/frontend-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-release-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Staging release strict offline quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out candidate without persistent credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6; existing project pin
+        with:
+          persist-credentials: false
+      - name: Install the existing pinned dependency tool
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7; parent official-ref receipt
+        with:
+          version: '0.13.7'
+      - name: Install locked Python 3.12 helper test and static tools
+        run: uv sync --locked --python 3.12 --project backend --no-install-project
+      - name: Full inherited Ruff selectors and formatting
+        run: |
+          backend/.venv/bin/ruff check deployment/staging/release
+          backend/.venv/bin/ruff format --check deployment/staging/release
+      - name: Inherited strict mypy for every helper and test module
+        run: backend/.venv/bin/mypy --config-file backend/pyproject.toml deployment/staging/release
+      - name: All offline release regressions, without providers or deployment inputs
+        run: backend/.venv/bin/python -m pytest -c backend/pyproject.toml deployment/staging/release/tests -q
+      - name: Verify and run the exact official actionlint release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools=$(mktemp -d "$RUNNER_TEMP/peerly-release-actionlint.XXXXXX")
+          trap 'rm -rf -- "$tools"' EXIT
+          archive="$tools/actionlint_1.7.7_linux_amd64.tar.gz"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+            --max-redirs 3 --connect-timeout 10 --max-time 60 \
+            'https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz' \
+            --output "$archive"
+          printf '%s  %s\n' \
+            '023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757' "$archive" | sha256sum --check --status
+          tar -xzf "$archive" -C "$tools" actionlint
+          "$tools/actionlint" -config-file deployment/staging/release/actionlint.yaml \
+            .github/workflows/staging-release-quality.yml \
+            .github/workflows/staging-release.yml \
+            .github/workflows/backend.yml \
+            .github/workflows/frontend-image.yml
+      # No environment, repository secrets, provider calls, deployment, Docker or self-hosted runner.

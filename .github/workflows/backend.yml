@@ -83,10 +83,11 @@ jobs:
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
       - name: Publish immutable commit tag
         run: docker push "$REGISTRY_IMAGE:staging-$GITHUB_SHA"
-      - name: Record published digest
+      - name: Record exact backend publication receipt
         run: |
-          docker image inspect "$REGISTRY_IMAGE:staging-$GITHUB_SHA" \
-            --format '{{range .RepoDigests}}{{println .}}{{end}}' >> "$GITHUB_STEP_SUMMARY"
+          python3 -m deployment.staging.release.publication \
+            --sha "$GITHUB_SHA" --output "$RUNNER_TEMP/backend-published.json" --log-receipt
+          cat "$RUNNER_TEMP/backend-published.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove temporary registry credentials
         if: always()
         run: rm -rf -- "$DOCKER_CONFIG"

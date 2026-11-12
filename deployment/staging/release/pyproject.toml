@@ -1,0 +1,5 @@
+[tool.ruff]
+extend = "../../../backend/pyproject.toml"
+
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/*.py" = ["S101"]
