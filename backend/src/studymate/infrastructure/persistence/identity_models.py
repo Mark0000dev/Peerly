@@ -62,6 +62,7 @@ class ExternalIdentityRecord(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("account_id", name="uq_external_identities_account_id"),
+        UniqueConstraint("id", "account_id", name="uq_external_identities_membership_source"),
         CheckConstraint("issuer = 'https://accounts.google.com'", name="google_issuer"),
         CheckConstraint("length(subject) > 0", name="nonempty_subject"),
     )
@@ -97,6 +98,12 @@ class SessionRecord(Base):
 class InstitutionalBindingRecord(Base):
     __tablename__ = "institutional_bindings"
     __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "email",
+            "verified_at",
+            name="uq_institutional_bindings_membership_source",
+        ),
         Index(
             "uq_institutional_bindings_active_email",
             "email",

@@ -31,6 +31,7 @@ MAX_APPLICATION_FRAMES = 10
 MAX_ERROR_CHAIN = 16
 ERROR_TYPE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
 SQLSTATE = re.compile(r"[0-9A-Z]{5}")
+SERVICE_RELEASE = re.compile(r"[0-9a-f]{40}")
 HTTP_STATUS_MIN = 100
 HTTP_STATUS_MAX = 599
 LOG_QUEUE_CAPACITY = 1024
@@ -143,7 +144,24 @@ def _ai_runtime_metadata(record: logging.LogRecord) -> dict[str, str]:
     }
 
 
+def validated_service_release(value: object) -> str | None:
+    if (
+        isinstance(value, str)
+        and SERVICE_RELEASE.fullmatch(value) is not None
+        and value != "0" * 40
+    ):
+        return value
+    return None
+
+
 class SafeJsonFormatter(logging.Formatter):
+    def __init__(self, *, release: str | None = None) -> None:
+        super().__init__()
+        self._service_release = validated_service_release(release)
+
+    def bind_release(self, release: str | None) -> None:
+        self._service_release = validated_service_release(release)
+
     def format(self, record: logging.LogRecord) -> str:
         supplied: object = getattr(record, "event", None)
         event = (
@@ -160,6 +178,8 @@ class SafeJsonFormatter(logging.Formatter):
             }.get(record.levelno, "INFO"),
             "event": event,
         }
+        if self._service_release is not None:
+            content["service_release"] = self._service_release
         content.update(_ai_runtime_metadata(record))
         if record.name.startswith("opentelemetry."):
             content["component"] = "telemetry"
@@ -295,6 +315,34 @@ class SafeBufferedHandler(logging.Handler):
         self._stop.set()
         self._writer.join(timeout=LOG_SHUTDOWN_SECONDS)
         super().close()
+
+
+def bind_log_release(release: str | None) -> None:
+    """Bind this process's validated settings to owned formatters before SDK startup.
+
+    Do not install handlers, mutate log levels or trust caller/record metadata.
+    Separate API/worker processes receive their own configuration, including AI.
+    """
+    loggers = (
+        logging.getLogger(),
+        *(
+            logging.getLogger(name)
+            for name in (
+                "uvicorn",
+                "uvicorn.error",
+                "uvicorn.access",
+                "studymate",
+                "opentelemetry",
+            )
+        ),
+    )
+    seen: set[int] = set()
+    for logger in loggers:
+        for handler in tuple(logger.handlers):
+            formatter = handler.formatter
+            if isinstance(formatter, SafeJsonFormatter) and id(formatter) not in seen:
+                formatter.bind_release(release)
+                seen.add(id(formatter))
 
 
 def logging_configuration() -> dict[str, object]:

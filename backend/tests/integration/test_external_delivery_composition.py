@@ -124,8 +124,14 @@ async def test_real_worker_registers_destination_and_releases_sql_before_control
     def engine_factory(url: str, **options: object) -> AsyncEngine:
         assert options["pool_size"] == 1
         assert options["max_overflow"] == 0
-        assert options["connect_args"] == {"timeout": 5}
-        options["connect_args"] = {"timeout": 5, "server_settings": {"search_path": schema}}
+        assert options["connect_args"] == {
+            "timeout": 5,
+            "server_settings": {"lock_timeout": "1000"},
+        }
+        options["connect_args"] = {
+            "timeout": 5,
+            "server_settings": {"search_path": schema, "lock_timeout": "1000"},
+        }
         result = create_async_engine(url, **options)
         engines.append(result)
         return result

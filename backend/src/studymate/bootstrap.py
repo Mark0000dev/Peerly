@@ -113,7 +113,16 @@ from studymate.application.operator.connection_requests import (
 from studymate.application.operator.conversation_index import ReadOperatorConversations
 from studymate.application.operator.goals import ReadOperatorGoalHistory, ReadOperatorGoals
 from studymate.application.operator.help_history import ReadOperatorHelpHistory
+from studymate.application.operator.lifecycle_history import ReadOperatorLifecycleHistory
 from studymate.application.operator.media_read import ReadOperatorProfileMedia
+from studymate.application.operator.membership_verification import (
+    ManuallyVerifyMembership,
+    ReadManualMembershipContext,
+)
+from studymate.application.operator.message_operations import (
+    ReadOperatorMessageOperation,
+    ReadOperatorMessageOperations,
+)
 from studymate.application.operator.messages import ReadOperatorConversationMessages
 from studymate.application.operator.peer_feedback import (
     ReadOperatorFeedback,
@@ -135,6 +144,7 @@ from studymate.application.operator.timeline import (
     ReadOperatorEvent,
     SearchOperatorEvents,
 )
+from studymate.application.policy_history.read import ReadPolicyHistory
 from studymate.application.profiles.basics import ReadOwnProfile, SaveOwnProfile
 from studymate.application.profiles.goals import CompleteOwnGoal, ReadOwnGoal, SaveOwnGoal
 from studymate.application.profiles.help_subjects import ReadOwnHelpSubjects, SaveOwnHelpSubjects
@@ -251,6 +261,7 @@ from studymate.infrastructure.observability.delivery_queue import (
 from studymate.infrastructure.observability.email import ObservedVerificationDelivery
 from studymate.infrastructure.observability.external_delivery import ExternalDeliverySignals
 from studymate.infrastructure.observability.http import JsonHttpObserver
+from studymate.infrastructure.observability.logging import bind_log_release
 from studymate.infrastructure.observability.media import ObservedMediaStep
 from studymate.infrastructure.observability.requests import ObservedRequestExpiry
 from studymate.infrastructure.observability.runtime import (
@@ -290,7 +301,22 @@ from studymate.infrastructure.operator.help_history_cursors import (
 from studymate.infrastructure.operator.help_history_transactions import (
     SqlOperatorHelpHistoryUnitOfWork,
 )
+from studymate.infrastructure.operator.lifecycle_history_cursors import (
+    FernetOperatorLifecycleHistoryCursorCodec,
+)
+from studymate.infrastructure.operator.lifecycle_history_transactions import (
+    SqlOperatorLifecycleHistoryUnitOfWork,
+)
 from studymate.infrastructure.operator.media_transactions import SqlOperatorProfileMediaUnitOfWork
+from studymate.infrastructure.operator.membership_verification_transactions import (
+    SqlManualMembershipUnitOfWork,
+)
+from studymate.infrastructure.operator.message_operations_cursors import (
+    FernetOperatorMessageOperationCursorCodec,
+)
+from studymate.infrastructure.operator.message_operations_transactions import (
+    SqlOperatorMessageOperationsUnitOfWork,
+)
 from studymate.infrastructure.operator.photo_cursors import FernetOperatorPhotoCursorCodec
 from studymate.infrastructure.operator.photo_transactions import SqlOperatorPhotoUnitOfWork
 from studymate.infrastructure.operator.profile_history_cursors import (
@@ -335,6 +361,7 @@ from studymate.infrastructure.persistence.photo_worker import SqlPhotoWorkerUnit
 from studymate.infrastructure.persistence.product_events import (
     record_conversation_goal_share,
     record_conversation_read,
+    record_manual_membership_event,
     record_message_outcome,
     record_message_report_event,
     record_notification_preference_event,
@@ -351,6 +378,7 @@ from studymate.infrastructure.persistence.profiles import SqlProfileUnitOfWork
 from studymate.infrastructure.persistence.registration import SqlRegistrationUnitOfWork
 from studymate.infrastructure.persistence.transport_cleanup import SqlTransportCleanupUnitOfWork
 from studymate.infrastructure.persistence.visibility import SqlVisibilityUnitOfWork
+from studymate.infrastructure.policy_history.read import SqlPolicyHistoryUnitOfWork
 from studymate.infrastructure.requests.cursors import FernetRequestCursorCodec
 from studymate.infrastructure.requests.expiry import SqlRequestExpiryUnitOfWork
 from studymate.infrastructure.requests.expiry_loop import run_expiry_loop
@@ -445,9 +473,21 @@ from studymate.presentation.operator.help_history_router import (
     OperatorHelpHistoryHttpServices,
     operator_help_history_router,
 )
+from studymate.presentation.operator.lifecycle_history_router import (
+    OperatorLifecycleHistoryHttpServices,
+    operator_lifecycle_history_router,
+)
 from studymate.presentation.operator.media_router import (
     OperatorProfileMediaHttpServices,
     operator_profile_media_router,
+)
+from studymate.presentation.operator.membership_verification_router import (
+    ManualMembershipHttpServices,
+    operator_membership_verification_router,
+)
+from studymate.presentation.operator.message_operations_router import (
+    OperatorMessageOperationsHttpServices,
+    operator_message_operations_router,
 )
 from studymate.presentation.operator.photo_router import (
     OperatorPhotoHttpServices,
@@ -471,6 +511,7 @@ from studymate.presentation.operator.timeline_router import (
     operator_timeline_router,
 )
 from studymate.presentation.people import PeopleServices, people_router
+from studymate.presentation.policy_history.router import policy_history_router
 from studymate.presentation.problems import ProblemResponse
 from studymate.presentation.profiles import ProfileServices, profile_router
 from studymate.presentation.registration import RegistrationServices, registration_router
@@ -625,20 +666,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             configuration.authentication, sessions, auth_services, media_storage
         ):
             app.include_router(router)
-        registration_uow = SqlRegistrationUnitOfWork(sessions)
-        app.include_router(
-            registration_router(
-                RegistrationServices(
-                    BeginRegistration(registration_uow, Sha256SessionHasher()),
-                    CompleteRegistration(registration_uow, Sha256SessionHasher()),
-                    ReadPolicyStatus(registration_uow, Sha256SessionHasher()),
-                    ReadPublishedPolicy(registration_uow),
-                    auth_services.signer,
-                    auth_services.browser,
-                )
-            )
-        )
+        for router in _registration_routers(sessions, auth_services):
+            app.include_router(router)
     return app
+
+
+def _registration_routers(
+    sessions: async_sessionmaker[AsyncSession], auth_services: AuthenticationServices
+) -> tuple[APIRouter, ...]:
+    unit = SqlRegistrationUnitOfWork(sessions)
+    public_history = APIRouter(prefix="/api/v1")
+    public_history.include_router(
+        policy_history_router(ReadPolicyHistory(SqlPolicyHistoryUnitOfWork(sessions)))
+    )
+    return (
+        registration_router(
+            RegistrationServices(
+                BeginRegistration(unit, Sha256SessionHasher()),
+                CompleteRegistration(unit, Sha256SessionHasher()),
+                ReadPolicyStatus(unit, Sha256SessionHasher()),
+                ReadPublishedPolicy(unit),
+                auth_services.signer,
+                auth_services.browser,
+            )
+        ),
+        public_history,
+    )
 
 
 def _observation_router(
@@ -735,6 +788,7 @@ def _database_telemetry(telemetry: TelemetryRuntime | None) -> DatabaseTelemetry
 def _telemetry(
     configuration: ObservabilityConfiguration | None, service_name: str = "studymate-api"
 ) -> TelemetryRuntime | None:
+    bind_log_release(configuration.release if configuration is not None else None)
     if configuration is None:
         return None
     return build_telemetry(
@@ -1056,6 +1110,7 @@ def _student_routers(
         *_lifecycle_routers(configuration, sessions, auth_services, intent_fingerprinter),
         _chat_image_router(sessions, auth_services, intent_fingerprinter, media_storage),
         *_operator_routers(configuration, sessions, intent_fingerprinter, media_storage),
+        _operator_membership_router(sessions, auth_services, intent_fingerprinter),
         *_student_support_routers(sessions, auth_services, intent_fingerprinter),
     )
 
@@ -1396,6 +1451,25 @@ def _lifecycle_routers(
     )
 
 
+def _operator_membership_router(
+    sessions: async_sessionmaker[AsyncSession],
+    auth_services: AuthenticationServices,
+    fingerprinter: IntentFingerprinter,
+) -> APIRouter:
+    hasher = Sha256SessionHasher()
+    unit = SqlManualMembershipUnitOfWork(
+        sessions, record_operator_audit, record_manual_membership_event
+    )
+    return operator_membership_verification_router(
+        ManualMembershipHttpServices(
+            ReadManualMembershipContext(unit, hasher),
+            ManuallyVerifyMembership(unit, hasher, fingerprinter),
+            auth_services.signer,
+            auth_services.browser,
+        )
+    )
+
+
 def _operator_routers(
     configuration: AuthenticationConfiguration,
     sessions: async_sessionmaker[AsyncSession],
@@ -1428,6 +1502,27 @@ def _operator_routers(
                 SearchOperatorAccounts(unit, hasher, fingerprinter, cursor),
                 ReadOperatorAccount(unit, hasher),
                 ReadOperatorConversationMessages(unit, hasher, cursor),
+            )
+        ),
+        operator_message_operations_router(
+            OperatorMessageOperationsHttpServices(
+                ReadOperatorMessageOperations(
+                    SqlOperatorMessageOperationsUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    FernetOperatorMessageOperationCursorCodec.from_key(key),
+                ),
+                ReadOperatorMessageOperation(
+                    SqlOperatorMessageOperationsUnitOfWork(sessions, record_operator_audit), hasher
+                ),
+            )
+        ),
+        operator_lifecycle_history_router(
+            OperatorLifecycleHistoryHttpServices(
+                ReadOperatorLifecycleHistory(
+                    SqlOperatorLifecycleHistoryUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    FernetOperatorLifecycleHistoryCursorCodec.from_key(key),
+                )
             )
         ),
         operator_conversation_index_router(

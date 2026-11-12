@@ -14,6 +14,7 @@ from studymate.infrastructure.persistence.conversation_details import (
     SqlConversationDetailsUnitOfWork,
 )
 from studymate.infrastructure.persistence.discovery_freshness_models import DiscoveryExposureRecord
+from studymate.infrastructure.persistence.message_reads import SqlReadPositionUnitOfWork
 from studymate.infrastructure.persistence.product_event_models import ProductEventRecord
 from studymate.infrastructure.persistence.product_events import (
     record_conversation_read,
@@ -46,7 +47,10 @@ async def test_actual_details_keep_original_context_and_private_unread_without_i
     own = await read(owned.sender.credential, owned.conversation_id)
     assert own.unread_count == 0
     assert own.read_position is None
-    position = await AcknowledgeConversationRead(uow, HASHER, FINGERPRINTER)(
+    write_uow = SqlReadPositionUnitOfWork(
+        owned.api.sessions, record_message_outcome, record_conversation_read
+    )
+    position = await AcknowledgeConversationRead(write_uow, HASHER, FINGERPRINTER)(
         ReadPositionCommand(
             owned.recipient.credential, owned.conversation_id, 1, IntentKey(str(uuid4()))
         )

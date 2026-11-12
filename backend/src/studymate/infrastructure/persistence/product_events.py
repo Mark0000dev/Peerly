@@ -20,6 +20,7 @@ from studymate.domain.messaging import MessageOperation
 from studymate.domain.notification_preferences.state import NotificationPreference
 from studymate.domain.onboarding import OnboardingActivation, ProfileLifecycle
 from studymate.domain.operator.audit import OperatorAudit
+from studymate.domain.operator.membership_verification import ManualMembershipVerification
 from studymate.domain.profiles import ProfileRevision
 from studymate.domain.relationships import BlockRevision
 from studymate.domain.reports import ProfileReport
@@ -176,6 +177,25 @@ async def record_membership_event(session: AsyncSession, account_id: UUID, at: d
             schema_version=1,
             occurred_at=at,
         ),
+    )
+
+
+async def record_manual_membership_event(
+    session: AsyncSession,
+    source: ManualMembershipVerification,
+) -> None:
+    """The exact operator mutation source, never consumed OTP or target foreground activity."""
+    await _append(
+        session,
+        ProductEventRecord(
+            id=source.event_id,
+            account_id=source.account_id,
+            kind="auth.email_confirmed",
+            occurrence_key=source.occurrence_key,
+            schema_version=1,
+            occurred_at=source.verified_at,
+        ),
+        foreground=False,
     )
 
 

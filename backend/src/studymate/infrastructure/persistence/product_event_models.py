@@ -378,6 +378,13 @@ EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE.replace(
 class ProductEventRecord(Base):
     __tablename__ = "product_events"
     __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "account_id",
+            "kind",
+            "occurred_at",
+            name="uq_product_events_membership_source",
+        ),
         ForeignKeyConstraint(
             ["account_id", "notification_preference_version"],
             [

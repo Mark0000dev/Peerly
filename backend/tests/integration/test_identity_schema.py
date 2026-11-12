@@ -73,6 +73,8 @@ async def test_revision_upgrade_matches_models_and_can_be_reversed(engine: Async
             "operator_access",
             "operator_access_revisions",
             "operator_audits",
+            "operator_membership_verifications",
+            "operator_membership_verification_intents",
             "conversation_goal_shares",
             "conversation_goal_share_heads",
             "conversation_goal_share_intents",

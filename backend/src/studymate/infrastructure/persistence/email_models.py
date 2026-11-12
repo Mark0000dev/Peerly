@@ -28,6 +28,7 @@ class EmailChallengeRecord(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "account_id", name="uq_email_challenges_id_account_id"),
+        UniqueConstraint("id", "account_id", "email", name="uq_email_challenges_membership_source"),
         CheckConstraint("attempts BETWEEN 0 AND 5", name="attempts_range"),
         CheckConstraint(
             "created_at < resend_at AND resend_at < expires_at", name="valid_deadlines"

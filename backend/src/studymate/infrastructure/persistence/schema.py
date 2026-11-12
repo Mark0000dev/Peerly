@@ -42,6 +42,10 @@ from studymate.infrastructure.notification_preferences.models import (
     PreferenceIntentRecord,
     PreferenceRevisionRecord,
 )
+from studymate.infrastructure.operator.membership_verification_models import (
+    OperatorMembershipIntentRecord,
+    OperatorMembershipVerificationRecord,
+)
 from studymate.infrastructure.operator.models import (
     OperatorAccessRecord,
     OperatorAccessRevisionRecord,
@@ -175,6 +179,8 @@ MODELS: tuple[type[Base], ...] = (
     OperatorAccessRecord,
     OperatorAccessRevisionRecord,
     OperatorAuditRecord,
+    OperatorMembershipVerificationRecord,
+    OperatorMembershipIntentRecord,
     *REQUEST_MODELS,
     RequestDisclosureRecord,
     RequestViewAcknowledgementRecord,

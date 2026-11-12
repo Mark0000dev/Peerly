@@ -73,5 +73,7 @@ class SqlPhotoResumeUnitOfWork:
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[PhotoResumeTransaction]:
-        async with open_transaction(self.sessions, read_only=True) as session:
-            yield SqlPhotoResumeTransaction(session, shared_identity_locks=True)
+        # Resume expires overdue upload revisions while holding the owner lock.
+        # This is a writing transaction even though its HTTP adapter serves GET.
+        async with open_transaction(self.sessions) as session:
+            yield SqlPhotoResumeTransaction(session)

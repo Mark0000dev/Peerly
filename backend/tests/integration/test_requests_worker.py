@@ -45,7 +45,7 @@ async def test_real_expiry_worker_uses_one_connection_and_does_not_warm_users(
             "pool_size": 1,
             "max_overflow": 0,
             "pool_timeout": 2,
-            "connect_args": {"timeout": 5},
+            "connect_args": {"timeout": 5, "server_settings": {"lock_timeout": "1000"}},
         }
         value = create_async_engine(
             url,
@@ -53,7 +53,10 @@ async def test_real_expiry_worker_uses_one_connection_and_does_not_warm_users(
             pool_size=1,
             max_overflow=0,
             pool_timeout=2,
-            connect_args={"timeout": 5, "server_settings": {"search_path": schema}},
+            connect_args={
+                "timeout": 5,
+                "server_settings": {"search_path": schema, "lock_timeout": "1000"},
+            },
         )
         engines.append(value)
         return value

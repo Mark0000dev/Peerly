@@ -34,6 +34,19 @@ class CommandHandler:
         ("/api/v1/ai/jobs/job/cancel", b"{}", "application/json", 400),
         ("/api/v1/ai/jobs/job/cancel", b"", "", 204),
         ("/api/v1/ai/jobs", b"{}", "application/json; charset=utf-8", 204),
+        ("/api/v1/operator/accounts/person/membership-verifications", b"{}", "text/plain", 415),
+        (
+            "/api/v1/operator/accounts/person/membership-verifications",
+            b"x" * 8193,
+            "application/json",
+            413,
+        ),
+        (
+            "/api/v1/operator/accounts/person/membership-verifications",
+            b"{}",
+            "application/json",
+            204,
+        ),
     ],
 )
 async def test_commands_bound_body_before_handler(

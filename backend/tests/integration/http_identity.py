@@ -113,7 +113,10 @@ async def browser(
         if "server_settings" in connect_args:
             # Direct calls to actual named factories keep their own topology.
             # Only this explicitly isolated disposable schema is permitted.
-            assert connect_args["server_settings"] == {"search_path": schema}
+            assert connect_args["server_settings"] == {
+                "search_path": schema,
+                "lock_timeout": "1000",
+            }
             return original_engine_factory(
                 url, pool_pre_ping=pool_pre_ping, connect_args=connect_args, **pool_options
             )
