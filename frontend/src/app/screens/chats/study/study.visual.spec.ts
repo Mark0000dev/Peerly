@@ -87,6 +87,12 @@ async function feedback(page: Readonly<Page>): Promise<void> {
   await open(page);
   await page.getByRole('button', { name: 'Give feedback', exact: true }).click();
 }
+type VisibleBounds = Readonly<NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>>;
+async function requiredBounds(locator: Readonly<Locator>): Promise<VisibleBounds> {
+  const bounds = await locator.boundingBox();
+  if (bounds === null) throw new Error('Missing focused control bounds');
+  return bounds;
+}
 function releaseHeldFeedback(release: (() => void) | undefined): void {
   if (release === undefined) throw new Error('Missing held feedback response');
   release();
@@ -473,6 +479,9 @@ test('F02 initial 320px / 200% text, reduced motion and keyboard controls remain
   });
   await setup(page);
   await feedback(page);
+  const heading = page.getByRole('heading', { name: 'Feedback', exact: true });
+  await expect(heading).toBeInViewport({ ratio: 1 });
+  await assertNaturalWordWrapping(heading);
   await page.getByRole('radio', { name: 'Maybe', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('radio', { name: 'No', exact: true })).toBeChecked();
@@ -486,10 +495,29 @@ test('F02 initial 320px / 200% text, reduced motion and keyboard controls remain
   await page.keyboard.type('Keyboard draft');
   const note = page.getByRole('textbox', { name: 'Note for the team · optional' });
   await expect(note).toHaveValue('Keyboard draft');
-  await expect(note).toBeInViewport({ ratio: 1 });
-  const heading = page.getByRole('heading', { name: 'Feedback', exact: true });
-  await expect(heading).toBeInViewport({ ratio: 1 });
-  await assertNaturalWordWrapping(heading);
+  // Taiga clips the native textarea's painted content inside its own padding.
+  // Its public Textfield owns the complete visible border and focus outline.
+  const textfield = page.locator('tui-textfield').filter({ has: note });
+  await expect(textfield).toBeInViewport({ ratio: 1 });
+  const noteBox = await requiredBounds(note);
+  const fieldBox = await requiredBounds(textfield);
+  const scrollBox = await requiredBounds(page.locator('.study-scroll'));
+  expect(noteBox).toEqual(fieldBox);
+  expect(noteBox.y).toBeGreaterThanOrEqual(scrollBox.y);
+  expect(noteBox.y + noteBox.height).toBeLessThanOrEqual(scrollBox.y + scrollBox.height);
+  expect(noteBox.x).toBeGreaterThanOrEqual(scrollBox.x);
+  expect(noteBox.x + noteBox.width).toBeLessThanOrEqual(scrollBox.x + scrollBox.width);
+  await page.keyboard.type('\nAnother line\nFinal line');
+  await expect(note).toHaveValue('Keyboard draft\nAnother line\nFinal line');
+  await expect(textfield).toBeInViewport({ ratio: 1 });
+  await expect(note).toBeFocused();
+  expect(
+    await note.evaluate(
+      (element: Readonly<HTMLElement | SVGElement>) => element.scrollHeight > element.clientHeight,
+    ),
+  ).toBe(true);
+  // The title shares the natural scrolling content, rather than covering the
+  // native caret's reveal area. The action footer remains independently usable.
   await expect(page.getByRole('dialog', { name: 'Feedback', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Update feedback', exact: true })).toBeInViewport({
     ratio: 1,
