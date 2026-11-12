@@ -1,0 +1,5 @@
+[tool.ruff]
+extend = "../../backend/pyproject.toml"
+
+[tool.ruff.lint.per-file-ignores]
+"test_accept_restore.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
