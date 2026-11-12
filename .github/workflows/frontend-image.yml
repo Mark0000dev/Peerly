@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/peerly-staging-frontend
+      - feature/peerly-frontend-integration
   workflow_dispatch:
 
 permissions:
@@ -17,7 +18,7 @@ concurrency:
 jobs:
   image:
     name: Build, restricted nginx smoke and publish
-    if: github.ref == 'refs/heads/feature/peerly-staging-frontend'
+    if: github.ref == 'refs/heads/feature/peerly-staging-frontend' || github.ref == 'refs/heads/feature/peerly-frontend-integration'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
