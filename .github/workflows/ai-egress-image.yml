@@ -1,0 +1,295 @@
+name: AI egress staging image
+
+on:
+  push:
+    branches:
+      - feature/peerly-ai-egress-integration
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-egress-image-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build, bounded gateway quality, isolated OTLP proof and publish
+    if: github.ref == 'refs/heads/feature/peerly-ai-egress-integration'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+      image: ${{ steps.publish.outputs.image }}
+    env:
+      IMAGE_REPOSITORY: ghcr.io/mark0000dev/peerly-ai-egress
+      SMOKE_CONTAINER: peerly-ai-egress-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Initialize temporary authentication and receipt paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "DOCKER_CONFIG=$RUNNER_TEMP/peerly-ai-egress-auth-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "RECEIPT_DIRECTORY=$RUNNER_TEMP/peerly-ai-egress-receipts" \
+            "FIXTURE_DIRECTORY=$RUNNER_TEMP/peerly-ai-egress-fixture-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+
+      - name: Check out the exact gateway packaging commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install the pinned dependency tool
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: '0.13.7'
+
+      - name: Install the locked Python 3.12 backend environment for gateway checks and SDK fixtures
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --locked --python 3.12
+
+      - name: Check only the four optional gateway Python files and pure configuration regressions
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RECEIPT_DIRECTORY"
+          gateway_files=(
+            ../deployment/ai-egress/prove_otlp.py
+            ../deployment/ai-egress/otlp_client.py
+            ../deployment/ai-egress/otlp_fixture.py
+            ../deployment/ai-egress/tests/test_otlp_gateway.py
+          )
+          .venv/bin/ruff check --config ../deployment/ai-egress/pyproject.toml "${gateway_files[@]}"
+          .venv/bin/ruff format --check --config ../deployment/ai-egress/pyproject.toml "${gateway_files[@]}"
+          .venv/bin/mypy --strict "${gateway_files[@]}"
+          .venv/bin/python -m pytest -c ../deployment/ai-egress/pyproject.toml \
+            ../deployment/ai-egress/tests/test_otlp_gateway.py \
+            --junitxml="$RECEIPT_DIRECTORY/gateway-unit.xml"
+
+      - name: Build the gateway Dockerfile from its actual context
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RECEIPT_DIRECTORY"
+          docker build --file deployment/ai-egress/Dockerfile \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --tag "$IMAGE_REPOSITORY:staging-$GITHUB_SHA" deployment/ai-egress
+
+      - name: Validate the baked configuration offline as the actual nonroot image user
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYSMOKE'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          image = os.environ["IMAGE_REPOSITORY"] + ":staging-" + os.environ["GITHUB_SHA"]
+          container = os.environ["SMOKE_CONTAINER"]
+          config_path = "/usr/local/etc/haproxy/haproxy.cfg"
+          image_config = json.loads(subprocess.check_output(["docker", "image", "inspect", image]))[0]
+          user = image_config["Config"].get("User", "")
+          if not user or user.split(":", 1)[0] in ("0", "root"):
+              raise RuntimeError("Gateway image must default to a nonroot user")
+          # Only inspect configuration. Do not start a proxy, bind listeners or
+          # connect to DNS/providers/PostgreSQL. The address is documentation-only.
+          command = 'uid=$(id -u); test "$uid" -ne 0; printf "PEERLY_SMOKE_UID=%s\n" "$uid"; exec haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg'
+          subprocess.run([
+              "docker", "create", "--name", container, "--network", "none",
+              "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+              "--pids-limit", "32", "--memory", "64m", "--cpus", "0.25",
+              "--env", "AI_DATABASE_FORWARD_IP=192.0.2.10",
+              "--entrypoint", "sh", image, "-eu", "-c", command,
+          ], check=True)
+          result = subprocess.run(["docker", "start", "--attach", container],
+                                  capture_output=True, text=True, timeout=45)
+          print(result.stdout, end="")
+          print(result.stderr, end="", file=sys.stderr)
+          result.check_returncode()
+          uid_lines = [line for line in result.stdout.splitlines() if line.startswith("PEERLY_SMOKE_UID=")]
+          if len(uid_lines) != 1:
+              raise RuntimeError("Configuration smoke did not record its actual execution identity")
+          uid = int(uid_lines[0].split("=", 1)[1])
+          if uid <= 0:
+              raise RuntimeError("Configuration smoke executed as root")
+          details = json.loads(subprocess.check_output(["docker", "inspect", container]))[0]
+          host = details["HostConfig"]
+          if (details["State"]["ExitCode"] != 0 or details["State"]["OOMKilled"]
+                  or not host["ReadonlyRootfs"] or host["NetworkMode"] != "none"
+                  or host["CapDrop"] != ["ALL"]):
+              raise RuntimeError("Gateway configuration smoke did not finish under the required restrictions")
+          if details["Image"] != image_config["Id"]:
+              raise RuntimeError("Configuration smoke did not use the exact built image")
+          receipt = {"image": image, "source_sha": os.environ["GITHUB_SHA"],
+                     "image_id": details["Image"], "image_user": user, "uid": uid,
+                     "read_only": True, "cap_drop": ["ALL"], "network": "none",
+                     "config_path": config_path,
+                     "config_sha256": hashlib.sha256(Path("deployment/ai-egress/haproxy.cfg").read_bytes()).hexdigest(),
+                     "database_forward_ip": "192.0.2.10", "haproxy_config_exit_code": 0,
+                     "provider_or_transport_proof_executed": False}
+          Path(os.environ["RECEIPT_DIRECTORY"], "smoke.json").write_text(
+              json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+          PYSMOKE
+
+      - name: Prove the dormant opt-in OTLP configuration with isolated native SDK fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python_base='python:3.12.16-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df'
+          python3 - "$python_base" <<'PYBASE'
+          import sys
+          from pathlib import Path
+
+          expected = "FROM " + sys.argv[1] + " AS python"
+          if expected not in Path("backend/Dockerfile").read_text().splitlines():
+              raise RuntimeError("OTLP fixture Python pin differs from the backend Dockerfile")
+          PYBASE
+          docker pull "$python_base"
+          mkdir -p "$FIXTURE_DIRECTORY"
+          cat > "$FIXTURE_DIRECTORY/Dockerfile" <<'FIXTURE'
+          ARG PYTHON_IMAGE
+          FROM ${PYTHON_IMAGE}
+          COPY . /opt/sdk/
+          ENV PYTHONPATH=/opt/sdk PYTHONDONTWRITEBYTECODE=1
+          USER 10001:10001
+          FIXTURE
+          fixture_image="peerly-ai-egress-sdk:$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker build --network none --build-arg "PYTHON_IMAGE=$python_base" \
+            --file "$FIXTURE_DIRECTORY/Dockerfile" --tag "$fixture_image" \
+            backend/.venv/lib/python3.12/site-packages
+          gateway_id=$(docker image inspect --format '{{.Id}}' "$IMAGE_REPOSITORY:staging-$GITHUB_SHA")
+          python_id=$(docker image inspect --format '{{.Id}}' "$fixture_image")
+          backend/.venv/bin/python deployment/ai-egress/prove_otlp.py \
+            --gateway-image "$gateway_id" --python-image "$python_id" \
+            --output "$RECEIPT_DIRECTORY/otlp-proof.json"
+          base_id=$(docker image inspect --format '{{.Id}}' "$python_base")
+          backend/.venv/bin/python - "$python_base" "$base_id" "$python_id" "$gateway_id" <<'PYFIXTURE'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          receipt = {
+              "source_sha": os.environ["GITHUB_SHA"],
+              "fixture_only_not_worker_image": True,
+              "python_base": sys.argv[1], "python_base_config_id": sys.argv[2],
+              "fixture_config_id": sys.argv[3], "gateway_config_id": sys.argv[4],
+              "python_version": sys.version,
+              "uv_version": subprocess.check_output(["uv", "--version"], text=True).strip(),
+              "backend_lock_sha256": hashlib.sha256(Path("backend/uv.lock").read_bytes()).hexdigest(),
+              "fixture_dockerfile_sha256": hashlib.sha256(
+                  Path(os.environ["FIXTURE_DIRECTORY"], "Dockerfile").read_bytes()).hexdigest(),
+              "proof_source_sha256": {
+                  name: hashlib.sha256(Path("deployment/ai-egress", name).read_bytes()).hexdigest()
+                  for name in ("prove_otlp.py", "otlp_client.py", "otlp_fixture.py")
+              },
+          }
+          Path(os.environ["RECEIPT_DIRECTORY"], "otlp-fixture.json").write_text(
+              json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+          PYFIXTURE
+
+      - name: Publish the smoked commit image and record the registry digest
+        id: publish
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$DOCKER_CONFIG"
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          import subprocess
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          repository = "mark0000dev/peerly-ai-egress"
+          sha = os.environ["GITHUB_SHA"]
+          if re.fullmatch(r"[0-9a-f]{40}", sha) is None:
+              raise RuntimeError("Publishing requires the exact full commit SHA")
+          tag = "staging-" + sha
+          image = os.environ["IMAGE_REPOSITORY"] + ":" + tag
+          credential = os.environ["GITHUB_TOKEN"]
+          subprocess.run(["docker", "login", "ghcr.io", "--username", os.environ["GITHUB_ACTOR"],
+                          "--password-stdin"], input=credential + "\n", text=True, check=True)
+          subprocess.run(["docker", "push", image], check=True)
+          basic = base64.b64encode((os.environ["GITHUB_ACTOR"] + ":" + credential).encode()).decode()
+          query = urllib.parse.urlencode({"service": "ghcr.io", "scope": "repository:" + repository + ":pull,push"})
+          request = urllib.request.Request("https://ghcr.io/token?" + query,
+                                           headers={"Authorization": "Basic " + basic})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              token = json.load(response)["token"]
+          manifest_url = "https://ghcr.io/v2/" + repository + "/manifests/" + tag
+          headers = {"Authorization": "Bearer " + token,
+                     "Accept": "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"}
+          with urllib.request.urlopen(urllib.request.Request(manifest_url, headers=headers), timeout=30) as response:
+              digest = response.headers.get("Docker-Content-Digest", "")
+              manifest = json.load(response)
+          if re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
+              raise RuntimeError("Registry did not return an actual immutable digest")
+          directory = Path(os.environ["RECEIPT_DIRECTORY"])
+          smoke = json.loads((directory / "smoke.json").read_text(encoding="utf-8"))
+          proof = json.loads((directory / "otlp-proof.json").read_text(encoding="utf-8"))
+          if (proof.get("result") != "PASS" or proof.get("cleanup") != "verified"
+                  or proof.get("gateway_image") != smoke["image_id"]
+                  or not {"native_sdk_traces", "native_sdk_metrics"}.issubset(proof.get("checks", []))):
+              raise RuntimeError("Publication requires the exact gateway's cleaned native SDK proof")
+          if manifest.get("config", {}).get("digest") != smoke["image_id"]:
+              raise RuntimeError("Published manifest does not reference the smoked image configuration")
+          reference = os.environ["IMAGE_REPOSITORY"] + "@" + digest
+          receipt = {"source_sha": sha, "tag": image, "digest": digest, "image": reference,
+                     "smoked_image_id": smoke["image_id"],
+                     "otlp_proof": "otlp-proof.json", "otlp_python_image_id": proof["python_image"],
+                     "otlp_checks": proof["checks"], "otlp_fixture_cleanup": proof["cleanup"],
+                     "config_path": smoke["config_path"], "config_sha256": smoke["config_sha256"],
+                     "smoke_uid": smoke["uid"], "database_forward_ip": smoke["database_forward_ip"]}
+          (directory / "published.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("digest=" + digest + "\nimage=" + reference + "\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("AI egress image published after bounded gateway quality, offline base smoke and isolated native SDK OTLP proof.\n\n"
+                            "Commit: `" + sha + "`\n\nTag: `" + image + "`\n\n"
+                            "Digest reference: `" + reference + "`\n\n"
+                            "Synthetic optional OTLP transport proof only; no provider or actual worker/model containment readiness proven.\n")
+          PY
+
+      - name: Retain source, smoke and digest receipts
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: ai-egress-image-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.RECEIPT_DIRECTORY }}/*.json
+            ${{ env.RECEIPT_DIRECTORY }}/*.jsonl
+            ${{ env.RECEIPT_DIRECTORY }}/*.xml
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Container diagnostics and temporary authentication cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'if [ -n "${DOCKER_CONFIG:-}" ]; then rm -rf -- "$DOCKER_CONFIG"; fi; if [ -n "${FIXTURE_DIRECTORY:-}" ]; then rm -rf -- "$FIXTURE_DIRECTORY"; fi' EXIT
+          container_id=$(docker ps --all --quiet --filter "name=^/$SMOKE_CONTAINER$")
+          if [ -n "$container_id" ]; then
+            docker logs "$container_id"
+            docker rm --force "$container_id"
+          fi
