@@ -51,7 +51,13 @@
       <div class="photo-choice">
         @if (own.photo; as photo) {
           <span tuiAvatar size="xxl" [round]="true">
-            <img [src]="photo.display_url" alt="Your current profile photo" />
+            <img
+              [peerlyNativeImage]="photo.display_url"
+              [nativeImageActor]="actor().account_id"
+              [nativeImageEnabled]="!checking()"
+              (nativeImageExpired)="expired.emit()"
+              alt="Your current profile photo"
+            />
           </span>
         } @else {
           <span

@@ -1,3 +1,4 @@
+import { NativeImage } from '../native-image';
 import { confirmDraftExit } from '../../draft-exit';
 import { PhotoAssistance } from '../study/ai/photo-assistance';
 import type { AssistanceExpired } from '../study/ai/goal-assistance-contract';
@@ -124,6 +125,7 @@ function optionalText(value: string): string | null {
 @Component({
   selector: 'peerly-profile-basics',
   imports: [
+    NativeImage,
     TuiAvatar,
     ReactiveFormsModule,
     TuiInput,

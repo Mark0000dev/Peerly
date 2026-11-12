@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -41,6 +42,10 @@ from studymate.application.identity.login import (
     LoginCancelledError,
     LoginRateLimitedError,
 )
+from studymate.application.identity.native_login import (
+    CompleteLoginForClient,
+    NativeCallbackFinished,
+)
 from studymate.application.identity.sessions import Logout, UnauthenticatedError
 from studymate.domain.identity import StudentEmail
 from studymate.domain.membership import ChallengeState
@@ -58,6 +63,7 @@ from studymate.presentation.problems import ProblemResponse, problem
 from studymate.presentation.registration_models import RegistrationReceiptResponse, receipt_response
 
 LOGIN_COOKIE = "__Host-studymate_login"
+NATIVE_LOGIN_COOKIE = "__Host-peerly_native"
 COOKIE_LIFETIME = 604800
 LOGIN_COOKIE_LIFETIME = 300
 STATE_LENGTH = 43
@@ -75,6 +81,7 @@ class AuthenticationServices:
     start_email: StartEmailChallenge
     verify_email: VerifyStudentEmail
     read_email: ReadEmailChallenge
+    native_complete: CompleteLoginForClient | None = None
 
 
 class CapabilitiesResponse(BaseModel):
@@ -172,7 +179,9 @@ def _google_start_router(services: AuthenticationServices) -> APIRouter:
     return router
 
 
-def _google_router(services: AuthenticationServices) -> APIRouter:
+def _google_router(
+    services: AuthenticationServices, finish_native: Callable[[], Response] | None = None
+) -> APIRouter:
     router = APIRouter()
     router.include_router(_google_start_router(services))
 
@@ -216,7 +225,13 @@ def _google_router(services: AuthenticationServices) -> APIRouter:
                 _clear_cookie(response, LOGIN_COOKIE)
                 return response
             try:
-                completed = await services.complete(
+                complete = (
+                    services.native_complete
+                    if request.cookies.get(NATIVE_LOGIN_COOKIE) == "1"
+                    and services.native_complete is not None
+                    else services.complete
+                )
+                completed = await complete(
                     GoogleCallbackCommand(
                         source_digest=source,
                         state=state,
@@ -238,6 +253,10 @@ def _google_router(services: AuthenticationServices) -> APIRouter:
             except GoogleUnavailableError:
                 response = problem(HTTPStatus.SERVICE_UNAVAILABLE, "login_provider_unavailable")
             else:
+                if isinstance(completed, NativeCallbackFinished):
+                    if finish_native is None:
+                        raise RuntimeError("Native callback response factory was not composed")
+                    return finish_native()
                 response = RedirectResponse(
                     services.browser.public_origin + completed.return_to,
                     status_code=HTTPStatus.SEE_OTHER,
@@ -310,7 +329,9 @@ def _session_router(services: AuthenticationServices) -> APIRouter:
     return router
 
 
-def identity_router(services: AuthenticationServices) -> APIRouter:
+def identity_router(
+    services: AuthenticationServices, finish_native: Callable[[], Response] | None = None
+) -> APIRouter:
     router = APIRouter(
         tags=["identity"],
         responses={
@@ -330,7 +351,7 @@ def identity_router(services: AuthenticationServices) -> APIRouter:
             )
         },
     )
-    router.include_router(_google_router(services))
+    router.include_router(_google_router(services, finish_native))
     router.include_router(_session_router(services))
     router.include_router(_email_router(services))
     return router

@@ -75,7 +75,13 @@
                 <header class="profile-identity">
                   @if (profile.data.photo; as photo) {
                     <span tuiAvatar size="xl" [round]="true">
-                      <img [src]="photo.display_url" alt="Your current profile photo" />
+                      <img
+                        [peerlyNativeImage]="photo.display_url"
+                        [nativeImageActor]="session.data.account_id"
+                        [nativeImageEnabled]="!checking"
+                        (nativeImageExpired)="checkSession()"
+                        alt="Your current profile photo"
+                      />
                     </span>
                   } @else {
                     <span

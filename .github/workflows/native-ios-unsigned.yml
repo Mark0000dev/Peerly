@@ -1,0 +1,149 @@
+name: Native unsigned compile
+
+# PR compile gate and manual reruns after review. No deployment or store job.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/native-ios-unsigned.yml"
+      - "frontend/ios/**"
+      - "frontend/android/**"
+      - "frontend/native/**"
+      - "frontend/src/**"
+      - "frontend/capacitor.config.ts"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "frontend/.nvmrc"
+      - "frontend/angular.json"
+      - "frontend/tsconfig*.json"
+      - "frontend/patches/**"
+      - "frontend/tooling/native-ios-compile.sh"
+      - "frontend/tooling/native-android-compile.sh"
+      - "frontend/tooling/native-android-verify.mjs"
+      - "frontend/tooling/native-android-verify.test.mjs"
+      - "frontend/tooling/font-watcher-patch.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ios-unsigned-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: Compile both real Peerly iOS variants unsigned
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: frontend
+        shell: bash
+    env:
+      CI: "true"
+      HUSKY: "0"
+      NG_CLI_ANALYTICS: "false"
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - name: Check out the exact PR merge or dispatch commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install the pinned repository Node version
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: frontend/.nvmrc
+
+      - name: Verify the explicit Xcode installation and compiler
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          test "$(xcodebuild -version | head -n 1)" = 'Xcode 26.3'
+          xcrun --sdk iphonesimulator --find swiftc
+          xcrun --sdk iphonesimulator --show-sdk-version
+
+      - name: Install locked frontend and verified repository dependency patches
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.8.2 --ignore-scripts --no-audit --no-fund
+          test "$(node --version)" = "v$(cat .nvmrc)"
+          test "$(npm --version)" = '10.8.2'
+          npm ci --no-audit --no-fund
+
+      - name: Compile the real registered native projects and verify built variant settings
+        run: |
+          set -euo pipefail
+          bash tooling/native-ios-compile.sh 2>&1 | tee "$RUNNER_TEMP/peerly-native-ios-compile.log"
+
+      - name: Retain compile evidence, never signing or distribution material
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: native-ios-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/peerly-native-ios-compile.log
+            frontend/ios/App/build/*/compile.xcresult
+            frontend/ios/App/build/*/variant-receipt.txt
+
+  android_compile:
+    name: Compile both real Peerly Android variants unsigned
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: frontend
+        shell: bash
+    env:
+      CI: "true"
+      HUSKY: "0"
+      NG_CLI_ANALYTICS: "false"
+    steps:
+      - name: Check out the exact PR merge or dispatch commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install the pinned repository Node version
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: frontend/.nvmrc
+
+      - name: Require already installed SDK36 and Build Tools36 with accepted license
+        run: |
+          set -euo pipefail
+          bash tooling/native-android-compile.sh --preflight-only \
+            2>&1 | tee "$RUNNER_TEMP/peerly-native-android-preflight.log"
+
+      - name: Install locked frontend including verified dependency patches
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.8.2 --ignore-scripts --no-audit --no-fund
+          test "$(node --version)" = "v$(cat .nvmrc)"
+          test "$(npm --version)" = '10.8.2'
+          npm ci --no-audit --no-fund
+
+      - name: Assemble both actual unsigned APKs and verify packaged settings and manifests
+        run: |
+          set -euo pipefail
+          bash tooling/native-android-compile.sh \
+            2>&1 | tee "$RUNNER_TEMP/peerly-native-android-compile.log"
+
+      - name: Retain actual unsigned APKs and compile verification evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: native-android-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/peerly-native-android-preflight.log
+            ${{ runner.temp }}/peerly-native-android-compile.log
+            frontend/android/native-evidence/
+            frontend/android/app/build/outputs/apk/production/release/*-unsigned.apk
+            frontend/android/app/build/outputs/apk/staging/release/*-unsigned.apk
+            frontend/android/**/gradle.lockfile

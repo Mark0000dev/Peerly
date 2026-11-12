@@ -132,7 +132,8 @@ describe('Google identity and institutional verification screen', () => {
     fixture = TestBed.createComponent(Onboarding);
     fixture.detectChanges();
     await me({ code: 'unauthenticated' }, 401);
-    await shown(fixture, 'Use Peerly in a web browser');
+    await shown(fixture, 'Continue with Google');
+    expect(host(fixture).querySelector('button')).not.toBeNull();
     expect(host(fixture).querySelector('a[href^="/api/v1/auth/google/start"]')).toBeNull();
   });
   it('keeps server bootstrap failure recoverable', async () => {

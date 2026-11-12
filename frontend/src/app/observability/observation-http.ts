@@ -5,11 +5,12 @@ import { inject } from '@angular/core';
 import { defer, finalize, tap } from 'rxjs';
 import { CLIENT_OBSERVATIONS } from './observation-errors';
 import { CLIENT_ACTION } from './observation-context';
+import { NATIVE_RUNTIME } from '../native-transport/runtime';
 import { methods, uuid, traceId } from './observation-contract';
 import type { HttpRoute, Method, StatusClass } from './observation-contract';
 // Semantic groups derived from current enabled OpenAPI107, never resource IDs.
 export function publicHttpRoute(path: string): HttpRoute {
-  if (path === '/api/v1/me' || /^\/api\/v1\/auth\/(?:google|logout)(?:\/|$)/.test(path))
+  if (path === '/api/v1/me' || /^\/api\/v1\/auth\/(?:google|native|logout)(?:\/|$)/.test(path))
     return 'identity';
   if (/^\/api\/v1\/auth\/email-challenges(?:\/|$)/.test(path)) return 'verification';
   if (/^\/api\/v1\/me\/(?:registration|registration-context)(?:\/|$)/.test(path))
@@ -85,7 +86,8 @@ function statusClass(status: number): StatusClass {
 export const observationInterceptor: HttpInterceptorFn = (request, next) => {
   const sink = inject(CLIENT_OBSERVATIONS);
   const document = inject(DOCUMENT);
-  const target = observedApi(request.url, document.location.origin);
+  const native = inject(NATIVE_RUNTIME);
+  const target = observedApi(request.url, native?.config()?.apiOrigin ?? document.location.origin);
   const method = methods.find((value) => value === request.method);
   if (target === null || method === undefined) return next(request);
   return defer(() => {

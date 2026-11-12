@@ -6,7 +6,14 @@
     </p>
   }
   @if (displayPhoto; as photo) {
-    <img class="photo" [src]="photo.display_url" alt="Your current profile photo" />
+    <img
+      class="photo"
+      [peerlyNativeImage]="photo.display_url"
+      [nativeImageActor]="actor().account_id"
+      [nativeImageEnabled]="permitted"
+      (nativeImageExpired)="expired.emit()"
+      alt="Your current profile photo"
+    />
   }
   <p>Use a clear photo of yourself. JPEG or PNG, up to {{ maxBytes / 1000000 }} MB.</p>
   <input #fileInput type="file" accept="image/jpeg,image/png" hidden (change)="picked($event)" />

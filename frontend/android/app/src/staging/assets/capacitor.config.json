@@ -1,0 +1,22 @@
+{
+  "appId": "dev.alekseiorlov.peerly.staging",
+  "appName": "Peerly Staging",
+  "webDir": "dist/studymate/browser",
+  "loggingBehavior": "none",
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "PeerlyTransport": {
+      "apiOrigin": "https://peerly-staging.aleksei-orlov.dev",
+      "wakeUrl": "dev.alekseiorlov.peerly.staging://auth/complete"
+    },
+    "CapacitorHttp": {
+      "enabled": false
+    },
+    "CapacitorCookies": {
+      "enabled": false
+    }
+  }
+}

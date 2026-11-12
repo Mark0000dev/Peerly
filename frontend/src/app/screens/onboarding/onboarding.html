@@ -249,7 +249,28 @@
       </div>
       <div class="welcome-actions">
         @if (native) {
-          <p>Use Peerly in a web browser to sign in on this device.</p>
+          <button
+            tuiButton
+            type="button"
+            appearance="outline-grayscale"
+            [disabled]="nativeSigningIn.isPending"
+            (click)="nativeSignIn()"
+          >
+            <img src="assets/brand/google-g.svg" width="20" height="20" alt="" />Continue with
+            Google
+          </button>
+          @if (nativeSigningIn.isPending) {
+            <p role="status">Finish sign-in in the browser, then return to Peerly.</p>
+            <button tuiButton appearance="flat" type="button" (click)="nativeCancel()">
+              Cancel sign-in
+            </button>
+          }
+          @if (nativeRestart()) {
+            <p role="status">Sign-in was interrupted. Start again to continue.</p>
+          }
+          @if (nativeProblem; as message) {
+            <p role="alert">{{ message }}</p>
+          }
         } @else {
           <a
             tuiButton

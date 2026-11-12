@@ -1,3 +1,4 @@
+import { NativeImage } from './native-image';
 import { SettingsHeader } from '../settings-header';
 import type { Api } from '../../api.generated';
 import { StudentLayout } from '../student-layout';
@@ -32,6 +33,7 @@ import { isSetupStatus } from './setup/setup-contract';
 @Component({
   selector: 'peerly-profile-page',
   imports: [
+    NativeImage,
     StudentLayout,
     TuiAvatar,
     TuiBadge,

@@ -1,3 +1,4 @@
+import { NativeImage } from '../../native-image';
 import { trustedVerifiedActor } from '../../../verified-actor';
 import { HttpClient } from '@angular/common/http';
 import {
@@ -89,7 +90,16 @@ function uploadOptions(
 
 @Component({
   selector: 'peerly-photo',
-  imports: [ReactiveFormsModule, TuiAutoFocus, TuiPan, TuiButton, TuiDialog, TuiLink, TuiLoader],
+  imports: [
+    NativeImage,
+    ReactiveFormsModule,
+    TuiAutoFocus,
+    TuiPan,
+    TuiButton,
+    TuiDialog,
+    TuiLink,
+    TuiLoader,
+  ],
   templateUrl: './photo.html',
   styleUrl: './photo.less',
 })

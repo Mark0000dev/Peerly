@@ -2,7 +2,7 @@ import asyncio
 import ssl
 from collections.abc import AsyncIterator, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import httpx2 as httpx
@@ -66,6 +66,15 @@ from studymate.application.identity.login import (
     BeginGoogleLogin,
     CompleteGoogleLogin,
     HandleGoogleCallback,
+)
+from studymate.application.identity.native_login import (
+    BeginNativeLogin,
+    BindNativeCallback,
+    CancelNativeAttempt,
+    CompleteLoginForClient,
+    ExchangeNativeAttempt,
+    IdentifyNativeCallback,
+    RegisterNativeAttempt,
 )
 from studymate.application.identity.registration import (
     BeginRegistration,
@@ -407,6 +416,7 @@ from studymate.infrastructure.persistence.media_resume import SqlPhotoResumeUnit
 from studymate.infrastructure.persistence.media_uploads import SqlMediaUnitOfWork
 from studymate.infrastructure.persistence.message_reads import SqlReadPositionUnitOfWork
 from studymate.infrastructure.persistence.messaging import SqlMessageUnitOfWork
+from studymate.infrastructure.persistence.native_login import SqlNativeUnitOfWork
 from studymate.infrastructure.persistence.onboarding import SqlProfileSetupUnitOfWork
 from studymate.infrastructure.persistence.photo_worker import SqlPhotoWorkerUnitOfWork
 from studymate.infrastructure.persistence.product_events import (
@@ -491,6 +501,7 @@ from studymate.presentation.lifecycle.recovery import (
 from studymate.presentation.media import MediaServices, media_router
 from studymate.presentation.messaging.goal_shares import GoalSharingHttpServices, goal_shares_router
 from studymate.presentation.messaging.router import MessagingHttpServices, messaging_router
+from studymate.presentation.native_login import NativeServices, native_router
 from studymate.presentation.notification_preferences.router import (
     PreferenceHttpServices,
     notification_preferences_router,
@@ -726,7 +737,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         and change_engine is not None
     ):
         auth_services = _authentication_services(configuration.authentication, sessions, http)
-        app.include_router(identity_router(auth_services))
+        auth_services = _mount_native_identity(app, auth_services, sessions)
         app.include_router(_observation_router(configuration, sessions, auth_services))
         app.include_router(
             changes_router(
@@ -889,6 +900,38 @@ def _telemetry(
             configuration.trace_queue_capacity,
         )
     )
+
+
+def _mount_native_identity(
+    app: FastAPI, auth_services: AuthenticationServices, sessions: async_sessionmaker[AsyncSession]
+) -> AuthenticationServices:
+    native_uow = SqlNativeUnitOfWork(sessions)
+    native_hasher = Sha256SessionHasher()
+    native_services = NativeServices(
+        signer=auth_services.signer,
+        start=BeginNativeLogin(
+            auth_services.begin, RegisterNativeAttempt(native_uow, native_hasher)
+        ),
+        exchange=ExchangeNativeAttempt(native_uow, native_hasher, auth_services.begin.vault),
+        browser=auth_services.browser,
+        wake_url=(
+            "dev.alekseiorlov.peerly.staging://auth/complete"
+            if auth_services.browser.public_origin == "https://peerly-staging.aleksei-orlov.dev"
+            else "dev.alekseiorlov.peerly://auth/complete"
+        ),
+    )
+    auth_services = replace(
+        auth_services,
+        native_complete=CompleteLoginForClient(
+            IdentifyNativeCallback(native_uow, native_hasher),
+            auth_services.complete,
+            BindNativeCallback(native_uow, native_hasher),
+            CancelNativeAttempt(native_uow, native_hasher),
+        ),
+    )
+    app.include_router(identity_router(auth_services, native_services.finish))
+    app.include_router(native_router(native_services))
+    return auth_services
 
 
 def _authentication_services(

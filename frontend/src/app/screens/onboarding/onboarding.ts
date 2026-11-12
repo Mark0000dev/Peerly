@@ -1,3 +1,8 @@
+import { NATIVE_RUNTIME } from '../../native-transport/runtime';
+import { NativeLoginFailure, runNativeLogin } from './native-auth/native-login';
+import { capacitorAuthPlatform, nativeLaunchHint } from './native-auth/capacitor-auth';
+import { nativeCookieSession } from './native-auth/cookie-session';
+import { nativeQueryBoundary } from './native-auth/query-boundary';
 import { EmailDeliveryHint } from './email-delivery/email-delivery-hint';
 import { StudySetup } from './setup/setup';
 import { HelpSubjects } from './study/help';
@@ -119,6 +124,68 @@ export class Onboarding {
     challengeOptions(this.http, null, null, false),
   );
   protected readonly native = Capacitor.isNativePlatform();
+  private readonly nativeRuntime = inject(NATIVE_RUNTIME);
+  private readonly nativeController = signal<AbortController | null>(null);
+  protected readonly nativeRestart = signal(false);
+  private readonly nativeAdopting = signal(false);
+  private readonly nativeLoginMutation = new MutationObserver(this.client, {
+    retry: false,
+    mutationFn: async () => {
+      const native = this.nativeRuntime;
+      if (native === null || this.destroy.destroyed) throw new NativeLoginFailure('unavailable');
+      const controller = new AbortController();
+      this.nativeController.set(controller);
+      this.nativeRestart.set(false);
+      const cookies = nativeCookieSession(this.http, native.transport, (error) => {
+        this.nativeFailure(error);
+      });
+      try {
+        await runNativeLogin(
+          native.build(),
+          capacitorAuthPlatform(),
+          {
+            begin: (signal) => cookies.begin(signal),
+            exchange: async (attempt, verifier, signal) => {
+              this.nativeAdopting.set(true);
+              await cookies.exchange(attempt, verifier, signal);
+            },
+          },
+          nativeQueryBoundary(this.http, this.client, (error) => {
+            this.nativeFailure(error);
+          }),
+          controller.signal,
+        );
+      } finally {
+        this.nativeAdopting.set(false);
+        if (this.nativeController() === controller) this.nativeController.set(null);
+      }
+    },
+  });
+  protected get nativeSigningIn() {
+    return this.nativeLoginMutation.getCurrentResult();
+  }
+  protected get nativeProblem(): string | null {
+    const error = this.nativeSigningIn.error;
+    if (error === null || (error instanceof DOMException && error.name === 'AbortError'))
+      return null;
+    return error instanceof NativeLoginFailure && error.reason === 'expired'
+      ? 'Sign-in timed out. Try again.'
+      : 'We couldn’t finish sign-in. Please try again.';
+  }
+  protected nativeSignIn(): void {
+    if (!this.nativeSigningIn.isPending)
+      void this.nativeLoginMutation.mutate().catch((error: unknown) => {
+        this.nativeFailure(error);
+      });
+  }
+  protected nativeCancel(): void {
+    this.nativeController()?.abort();
+  }
+  private nativeFailure(error: unknown): void {
+    if (error instanceof DOMException && error.name === 'AbortError') return;
+    // MutationObserver retains the outcome; display only the fixed nativeProblem text.
+    if (!this.destroy.destroyed) this.change.markForCheck();
+  }
   protected readonly email = new FormControl('', {
     nonNullable: true,
     validators: [
@@ -272,6 +339,7 @@ export class Onboarding {
     const sessionSubscription = this.sessionQuery.subscribe(
       (result: Readonly<QueryObserverResult<Identity | null>>) => {
         const accountId = result.data?.account_id ?? null;
+        if (accountId !== null && !this.nativeAdopting()) this.nativeController()?.abort();
         if (this.challengeQuery.options.queryKey[1] !== accountId) {
           this.email.reset('');
           this.code.reset('');
@@ -295,8 +363,23 @@ export class Onboarding {
     const sendSubscription = this.sendMutation.subscribe(update);
     const verifySubscription = this.verifyMutation.subscribe(update);
     const logoutSubscription = this.logoutMutation.subscribe(update);
+    const nativeSubscription = this.nativeLoginMutation.subscribe(update);
+    const nativeConfig = this.nativeRuntime?.config();
+    if (nativeConfig !== null && nativeConfig !== undefined)
+      void nativeLaunchHint(nativeConfig.wakeUrl)
+        .then((hint) => {
+          if (!this.destroy.destroyed) {
+            this.nativeRestart.set(hint !== null);
+            this.change.markForCheck();
+          }
+        })
+        .catch((error: unknown) => {
+          this.nativeFailure(error);
+        });
     this.destroy.onDestroy(() => {
       this.lifetime.abort();
+      this.nativeController()?.abort();
+      nativeSubscription();
       sessionSubscription();
       challengeSubscription();
       sendSubscription();

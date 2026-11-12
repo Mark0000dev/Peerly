@@ -679,6 +679,7 @@ export interface Api {
       readonly text: string | null;
     };
     readonly Metric: 'route_ready' | 'lcp' | 'inp' | 'fcp' | 'ttfb' | 'cls';
+    readonly NativeExchangeRequest: { readonly attempt_id: string; readonly verifier: string };
     readonly NoStudyPromptResponse: { readonly outcome?: 'no_offer' };
     readonly NotificationMode: 'messages_and_requests' | 'all_updates';
     readonly ObservationBatchBody: {
@@ -2642,6 +2643,60 @@ export interface Api {
           readonly '409': Api['schemas']['ProblemResponse'];
           readonly '413': Api['schemas']['ProblemResponse'];
           readonly '415': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '429': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/auth/native/exchange': {
+      readonly post: {
+        readonly parameters: {
+          readonly 'header:origin'?: string | null;
+          readonly 'header:x-csrf-token'?: string | null;
+        };
+        readonly body: Api['schemas']['NativeExchangeRequest'];
+        readonly responses: {
+          readonly '200': unknown;
+          readonly '400': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '409': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '429': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/auth/native/return': {
+      readonly get: {
+        readonly parameters: Readonly<Record<string, never>>;
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': unknown;
+          readonly '400': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '409': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '429': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/auth/native/start': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'query:attempt_id': string;
+          readonly 'query:challenge': string;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': unknown;
+          readonly '400': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '409': Api['schemas']['ProblemResponse'];
           readonly '422': Api['schemas']['ProblemResponse'];
           readonly '429': Api['schemas']['ProblemResponse'];
           readonly '500': Api['schemas']['ProblemResponse'];
