@@ -46,7 +46,7 @@ SELECT json_build_object(
     JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relrowsecurity),
   'superuser',(SELECT rolsuper FROM pg_roles WHERE rolname=current_user),
   'bypass_rls',(SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),
-  'control_system',has_function_privilege(current_user,'pg_catalog.pg_control_system()','EXECUTE')), 
+  'control_system',has_function_privilege(current_user,'pg_catalog.pg_control_system()','EXECUTE')),
  'server_version_num',current_setting('server_version_num')::integer,
  'server_address',coalesce(inet_server_addr()::text,'unix'),
  'server_port',current_setting('port')::integer,
