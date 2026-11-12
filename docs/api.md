@@ -83,6 +83,25 @@ Accepted chat uses its independent `/api/v1/conversations/{id}/participant` and
 supports current display only, not original/history/full-profile access. Private
 JPEG responses use no-store/no-referrer/nosniff. Deleted peers remain neutral.
 
+## Operator access history
+
+`GET /api/v1/operator/accounts/{account_id}/operator-access-history` exposes the
+actual saved operator-access revisions, including unused/revoked grants and
+retained deleted-account sources. It never grants access or treats a historical
+`active` field as current requester authority. Each page uses the existing fresh
+operator/session checks and records one atomic `READ_ACCOUNT` inspection of the
+target account aggregate. Existing unassigned accounts return an empty page with
+anchor_version0; missing accounts are audited before404.
+
+Pages contain at most50 revisions ordered by source version descending, not by
+changed_at: historical timestamps may regress. A purpose-specific encrypted
+cursor binds operator, current grant version, target account and fixed revision
+anchor. Newer revisions do not enter an existing continuation. Invalid or
+cross-scope cursors return422. Attribution and request/action/trace/span IDs are
+returned exactly as stored; legacy nulls stay null. No grantor/session/action is
+inferred. Audit failure, session expiry and cancellation never release the private
+result; audit and canonical inspection writes share the read transaction.
+
 ## SSE
 
 One authenticated change stream carries bounded source/version hints, reset and

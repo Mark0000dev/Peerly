@@ -98,6 +98,7 @@ from studymate.application.notification_preferences.preferences import (
     ChooseOwnNotificationPreference,
     ReadOwnNotificationPreference,
 )
+from studymate.application.operator.access_history import ReadOperatorAccessHistory
 from studymate.application.operator.accounts import ReadOperatorAccount, SearchOperatorAccounts
 from studymate.application.operator.ai_jobs import ReadOperatorAiJob, ReadOperatorAiJobs
 from studymate.application.operator.audit_search import SearchOperatorAudits
@@ -284,6 +285,12 @@ from studymate.infrastructure.observability.runtime import (
 )
 from studymate.infrastructure.observability.streams import StreamSignals
 from studymate.infrastructure.observability.tracing import OtelHttpTracing
+from studymate.infrastructure.operator.access_history_cursors import (
+    FernetOperatorAccessHistoryCursorCodec,
+)
+from studymate.infrastructure.operator.access_history_transactions import (
+    SqlOperatorAccessHistoryUnitOfWork,
+)
 from studymate.infrastructure.operator.ai_cursors import FernetOperatorAiCursorCodec
 from studymate.infrastructure.operator.ai_transactions import SqlOperatorAiUnitOfWork
 from studymate.infrastructure.operator.audit_search_cursors import FernetOperatorAuditCursorCodec
@@ -489,6 +496,10 @@ from studymate.presentation.notification_preferences.router import (
     notification_preferences_router,
 )
 from studymate.presentation.onboarding import OnboardingServices, onboarding_router
+from studymate.presentation.operator.access_history_router import (
+    OperatorAccessHistoryHttpServices,
+    operator_access_history_router,
+)
 from studymate.presentation.operator.ai_router import OperatorAiHttpServices, operator_ai_router
 from studymate.presentation.operator.audit_search_router import (
     OperatorAuditSearchHttpServices,
@@ -1635,6 +1646,15 @@ def _operator_routers(
                     SqlOperatorIdentityLinksUnitOfWork(sessions, record_operator_audit),
                     hasher,
                     FernetOperatorIdentityLinksCursorCodec.from_key(key),
+                )
+            )
+        ),
+        operator_access_history_router(
+            OperatorAccessHistoryHttpServices(
+                ReadOperatorAccessHistory(
+                    SqlOperatorAccessHistoryUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    FernetOperatorAccessHistoryCursorCodec.from_key(key),
                 )
             )
         ),

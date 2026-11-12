@@ -2242,6 +2242,62 @@
         "title": "OnboardingTask",
         "type": "string"
       },
+      "OperatorAccessHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": { "format": "uuid", "title": "Account Id", "type": "string" },
+          "anchor_version": { "minimum": 0, "title": "Anchor Version", "type": "integer" },
+          "next_cursor": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Next Cursor"
+          },
+          "revisions": {
+            "items": { "$ref": "#/components/schemas/OperatorAccessHistoryRevisionResponse" },
+            "maxItems": 50,
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": ["account_id", "revisions", "next_cursor", "anchor_version"],
+        "title": "OperatorAccessHistoryResponse",
+        "type": "object"
+      },
+      "OperatorAccessHistoryRevisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": { "format": "uuid", "title": "Account Id", "type": "string" },
+          "action_id": {
+            "anyOf": [{ "format": "uuid", "type": "string" }, { "type": "null" }],
+            "title": "Action Id"
+          },
+          "active": { "title": "Active", "type": "boolean" },
+          "changed_at": { "format": "date-time", "title": "Changed At", "type": "string" },
+          "changed_by_id": {
+            "anyOf": [{ "format": "uuid", "type": "string" }, { "type": "null" }],
+            "title": "Changed By Id"
+          },
+          "http_request_id": {
+            "anyOf": [{ "format": "uuid", "type": "string" }, { "type": "null" }],
+            "title": "Http Request Id"
+          },
+          "span_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Span Id" },
+          "trace_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Trace Id" },
+          "version": { "minimum": 1, "title": "Version", "type": "integer" }
+        },
+        "required": [
+          "account_id",
+          "version",
+          "active",
+          "changed_at",
+          "changed_by_id",
+          "http_request_id",
+          "action_id",
+          "trace_id",
+          "span_id"
+        ],
+        "title": "OperatorAccessHistoryRevisionResponse",
+        "type": "object"
+      },
       "OperatorAccountDetailResponse": {
         "additionalProperties": false,
         "properties": {
@@ -16023,6 +16079,80 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/OperatorPreferenceHistoryResponse" }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [{ "SessionCookie": [] }],
+        "summary": "History",
+        "tags": ["operator"]
+      }
+    },
+    "/api/v1/operator/accounts/{account_id}/operator-access-history": {
+      "get": {
+        "operationId": "history_api_v1_operator_accounts__account_id__operator_access_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": { "format": "uuid", "title": "Account Id", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "maxLength": 1024, "minLength": 1, "type": "string" },
+                { "type": "null" }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OperatorAccessHistoryResponse" }
               }
             },
             "description": "Successful Response"

@@ -730,6 +730,23 @@ export interface Api {
       readonly visibility: Api['schemas']['ProfileVisibilityResponse'] | null;
     };
     readonly OnboardingTask: 'find_help' | 'offer_help';
+    readonly OperatorAccessHistoryResponse: {
+      readonly account_id: string;
+      readonly anchor_version: number;
+      readonly next_cursor: string | null;
+      readonly revisions: readonly Api['schemas']['OperatorAccessHistoryRevisionResponse'][];
+    };
+    readonly OperatorAccessHistoryRevisionResponse: {
+      readonly account_id: string;
+      readonly action_id: string | null;
+      readonly active: boolean;
+      readonly changed_at: string;
+      readonly changed_by_id: string | null;
+      readonly http_request_id: string | null;
+      readonly span_id: string | null;
+      readonly trace_id: string | null;
+      readonly version: number;
+    };
     readonly OperatorAccountDetailResponse: {
       readonly account: Api['schemas']['OperatorAccountResponse'];
       readonly exposure: Api['schemas']['ExposureResponse'] | null;
@@ -4244,6 +4261,24 @@ export interface Api {
         readonly body: undefined;
         readonly responses: {
           readonly '200': Api['schemas']['OperatorPreferenceHistoryResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/operator-access-history': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorAccessHistoryResponse'];
           readonly '401': Api['schemas']['ProblemResponse'];
           readonly '403': Api['schemas']['ProblemResponse'];
           readonly '404': Api['schemas']['ProblemResponse'];
