@@ -28,31 +28,43 @@ class DestinationRegistration:
 async def register_destinations(
     sessions: async_sessionmaker[AsyncSession], registrations: tuple[DestinationRegistration, ...]
 ) -> None:
+    _require_unique_sinks(registrations)
+    async with open_transaction(sessions) as session:
+        await register_transaction_destinations(session, registrations)
+
+
+def _require_unique_sinks(registrations: tuple[DestinationRegistration, ...]) -> None:
     if len({item.destination.sink for item in registrations}) != len(registrations):
         raise ValueError("Only one current target per sink may be configured")
-    async with open_transaction(sessions) as session:
-        for item in sorted(registrations, key=lambda item: item.destination.sink):
-            sink, revision = item.destination.sink.value, item.destination.revision
-            await session.execute(
-                insert(DeliveryDestinationRecord)
-                .values(
-                    sink=sink,
-                    revision=revision,
-                    fingerprint=item.fingerprint,
-                    registered_at=await database_now(session),
-                )
-                .on_conflict_do_nothing(
-                    index_elements=[
-                        DeliveryDestinationRecord.sink,
-                        DeliveryDestinationRecord.revision,
-                    ]
-                )
+
+
+async def register_transaction_destinations(
+    session: AsyncSession, registrations: tuple[DestinationRegistration, ...]
+) -> None:
+    """Use the caller's guarded transaction; never begin or commit another one."""
+    _require_unique_sinks(registrations)
+    for item in sorted(registrations, key=lambda item: item.destination.sink):
+        sink, revision = item.destination.sink.value, item.destination.revision
+        await session.execute(
+            insert(DeliveryDestinationRecord)
+            .values(
+                sink=sink,
+                revision=revision,
+                fingerprint=item.fingerprint,
+                registered_at=await database_now(session),
             )
-            existing = await session.scalar(
-                select(DeliveryDestinationRecord).where(
-                    DeliveryDestinationRecord.sink == sink,
-                    DeliveryDestinationRecord.revision == revision,
-                )
+            .on_conflict_do_nothing(
+                index_elements=[
+                    DeliveryDestinationRecord.sink,
+                    DeliveryDestinationRecord.revision,
+                ]
             )
-            if existing is None or not hmac.compare_digest(existing.fingerprint, item.fingerprint):
-                raise ValueError("Registered destination revision cannot change its actual target")
+        )
+        existing = await session.scalar(
+            select(DeliveryDestinationRecord).where(
+                DeliveryDestinationRecord.sink == sink,
+                DeliveryDestinationRecord.revision == revision,
+            )
+        )
+        if existing is None or not hmac.compare_digest(existing.fingerprint, item.fingerprint):
+            raise ValueError("Registered destination revision cannot change its actual target")
