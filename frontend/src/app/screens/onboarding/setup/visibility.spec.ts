@@ -55,6 +55,28 @@ describe('canonical visibility and freshness confirmation', () => {
     backend.expectNone('/api/v1/me/visibility');
     expect(host(fixture).textContent).not.toContain('Updating your profile visibility');
   });
+  it('explains retained history and existing-partner continuity before any hide command', () => {
+    const effects = host(fixture).querySelector('[aria-label="While your profile is hidden"]');
+    expect(effects).not.toBeNull();
+    expect(effects?.querySelectorAll('li')).toHaveLength(5);
+    expect(effects?.textContent).toContain('Both sent and received requests');
+    expect(effects?.textContent).toContain('Your account and chat history stay saved');
+    expect(host(fixture).textContent).toContain(
+      'People you already chat with see your name and photo as before.',
+    );
+    backend.expectNone('/api/v1/me/visibility');
+  });
+  it('does not offer the hide explanation or action when the server disallows hiding', () => {
+    fixture.componentRef.setInput('status', {
+      ...complete,
+      capabilities: { ...complete.capabilities, can_hide_profile: false },
+    });
+    fixture.detectChanges();
+    expect(host(fixture).querySelector('[aria-label="While your profile is hidden"]')).toBeNull();
+    expect(host(fixture).textContent).not.toContain('Take a break.');
+    expect(host(fixture).textContent).not.toContain('Hide my profile');
+    backend.expectNone('/api/v1/me/visibility');
+  });
   it.each(['actor', 'revision', 'session'] as const)(
     'does not apply a confirmation after its %s context retires',
     async (changed) => {

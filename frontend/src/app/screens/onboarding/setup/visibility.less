@@ -1,7 +1,6 @@
 :host {
   display: block;
   min-inline-size: 0;
-  container: visibility-panel / inline-size;
 }
 
 section {
@@ -34,19 +33,15 @@ button {
   min-block-size: var(--tui-height-m);
 }
 
-.effect-content {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
+.hide-effects li {
+  align-items: start;
   gap: 0.75rem;
-  inline-size: 100%;
-  min-inline-size: 0;
 }
 
-@container visibility-panel (width < 16em) {
-  .effect-content {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.hide-effects [tuiTitle] {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
 .hide-confirmation h2 {

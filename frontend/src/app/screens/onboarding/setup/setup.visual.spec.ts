@@ -723,7 +723,7 @@ test('P03 consequences and native confirmation remain deliberate at320 text200',
     document.documentElement.style.setProperty('font-size', '200%');
   });
   const effects = page.getByRole('list', { name: 'While your profile is hidden', exact: true });
-  await expect(effects.getByRole('listitem')).toHaveCount(4);
+  await expect(effects.getByRole('listitem')).toHaveCount(5);
   await expect(effects).toContainText('Pending requests close and won’t reopen');
   await expect(effects).toContainText('Your existing chats keep working');
   expect(writes).toBe(0);
@@ -742,7 +742,7 @@ test('P03 consequences and native confirmation remain deliberate at320 text200',
   await expect(dialog).toContainText('Pending requests will close and won’t reopen.');
   expect(writes).toBe(0);
   const title = dialog.getByRole('heading', { name: 'Hide your profile?', exact: true });
-  const cancel = dialog.getByRole('button', { name: 'Cancel', exact: true });
+  const cancel = dialog.getByRole('button', { name: 'Keep profile visible', exact: true });
   const confirm = dialog.getByRole('button', { name: 'Hide profile', exact: true });
   await expect(title).toBeFocused();
   await assertNaturalWordWrapping(title);
