@@ -53,6 +53,7 @@ from studymate.infrastructure.ai.runtime.preflight import PinnedCli
 from studymate.infrastructure.ai.runtime.supervisor import AiWorkerSupervisor
 from studymate.infrastructure.ai.sandbox import LinuxSandbox
 from studymate.infrastructure.ai.telemetry import AiQueueSignals, ObservedAiQueue, ObservedAiStep
+from studymate.infrastructure.observability.logging import LogEvent
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
@@ -256,6 +257,10 @@ class AiWorkerRuntime:
             await self.health.register()
             registered = True
             await _diagnosed(AiRuntimePhase.HEARTBEAT, self.health.heartbeat(ready=True))
+            logging.getLogger(__name__).info(
+                LogEvent.WORKER_STEP,
+                extra={"event": LogEvent.WORKER_STEP, "outcome": "ready"},
+            )
             await self._serve(stop, quiesce, tasks)
             registered = False
         except BaseException as error:
