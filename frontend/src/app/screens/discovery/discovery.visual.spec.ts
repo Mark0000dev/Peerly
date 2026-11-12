@@ -4,6 +4,7 @@ import { jpegBase64 } from '../../../../testing/image-fixture';
 import type { Page, Route } from '@playwright/test';
 import { test, expect } from '../../../../testing/visual';
 import { identity, card, deck, pass, ownGoal } from './discovery.fixtures';
+import type { Api } from '../../api.generated';
 
 type Context = Readonly<{
   readonly page: Page;
@@ -85,6 +86,103 @@ test('D01 grounded card offers actual request review without sending on entry', 
   await expect(page.getByRole('navigation', { name: 'Deck options' })).toBeVisible();
   await checkpoint('deck-options.png');
 });
+
+for (const { mode, reason, appearance, context, contextLabel, caption } of [
+  {
+    mode: 'find_help',
+    reason: 'can_help',
+    appearance: 'sp-relevance',
+    context: deck.context,
+    contextLabel: 'SQL · JOINs',
+    caption: 'Your goal',
+  },
+  {
+    mode: 'offer_help',
+    reason: 'you_can_help',
+    appearance: 'sp-offer',
+    context: { mode: 'offer_help', help_version: 1 },
+    contextLabel: 'SQL · Calculus',
+    caption: 'Your help areas',
+  },
+  {
+    mode: 'study_together',
+    reason: 'shared_goal',
+    appearance: 'sp-shared',
+    context: { ...deck.context, mode: 'study_together' },
+    contextLabel: 'SQL · JOINs',
+    caption: 'Your goal',
+  },
+] as const) {
+  test(`D01 original ${mode} composition uses only actual saved context and eligible card data`, async ({
+    page,
+    checkpoint,
+  }: Context) => {
+    let writes = 0;
+    page.on('request', (request) => {
+      // Technical observations are genuine readonly telemetry, not a social decision.
+      if (
+        request.method() !== 'GET' &&
+        new URL(request.url()).pathname !== '/api/v1/telemetry/events'
+      )
+        writes += 1;
+    });
+    await account(page);
+    await page.route('**/api/v1/me/goal', async (route) => route.fulfill({ json: ownGoal }));
+    await page.route('**/api/v1/me/help-subjects', async (route) =>
+      route.fulfill({
+        json: {
+          selection: {
+            version: 1,
+            saved_at: ownGoal.goal.updated_at,
+            subjects: [
+              { subject_id: card.relevance.subject_id, label: 'SQL', topic_note: 'JOINs' },
+              {
+                subject_id: '10000000-0000-0000-0000-000000000004',
+                label: 'Calculus',
+                topic_note: null,
+              },
+            ],
+          },
+        } satisfies Api['schemas']['OwnHelpResponse'],
+      }),
+    );
+    await page.route('**/api/v1/discovery?*', async (route) =>
+      route.fulfill({
+        json: {
+          ...deck,
+          context,
+          people: [{ ...card, relevance: { ...card.relevance, reason } }],
+        } satisfies Api['schemas']['DiscoveryPageResponse'],
+      }),
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, `?mode=${mode}`);
+    const saved = page.getByRole('region', { name: 'Saved discovery context', exact: true });
+    await expect(saved.locator('[tuiTitle]')).toContainText(contextLabel);
+    await expect(saved.locator('[tuiSubtitle]')).toHaveText(caption);
+    const controls = page.getByRole('navigation', { name: 'Discovery mode', exact: true });
+    await expect(controls.locator('tui-segmented')).toBeVisible();
+    await expect(controls.locator('[aria-pressed="true"]')).toHaveCount(1);
+    const article = page.getByRole('article', { name: card.display_name, exact: true });
+    await expect(article).toHaveCount(1);
+    await expect(article.locator('.relevance')).toHaveAttribute('data-appearance', appearance);
+    await expect(article.locator('.candidate-subject')).toContainText('SQL');
+    await expect(article.locator('.candidate-subject')).toContainText('JOINs');
+    await expect(page.locator('.deck-next')).toHaveCount(0);
+    await expect(page.getByText(/4 of 5|Feedback is still building/)).toHaveCount(0);
+    await assertStudentNavigationInViewport(page, 'Discover');
+    await checkpoint(`${mode}-original-card.png`, { fullPage: false });
+    const review = page.getByRole('button', { name: 'Review request', exact: true });
+    await review.scrollIntoViewIfNeeded();
+    await expect(review).toBeInViewport();
+    await expect(review).toBeEnabled();
+    await assertFullTextFits(review);
+    await expect(page.getByRole('button', { name: 'Pass', exact: true })).toBeInViewport();
+    await assertStudentNavigationInViewport(page, 'Discover');
+    await checkpoint(`${mode}-original-actions.png`, { fullPage: false });
+    expect(writes).toBe(0);
+  });
+}
 
 for (const [mode, reason, copy] of [
   ['find_help', 'context_required', 'Choose your learning goal'],

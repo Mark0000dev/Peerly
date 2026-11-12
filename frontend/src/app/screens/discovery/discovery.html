@@ -13,7 +13,7 @@
 }
 <peerly-student-layout contentWidth="32rem">
   <main>
-    <header>
+    <header [class.screen-heading]="view === 'candidates' && actorId !== null">
       @if (view === 'passed' && actorId !== null) {
         <button
           tuiIconButton
@@ -50,19 +50,23 @@
     } @else {
       @if (view === 'candidates') {
         <nav class="mode-switch" aria-label="Discovery mode">
-          @for (item of modes; track item.id) {
-            <button
-              tuiButton
-              size="s"
-              type="button"
-              [appearance]="mode === item.id ? 'primary' : 'flat'"
-              [disabled]="locked"
-              [attr.aria-pressed]="mode === item.id"
-              (click)="changeMode($index)"
-            >
-              {{ item.label }}
-            </button>
-          }
+          <tui-segmented
+            class="mode-control"
+            size="s"
+            [disabled]="locked"
+            [activeItemIndex]="mode === 'find_help' ? 0 : mode === 'offer_help' ? 1 : 2"
+          >
+            @for (item of modes; track item.id) {
+              <button
+                type="button"
+                [disabled]="locked"
+                [attr.aria-pressed]="mode === item.id"
+                (click)="changeMode($index)"
+              >
+                {{ item.label }}
+              </button>
+            }
+          </tui-segmented>
         </nav>
 
         <section
@@ -71,54 +75,63 @@
           appearance="floating"
           aria-label="Saved discovery context"
         >
-          @if (deck.data?.context) {
-            <div tuiCell="m" class="context-summary">
-              <tui-icon
-                [icon]="mode === 'offer_help' ? '@tui.hand-helping' : '@tui.target'"
-                aria-hidden="true"
-              />
-              <div tuiTitle>
-                @if (savedContextLabel; as label) {
-                  <strong>{{ label }}</strong>
-                  <span tuiSubtitle>
-                    {{ mode === 'offer_help' ? 'Your help areas' : 'Your goal' }}
-                  </span>
-                } @else {
-                  <span>
-                    {{
-                      mode === 'offer_help'
-                        ? 'Using your saved help areas'
-                        : 'Using your saved active goal'
-                    }}
-                  </span>
-                }
+          <div class="context-layout">
+            @if (deck.data?.context) {
+              <div tuiCell="m" class="context-summary">
+                <tui-icon
+                  [icon]="mode === 'offer_help' ? '@tui.hand-helping' : '@tui.target'"
+                  aria-hidden="true"
+                />
+                <div tuiTitle>
+                  @if (savedContextLabel; as label) {
+                    <strong>{{ label }}</strong>
+                    <span tuiSubtitle>
+                      {{ mode === 'offer_help' ? 'Your help areas' : 'Your goal' }}
+                    </span>
+                  } @else {
+                    <span>
+                      {{
+                        mode === 'offer_help'
+                          ? 'Using your saved help areas'
+                          : 'Using your saved active goal'
+                      }}
+                    </span>
+                  }
+                </div>
               </div>
-            </div>
-          }
-          <div class="context-actions">
-            @if (deck.data?.context && savedContextLabel === null) {
-              <button
+            }
+            <div class="context-actions">
+              @if (deck.data?.context && savedContextLabel === null) {
+                <button
+                  tuiButton
+                  appearance="flat"
+                  size="s"
+                  type="button"
+                  [disabled]="locked || deck.isFetching"
+                  (click)="refresh()"
+                >
+                  Refresh context
+                </button>
+              }
+              <a
                 tuiButton
                 appearance="flat"
                 size="s"
-                type="button"
-                [disabled]="locked || deck.isFetching"
-                (click)="refresh()"
+                routerLink="/onboarding"
+                aria-label="Edit setup"
+                >{{ mode === 'offer_help' ? 'Change' : 'Edit' }}</a
               >
-                Refresh context
-              </button>
-            }
-            <a tuiButton appearance="flat" size="s" routerLink="/onboarding">Edit setup</a>
-            <button
-              tuiIconButton
-              appearance="flat"
-              size="s"
-              type="button"
-              iconStart="@tui.ellipsis-vertical"
-              aria-label="Deck options"
-              [attr.aria-expanded]="menu()"
-              (click)="menu.set(!menu())"
-            ></button>
+              <button
+                tuiIconButton
+                appearance="flat"
+                size="s"
+                type="button"
+                iconStart="@tui.ellipsis-vertical"
+                aria-label="Deck options"
+                [attr.aria-expanded]="menu()"
+                (click)="menu.set(!menu())"
+              ></button>
+            </div>
           </div>
         </section>
         @if (menu()) {
@@ -220,53 +233,101 @@
               }
             </ul>
           } @else {
-            <article
-              class="candidate-card"
-              tuiCardLarge="compact"
-              appearance="floating"
-              aria-labelledby="candidate-name"
-            >
-              <span class="relevance" tuiBadge appearance="sp-relevance" size="xl">{{
-                relevanceText(person.relevance)
-              }}</span>
-              <app-discovery-photo
-                [actorId]="actorId"
-                [personId]="person.id"
-                [version]="person.photo.version"
-                [name]="person.display_name"
-                (failure)="reauthorize($event)"
-                (refresh)="refresh()"
-              />
-              <div class="candidate-details">
-                <div class="candidate-heading">
-                  <h2 id="candidate-name" tabindex="-1" tuiAutoFocus>{{ person.display_name }}</h2>
-                  <span class="verification">
-                    <tui-icon icon="@tui.shield-check" aria-hidden="true" />
-                    <span>APU email confirmed</span>
-                  </span>
-                </div>
-                @if (person.about !== null) {
-                  <p>{{ person.about }}</p>
-                }
-                @if (person.relevance.reciprocal_subject_label !== null) {
-                  <p class="reciprocal">
-                    You could also help with their
-                    {{ person.relevance.reciprocal_subject_label }} goal.
-                  </p>
-                }
-              </div>
-              <footer class="candidate-footer">
-                <a
-                  tuiButton
-                  appearance="flat"
-                  size="s"
-                  iconEnd="@tui.chevron-right"
-                  [routerLink]="['/people', person.id]"
-                  [queryParams]="{ mode, view, cursor: pageCursor, person: person.id }"
-                  >View profile</a
+            <div class="candidate-deck">
+              <article
+                class="candidate-card"
+                tuiCardLarge="compact"
+                appearance="floating"
+                aria-labelledby="candidate-name"
+              >
+                <span
+                  class="relevance"
+                  tuiBadge
+                  [appearance]="
+                    person.relevance.reason === 'you_can_help'
+                      ? 'sp-offer'
+                      : person.relevance.reason === 'shared_goal'
+                        ? 'sp-shared'
+                        : 'sp-relevance'
+                  "
+                  size="xl"
+                  ><tui-icon
+                    [icon]="
+                      person.relevance.reason === 'can_help' ? '@tui.hand-helping' : '@tui.target'
+                    "
+                    aria-hidden="true"
+                  />{{ relevanceText(person.relevance) }}</span
                 >
-              </footer>
-            </article>
+                <app-discovery-photo
+                  [actorId]="actorId"
+                  [personId]="person.id"
+                  [version]="person.photo.version"
+                  [name]="person.display_name"
+                  (failure)="reauthorize($event)"
+                  (refresh)="refresh()"
+                />
+                <div class="candidate-details">
+                  <div class="candidate-heading">
+                    <h2 id="candidate-name" tabindex="-1" tuiAutoFocus>
+                      {{ person.display_name }}
+                    </h2>
+                    <span class="verification">
+                      <tui-icon icon="@tui.shield-check" aria-hidden="true" />
+                      <span>APU email confirmed</span>
+                    </span>
+                  </div>
+                  <div class="candidate-subject">
+                    <tui-icon
+                      [icon]="
+                        person.relevance.reason === 'can_help'
+                          ? '@tui.graduation-cap'
+                          : '@tui.target'
+                      "
+                      aria-hidden="true"
+                    />
+                    <p>
+                      {{
+                        person.relevance.reason === 'can_help'
+                          ? 'Helps with'
+                          : person.relevance.reason === 'you_can_help'
+                            ? 'Learning goal:'
+                            : 'Shared learning goal:'
+                      }}
+                      <strong>{{ person.relevance.subject_label }}</strong>
+                      @if (person.relevance.topic !== null) {
+                        — {{ person.relevance.topic }}
+                      }
+                    </p>
+                  </div>
+                  @if (person.about !== null) {
+                    <p class="candidate-about">{{ person.about }}</p>
+                  }
+                  @if (person.relevance.reciprocal_subject_label !== null) {
+                    <div class="reciprocal">
+                      <tui-icon icon="@tui.arrow-left-right" aria-hidden="true" />
+                      <p>
+                        You could also help with their
+                        {{ person.relevance.reciprocal_subject_label }} goal.
+                      </p>
+                    </div>
+                  }
+                </div>
+                <footer class="candidate-footer">
+                  <a
+                    tuiButton
+                    appearance="flat"
+                    size="s"
+                    iconEnd="@tui.chevron-right"
+                    [routerLink]="['/people', person.id]"
+                    [queryParams]="{ mode, view, cursor: pageCursor, person: person.id }"
+                    >View profile</a
+                  >
+                </footer>
+              </article>
+              @if (deck.data.people.length > 1) {
+                <div class="deck-next" tuiAppearance="floating" aria-hidden="true"></div>
+              }
+            </div>
             <div class="actions" aria-label="Candidate actions">
               <button
                 tuiButton
