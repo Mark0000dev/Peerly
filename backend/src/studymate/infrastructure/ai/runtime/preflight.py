@@ -2,15 +2,13 @@
 
 import asyncio
 import hashlib
-import os
 import re
-import signal
-from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
 from studymate.application.ai.ports import AiExecutorStateUncertainError
 from studymate.infrastructure.ai.lifecycle import settle_cleanup
+from studymate.infrastructure.ai.process import TerminationUncertainError, _stop
 from studymate.infrastructure.ai.runtime.namespace import OfflineNamespace
 
 MAX_INSPECTION_BYTES = 65_536
@@ -136,15 +134,14 @@ async def inspect_command(
 
 
 async def stop_inspection(process: asyncio.subprocess.Process) -> None:
-    with suppress(ProcessLookupError):
-        os.killpg(process.pid, signal.SIGKILL)
-    async with asyncio.timeout(5):
-        await process.wait()
+    # Reuse the same shared leader/group deadline as actual execution. SIGKILL
+    # delivery and non-child reaping are asynchronous, including offline probes.
     try:
-        os.killpg(process.pid, 0)
-    except ProcessLookupError:
-        return
-    raise AiExecutorStateUncertainError("Offline inspection process group remains occupied")
+        await _stop(process)
+    except TerminationUncertainError:
+        raise AiExecutorStateUncertainError(
+            "Offline inspection physical stop could not be confirmed"
+        ) from None
 
 
 @dataclass(frozen=True, slots=True)

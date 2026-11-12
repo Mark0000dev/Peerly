@@ -49,9 +49,16 @@ INTERACTIVE_WEIGHT = 4
 
 
 class TrustedReportSource(Protocol):
-    """Future report capability checks permission and immutable selected evidence."""
+    """Check report authority/evidence in the caller's existing queue transaction.
 
-    async def eligible(self, actor_id: UUID, task: TriageReport) -> bool: ...
+    Default locking precedes slot/job locks in claim and completion. Implementations
+    must not open another session, transaction or connection; typed source failures
+    must survive unchanged rather than being coerced to a boolean account check.
+    """
+
+    async def check(
+        self, session: AsyncSession, job: AiJob, *, lock: bool = True
+    ) -> Failure | None: ...
 
 
 async def _account(session: AsyncSession, actor_id: UUID) -> bool:
@@ -168,11 +175,9 @@ class SqlAiQueue:
 
     async def _eligible(self, session: AsyncSession, job: AiJob) -> Failure | None:
         if isinstance(job.task, TriageReport):
-            return (
-                None
-                if self.reports is not None and await self.reports.eligible(job.actor_id, job.task)
-                else Failure.ACCOUNT
-            )
+            if self.reports is None:
+                return Failure.ACCOUNT
+            return await self.reports.check(session, job)
         if not await _account(session, job.actor_id):
             return Failure.ACCOUNT
         submission = StudentSubmission(

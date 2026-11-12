@@ -152,3 +152,21 @@ async def test_pending_receipt_shutdown_never_reads_credentials_or_registers(
     stop.set()
     await running
     assert not (tmp_path / "private-auth").exists()
+
+
+def test_worker_preserves_optional_same_transaction_report_guard(tmp_path: Path) -> None:
+    from tests.unit.ai.test_report_guard import Guard
+
+    guard = Guard(None)
+    sessions = async_sessionmaker()
+    runtime = create_ai_worker_runtime(
+        sessions, Storage(b"synthetic"), configuration(tmp_path), reports=guard
+    )
+    assert runtime.queue.reports is guard
+    assert runtime.queue.sessions is sessions
+    assert runtime.health.sessions is sessions
+    assert runtime.health.report_guard_version == 1
+    assert guard.calls == []
+    default = create_ai_worker_runtime(sessions, Storage(b"synthetic"), configuration(tmp_path))
+    assert default.queue.reports is None
+    assert default.health.report_guard_version is None

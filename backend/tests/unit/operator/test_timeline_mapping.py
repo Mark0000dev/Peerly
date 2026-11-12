@@ -106,6 +106,15 @@ def journal_fields(row: ProductEventRecord, kind: OperatorEventKind) -> None:
     elif kind in {OperatorEventKind.SUPPORT_RECEIVED, OperatorEventKind.SUPPORT_STATUS_CHANGED}:
         row.support_case_id = uuid4()
         row.support_case_version = 1 if kind == OperatorEventKind.SUPPORT_RECEIVED else 2
+    elif kind == OperatorEventKind.REPORT_REVIEWED:
+        row.report_review_id, row.report_review_report_id = uuid4(), uuid4()
+        row.report_review_version, row.report_review_action = 1, "escalate"
+    elif kind == OperatorEventKind.PHOTO_REVIEWED:
+        row.photo_review_id = uuid4()
+        row.photo_review_version, row.photo_review_action = 1, "require_replacement"
+    elif kind == OperatorEventKind.REPORT_TRIAGE_SUBMITTED:
+        row.triage_job_id, row.triage_report_id = uuid4(), uuid4()
+        row.triage_source_version = 1
 
 
 @pytest.mark.parametrize("kind", list(OperatorEventKind))

@@ -35,6 +35,7 @@ class OperatorEventKind(StrEnum):
     EXPOSURE_CONFIRMED = "discovery.exposure_confirmed"
     REPORT_CREATED = "report.created"
     REPORT_REVIEWED = "report.reviewed"
+    REPORT_TRIAGE_SUBMITTED = "triage.submitted"
     PHOTO_REVIEWED = "photo.reviewed"
     BLOCK_CHANGED = "block.changed"
     DECK_DECISION_CHANGED = "discovery.pass_changed"
@@ -65,6 +66,7 @@ class OperatorSourceKind(StrEnum):
     AI_JOB = "ai_job"
     PROFILE_REPORT = "profile_report"
     REPORT_REVIEW = "report_review_revision"
+    REPORT_TRIAGE_SUBMISSION = "report_triage_submission"
     PHOTO_REVIEW = "photo_review_revision"
     BLOCK = "block_revision"
     DECK_DECISION = "private_pass_revision"
@@ -208,6 +210,7 @@ class OperatorEventFacts:
 
 
 EVENT_SOURCES = {
+    OperatorEventKind.REPORT_TRIAGE_SUBMITTED: OperatorSourceKind.REPORT_TRIAGE_SUBMISSION,
     OperatorEventKind.REPORT_REVIEWED: OperatorSourceKind.REPORT_REVIEW,
     OperatorEventKind.PHOTO_REVIEWED: OperatorSourceKind.PHOTO_REVIEW,
     OperatorEventKind.ACCOUNT_LIFECYCLE_CHANGED: OperatorSourceKind.LIFECYCLE,

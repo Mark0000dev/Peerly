@@ -55,6 +55,10 @@ from studymate.infrastructure.operator.photo_review_models import (
     OperatorPhotoReviewIntentRecord,
     OperatorPhotoReviewRecord,
 )
+from studymate.infrastructure.operator.report_triage_models import (
+    ReportTriageEvidenceRecord,
+    ReportTriageSubmissionRecord,
+)
 from studymate.infrastructure.persistence.base import Base
 from studymate.infrastructure.persistence.block_models import (
     BlockIntentRecord,
@@ -191,6 +195,8 @@ MODELS: tuple[type[Base], ...] = (
     OperatorMembershipIntentRecord,
     OperatorPhotoReviewRecord,
     OperatorPhotoReviewIntentRecord,
+    ReportTriageEvidenceRecord,
+    ReportTriageSubmissionRecord,
     ReportReviewRevisionRecord,
     ReportReviewIntentRecord,
     *REQUEST_MODELS,

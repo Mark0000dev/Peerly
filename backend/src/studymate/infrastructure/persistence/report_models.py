@@ -21,6 +21,7 @@ from studymate.infrastructure.persistence.base import Base
 class ProfileAccessRecord(Base):
     __tablename__ = "profile_access_contexts"
     __table_args__ = (
+        UniqueConstraint("id", "viewer_id", "target_id", name="uq_profile_access_triage_evidence"),
         UniqueConstraint("id", "viewer_id", name="uq_profile_access_contexts_viewer"),
         ForeignKeyConstraint(
             ["target_id", "profile_version"],
@@ -83,6 +84,11 @@ class ProfileAccessRecord(Base):
 class ProfileReportRecord(Base):
     __tablename__ = "profile_reports"
     __table_args__ = (
+        UniqueConstraint("id", "kind", "reporter_id", name="uq_profile_reports_triage_identity"),
+        UniqueConstraint("id", "context_id", name="uq_profile_reports_triage_profile_context"),
+        UniqueConstraint(
+            "id", "message_context_id", name="uq_profile_reports_triage_message_context"
+        ),
         UniqueConstraint("id", "reporter_id", name="uq_profile_reports_reporter"),
         ForeignKeyConstraint(
             ["context_id", "reporter_id"],

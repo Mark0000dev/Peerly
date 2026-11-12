@@ -203,3 +203,100 @@ async def test_direct_cli_inspection_requires_dedicated_non_home_context(tmp_pat
         await inspect_command(
             (sys.executable, "-c", "pass"), dedicated_home=Path("/home/forbidden")
         )
+
+
+async def exited_inspection_child() -> asyncio.subprocess.Process:
+    child = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-c",
+        "pass",
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        env={"PATH": "/usr/bin:/bin"},
+        start_new_session=True,
+    )
+    await child.wait()
+    return child
+
+
+async def test_inspection_waits_for_group_reap_after_leader_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    child = await exited_inspection_child()
+    original = os.killpg
+    probes = 0
+    reap_visibility_polls = 3
+    gone = asyncio.Event()
+
+    def kernel(pid: int, sig: int) -> None:
+        nonlocal probes
+        assert pid == child.pid
+        if sig != 0:
+            original(pid, sig)
+            return
+        probes += 1
+        if probes <= reap_visibility_polls:
+            return
+        gone.set()
+        raise ProcessLookupError
+
+    monkeypatch.setattr(os, "killpg", kernel)
+    await preflight.stop_inspection(child)
+    assert gone.is_set()
+    assert child.returncode == 0
+
+
+async def test_inspection_group_deadline_stays_typed_uncertain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from studymate.application.ai.ports import AiExecutorStateUncertainError
+    from studymate.infrastructure.ai import process
+
+    child = await exited_inspection_child()
+    original = os.killpg
+
+    def kernel(pid: int, sig: int) -> None:
+        assert pid == child.pid
+        if sig != 0:
+            original(pid, sig)
+        # The synthetic kernel never confirms disappearance of the group.
+
+    monkeypatch.setattr(os, "killpg", kernel)
+    monkeypatch.setattr(process, "STOP_CONFIRM_SECONDS", 0.03)
+    with pytest.raises(AiExecutorStateUncertainError, match="physical stop"):
+        await preflight.stop_inspection(child)
+
+
+async def test_inspection_leader_wait_deadline_is_not_ordinary_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from studymate.application.ai.ports import AiExecutorStateUncertainError
+    from studymate.infrastructure.ai import process
+
+    child = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-c",
+        "import time;time.sleep(30)",
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        env={"PATH": "/usr/bin:/bin"},
+        start_new_session=True,
+    )
+    original_wait = child.wait
+
+    async def delayed_reaping() -> int:
+        await asyncio.Event().wait()
+        raise RuntimeError("unreachable")
+
+    monkeypatch.setattr(child, "wait", delayed_reaping)
+    monkeypatch.setattr(process, "STOP_CONFIRM_SECONDS", 0.03)
+    try:
+        with pytest.raises(AiExecutorStateUncertainError, match="physical stop"):
+            await preflight.stop_inspection(child)
+    finally:
+        # Actual signal delivery already terminated this task-owned sole child;
+        # retain/reap its real wait handle even though delivery was delayed above.
+        await asyncio.wait_for(original_wait(), timeout=1)
+    assert child.returncode is not None

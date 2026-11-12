@@ -200,6 +200,12 @@ def journal_event_source(
 def review_event_source(
     row: ProductEventRecord, kind: OperatorEventKind
 ) -> OperatorEventSource | None:
+    if kind == OperatorEventKind.REPORT_TRIAGE_SUBMITTED:
+        return OperatorEventSource(
+            OperatorSourceKind.REPORT_TRIAGE_SUBMISSION,
+            required_id(row.triage_job_id),
+            row.account_id,
+        )
     if kind == OperatorEventKind.REPORT_REVIEWED:
         return OperatorEventSource(
             OperatorSourceKind.REPORT_REVIEW,

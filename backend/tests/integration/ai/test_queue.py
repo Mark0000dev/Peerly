@@ -512,9 +512,18 @@ async def test_global_admission_race_preserves_reserved_internal_capacity(
 
 @dataclass(frozen=True, slots=True)
 class SyntheticReportEligibility:
-    async def eligible(self, actor_id: UUID, task: TriageReport) -> bool:
-        # Deliberately controlled future permission/source boundary, no real report lookup.
-        return task.evidence == "Synthetic selected evidence" and actor_id.int > 0
+    async def check(
+        self, session: AsyncSession, job: AiJob, *, lock: bool = True
+    ) -> Failure | None:
+        # Controlled permission/source boundary only; production uses actual report authority.
+        if not lock or not session.in_transaction() or job.actor_id.int <= 0:
+            return Failure.ACCOUNT
+        if (
+            not isinstance(job.task, TriageReport)
+            or job.task.evidence != "Synthetic selected evidence"
+        ):
+            return Failure.STALE_SOURCE
+        return None
 
 
 async def test_fairness_round_robins_actors_and_services_due_internal_after_four(

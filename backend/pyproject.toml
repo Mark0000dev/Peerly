@@ -50,7 +50,8 @@ plugins = ["pydantic.mypy"]
 disallow_any_unimported = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
-files = ["src", "tests", "migrations", "../deployment/backend/manual_stage_verification.py", "../deployment/backend/provision_bootstrap.py", "../deployment/backend/operator_access.py"]
+# All public backend operational helpers use the same strict gate as application code.
+files = ["src", "tests", "migrations", "../deployment/backend"]
 
 [tool.pytest.ini_options]
 # Keep ordinary make check independent of a caller-supplied PYTHONPATH.

@@ -101,6 +101,7 @@ from studymate.application.notification_preferences.preferences import (
 from studymate.application.operator.accounts import ReadOperatorAccount, SearchOperatorAccounts
 from studymate.application.operator.ai_jobs import ReadOperatorAiJob, ReadOperatorAiJobs
 from studymate.application.operator.audit_search import SearchOperatorAudits
+from studymate.application.operator.block_history import ReadOperatorBlockHistory
 from studymate.application.operator.chat_image_uploads import (
     ReadOperatorChatImageHistory,
     ReadOperatorChatImageUploads,
@@ -134,10 +135,16 @@ from studymate.application.operator.photo_uploads import (
     ReadOperatorPhotoHistory,
     ReadOperatorPhotoUploads,
 )
+from studymate.application.operator.preference_history import ReadOperatorPreferenceHistory
 from studymate.application.operator.profile_history import ReadOperatorProfileHistory
 from studymate.application.operator.profile_reports import (
     ReadOperatorProfileReport,
     SearchOperatorProfileReports,
+)
+from studymate.application.operator.report_triage import (
+    EnqueueReportTriage,
+    ReadReportTriage,
+    ReadReportTriageContext,
 )
 from studymate.application.operator.request_disclosures import ReadOperatorRequestDisclosures
 from studymate.application.operator.timeline import (
@@ -145,6 +152,7 @@ from studymate.application.operator.timeline import (
     ReadOperatorEvent,
     SearchOperatorEvents,
 )
+from studymate.application.operator.visibility_history import ReadOperatorVisibilityHistory
 from studymate.application.policy_history.read import ReadPolicyHistory
 from studymate.application.profiles.basics import ReadOwnProfile, SaveOwnProfile
 from studymate.application.profiles.goals import CompleteOwnGoal, ReadOwnGoal, SaveOwnGoal
@@ -281,6 +289,12 @@ from studymate.infrastructure.operator.audit_search_cursors import FernetOperato
 from studymate.infrastructure.operator.audit_search_transactions import (
     SqlOperatorAuditSearchUnitOfWork,
 )
+from studymate.infrastructure.operator.block_history_cursors import (
+    FernetOperatorBlockHistoryCursorCodec,
+)
+from studymate.infrastructure.operator.block_history_transactions import (
+    SqlOperatorBlockHistoryUnitOfWork,
+)
 from studymate.infrastructure.operator.chat_image_cursors import FernetOperatorChatImageCursorCodec
 from studymate.infrastructure.operator.chat_image_transactions import SqlOperatorChatImageUnitOfWork
 from studymate.infrastructure.operator.chat_media_transactions import SqlOperatorChatMediaUnitOfWork
@@ -325,6 +339,12 @@ from studymate.infrastructure.operator.photo_cursors import FernetOperatorPhotoC
 from studymate.infrastructure.operator.photo_review_owner import SqlOwnPhotoReviewUnitOfWork
 from studymate.infrastructure.operator.photo_review_transactions import SqlPhotoReviewUnitOfWork
 from studymate.infrastructure.operator.photo_transactions import SqlOperatorPhotoUnitOfWork
+from studymate.infrastructure.operator.preference_history_cursors import (
+    FernetOperatorPreferenceHistoryCursorCodec,
+)
+from studymate.infrastructure.operator.preference_history_transactions import (
+    SqlOperatorPreferenceHistoryUnitOfWork,
+)
 from studymate.infrastructure.operator.profile_history_cursors import (
     FernetOperatorProfileHistoryCursorCodec,
 )
@@ -333,11 +353,22 @@ from studymate.infrastructure.operator.profile_history_transactions import (
 )
 from studymate.infrastructure.operator.report_cursors import FernetOperatorReportCursorCodec
 from studymate.infrastructure.operator.report_transactions import SqlOperatorReportUnitOfWork
+from studymate.infrastructure.operator.report_triage_cursors import FernetReportTriageSourceCodec
+from studymate.infrastructure.operator.report_triage_guard import SqlReportTriageSourceGuard
+from studymate.infrastructure.operator.report_triage_transactions import (
+    SqlOperatorReportTriageUnitOfWork,
+)
 from studymate.infrastructure.operator.request_cursors import FernetOperatorRequestCursorCodec
 from studymate.infrastructure.operator.request_transactions import SqlOperatorRequestUnitOfWork
 from studymate.infrastructure.operator.timeline_cursors import FernetOperatorEventCursorCodec
 from studymate.infrastructure.operator.timeline_transactions import SqlOperatorTimelineUnitOfWork
 from studymate.infrastructure.operator.transactions import SqlOperatorUnitOfWork
+from studymate.infrastructure.operator.visibility_history_cursors import (
+    FernetOperatorVisibilityHistoryCursorCodec,
+)
+from studymate.infrastructure.operator.visibility_history_transactions import (
+    SqlOperatorVisibilityHistoryUnitOfWork,
+)
 from studymate.infrastructure.persistence.block_list import SqlOwnBlocksUnitOfWork
 from studymate.infrastructure.persistence.blocks import SqlBlockUnitOfWork
 from studymate.infrastructure.persistence.catalogue_search import SqlCatalogueUnitOfWork
@@ -375,6 +406,7 @@ from studymate.infrastructure.persistence.product_events import (
     record_peer_feedback,
     record_photo_review_event,
     record_report_review_event,
+    record_report_triage_submission,
     record_request_outcome,
     record_request_viewed,
     record_study_outcome,
@@ -455,6 +487,10 @@ from studymate.presentation.operator.audit_search_router import (
     OperatorAuditSearchHttpServices,
     operator_audit_search_router,
 )
+from studymate.presentation.operator.block_history_router import (
+    OperatorBlockHistoryHttpServices,
+    operator_block_history_router,
+)
 from studymate.presentation.operator.chat_image_router import (
     OperatorChatImageHttpServices,
     operator_chat_image_router,
@@ -508,6 +544,10 @@ from studymate.presentation.operator.photo_router import (
     OperatorPhotoHttpServices,
     operator_photo_router,
 )
+from studymate.presentation.operator.preference_history_router import (
+    OperatorPreferenceHistoryHttpServices,
+    operator_preference_history_router,
+)
 from studymate.presentation.operator.profile_history_router import (
     OperatorProfileHistoryHttpServices,
     operator_profile_history_router,
@@ -515,6 +555,10 @@ from studymate.presentation.operator.profile_history_router import (
 from studymate.presentation.operator.report_router import (
     OperatorReportHttpServices,
     operator_report_router,
+)
+from studymate.presentation.operator.report_triage_router import (
+    OperatorReportTriageHttpServices,
+    operator_report_triage_router,
 )
 from studymate.presentation.operator.request_router import (
     OperatorRequestHttpServices,
@@ -524,6 +568,10 @@ from studymate.presentation.operator.router import OperatorHttpServices, operato
 from studymate.presentation.operator.timeline_router import (
     OperatorTimelineHttpServices,
     operator_timeline_router,
+)
+from studymate.presentation.operator.visibility_history_router import (
+    OperatorVisibilityHistoryHttpServices,
+    operator_visibility_history_router,
 )
 from studymate.presentation.people import PeopleServices, people_router
 from studymate.presentation.policy_history.router import policy_history_router
@@ -1146,21 +1194,28 @@ def _ai_router(
         sessions, AdmissionPolicy(request_budget_seconds=ai.request_budget_seconds)
     )
     hasher = Sha256SessionHasher()
-    return ai_router(
-        AiHttpServices(
-            SubmitStudentJob(
-                uow,
-                hasher,
-                HmacIntentFingerprinter(bytes.fromhex(configuration.code_key.get_secret_value())),
-                versions=None,
-            ),
-            ReadStudentJob(uow, hasher),
-            CancelStudentJob(uow, hasher),
-            auth_services.signer,
-            auth_services.browser,
-            retry_after_seconds=ai.retry_after_seconds,
+    router = APIRouter()
+    router.include_router(
+        ai_router(
+            AiHttpServices(
+                SubmitStudentJob(
+                    uow,
+                    hasher,
+                    HmacIntentFingerprinter(
+                        bytes.fromhex(configuration.code_key.get_secret_value())
+                    ),
+                    versions=None,
+                ),
+                ReadStudentJob(uow, hasher),
+                CancelStudentJob(uow, hasher),
+                auth_services.signer,
+                auth_services.browser,
+                retry_after_seconds=ai.retry_after_seconds,
+            )
         )
     )
+    router.include_router(_report_triage_router(configuration, ai, sessions, auth_services))
+    return router
 
 
 def _people_router(
@@ -1517,6 +1572,33 @@ def _operator_routers(
     support_inbox = SqlOperatorSupportInboxUnitOfWork(sessions, record_operator_audit)
     support_cursor = FernetOperatorSupportInboxCursorCodec.from_key(key)
     return (
+        operator_block_history_router(
+            OperatorBlockHistoryHttpServices(
+                ReadOperatorBlockHistory(
+                    SqlOperatorBlockHistoryUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    FernetOperatorBlockHistoryCursorCodec.from_key(key),
+                ),
+            )
+        ),
+        operator_preference_history_router(
+            OperatorPreferenceHistoryHttpServices(
+                ReadOperatorPreferenceHistory(
+                    SqlOperatorPreferenceHistoryUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    FernetOperatorPreferenceHistoryCursorCodec.from_key(key),
+                ),
+            )
+        ),
+        operator_visibility_history_router(
+            OperatorVisibilityHistoryHttpServices(
+                ReadOperatorVisibilityHistory(
+                    SqlOperatorVisibilityHistoryUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    FernetOperatorVisibilityHistoryCursorCodec.from_key(key),
+                ),
+            )
+        ),
         operator_router(
             OperatorHttpServices(
                 SearchOperatorAccounts(unit, hasher, fingerprinter, cursor),
@@ -1772,6 +1854,7 @@ async def run_ai_worker(configuration: AiWorkerSettings, stop: asyncio.Event) ->
                 runtime_configuration,
                 tracer=telemetry.tracer_provider.get_tracer("studymate.ai") if telemetry else None,
                 meter=telemetry.meter_provider.get_meter("studymate.ai") if telemetry else None,
+                reports=SqlReportTriageSourceGuard(),
             )
             await runtime.run(stop)
     finally:
@@ -1968,4 +2051,33 @@ def _human_review_routers(
                 auth_services.browser,
             )
         ),
+    )
+
+
+def _report_triage_router(
+    configuration: AuthenticationConfiguration,
+    ai: AiHttpConfiguration,
+    sessions: async_sessionmaker[AsyncSession],
+    auth_services: AuthenticationServices,
+) -> APIRouter:
+    # SAME dedicated admission pool2 and bounded deadline as student AI; never the core pool.
+    policy = AdmissionPolicy(request_budget_seconds=ai.request_budget_seconds)
+    unit = SqlOperatorReportTriageUnitOfWork(
+        sessions, record_operator_audit, record_report_triage_submission, policy
+    )
+    hasher = Sha256SessionHasher()
+    codec = FernetReportTriageSourceCodec.from_key(
+        bytes.fromhex(configuration.envelope_key.get_secret_value())
+    )
+    fingerprinter = HmacIntentFingerprinter(
+        bytes.fromhex(configuration.code_key.get_secret_value())
+    )
+    return operator_report_triage_router(
+        OperatorReportTriageHttpServices(
+            ReadReportTriageContext(unit, hasher, codec),
+            EnqueueReportTriage(unit, hasher, fingerprinter, codec),
+            ReadReportTriage(unit, hasher),
+            auth_services.signer,
+            auth_services.browser,
+        )
     )

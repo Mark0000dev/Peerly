@@ -21,6 +21,9 @@ class AiJobRecord(Base):
     __tablename__ = "ai_jobs"
     __table_args__ = (
         UniqueConstraint("id", "actor_id", "kind", name="uq_ai_jobs_owner_kind"),
+        UniqueConstraint(
+            "id", "actor_id", "kind", "source_id", "source_version", name="uq_ai_jobs_triage_source"
+        ),
         UniqueConstraint("id", "token", "generation", name="uq_ai_jobs_lease"),
         CheckConstraint(
             "request_id IS NOT NULL OR (action_id IS NULL "
@@ -160,6 +163,11 @@ class AiSlotRecord(Base):
             name="runtime_shape",
         ),
         CheckConstraint(
+            "runtime_report_guard_version IS NULL OR (runtime_report_guard_version=1 AND "
+            "runtime_worker_id IS NOT NULL AND runtime_state IN ('starting','ready','blocked'))",
+            name="runtime_report_guard",
+        ),
+        CheckConstraint(
             "runtime_worker_id IS NULL OR (runtime_heartbeat_at>=runtime_started_at AND runti"
             "me_valid_until=runtime_heartbeat_at+interval '15 seconds')",
             name="runtime_clock",
@@ -189,6 +197,7 @@ class AiSlotRecord(Base):
     runtime_prompt: Mapped[str | None] = mapped_column(String(100))
     runtime_schema: Mapped[str | None] = mapped_column(String(100))
     runtime_adapter: Mapped[str | None] = mapped_column(String(100))
+    runtime_report_guard_version: Mapped[int | None] = mapped_column()
 
 
 class AiAttemptRecord(Base):

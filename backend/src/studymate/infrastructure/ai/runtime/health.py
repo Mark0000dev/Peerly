@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from studymate.infrastructure.ai.queue import SqlAiQueue
 
 
+REPORT_GUARD_VERSION = 1
+
+
 class RuntimeOwnershipError(Exception):
     """A predecessor or uncertain physical execution requires external recovery."""
 
@@ -25,6 +28,14 @@ class SqlRuntimeHealth:
     sessions: async_sessionmaker[AsyncSession]
     worker_id: UUID
     versions: Versions
+    report_guard_version: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.report_guard_version is not None and (
+            type(self.report_guard_version) is not int
+            or self.report_guard_version != REPORT_GUARD_VERSION
+        ):
+            raise ValueError("Report guard capability must be absent or version1")
 
     async def register(self) -> None:
         async with open_transaction(self.sessions) as session:
@@ -47,6 +58,7 @@ class SqlRuntimeHealth:
             slot.runtime_prompt = self.versions.prompt
             slot.runtime_schema = self.versions.schema
             slot.runtime_adapter = self.versions.adapter
+            slot.runtime_report_guard_version = self.report_guard_version
 
     async def heartbeat(self, *, ready: bool = False) -> None:
         async with open_transaction(self.sessions) as session:
@@ -97,3 +109,4 @@ class SqlRuntimeHealth:
             slot.runtime_prompt = None
             slot.runtime_schema = None
             slot.runtime_adapter = None
+            slot.runtime_report_guard_version = None

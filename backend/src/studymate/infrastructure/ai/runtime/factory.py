@@ -42,7 +42,11 @@ from studymate.infrastructure.ai.runtime.diagnostics import (
     AiRuntimeDiagnostic,
     AiRuntimePhase,
 )
-from studymate.infrastructure.ai.runtime.health import RuntimeOwnershipError, SqlRuntimeHealth
+from studymate.infrastructure.ai.runtime.health import (
+    REPORT_GUARD_VERSION,
+    RuntimeOwnershipError,
+    SqlRuntimeHealth,
+)
 from studymate.infrastructure.ai.runtime.launch import PinnedProcessPolicy
 from studymate.infrastructure.ai.runtime.policy import DEFAULT_MAX_PROCESSES, require_max_processes
 from studymate.infrastructure.ai.runtime.preflight import PinnedCli
@@ -52,6 +56,8 @@ from studymate.infrastructure.ai.telemetry import AiQueueSignals, ObservedAiQueu
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
+
+    from studymate.infrastructure.ai.queue import TrustedReportSource
 
 
 def _record_failure(phase: AiRuntimePhase, error: BaseException, *, primary: bool) -> None:
@@ -280,13 +286,14 @@ class AiWorkerRuntime:
                 self._active = False
 
 
-def create_ai_worker_runtime(
+def create_ai_worker_runtime(  # noqa: PLR0913 - explicit composition resources/ports, no option bag.
     sessions: async_sessionmaker[AsyncSession],
     storage: MediaStorage,
     configuration: AiRuntimeConfiguration,
     *,
     tracer: Tracer | None = None,
     meter: Meter | None = None,
+    reports: "TrustedReportSource | None" = None,
 ) -> AiWorkerRuntime:
     """Main supplies dedicated pool1/overflow0 and owns engine/storage disposal."""
     cli = PinnedCli(
@@ -322,8 +329,13 @@ def create_ai_worker_runtime(
         PinnedProcessPolicy(cli, configuration.max_processes),
     )
     worker_id = uuid4()
-    queue = SqlAiQueue(sessions, worker_id=worker_id)
-    health = SqlRuntimeHealth(sessions, worker_id, Versions(configuration.model))
+    queue = SqlAiQueue(sessions, reports=reports, worker_id=worker_id)
+    health = SqlRuntimeHealth(
+        sessions,
+        worker_id,
+        Versions(configuration.model),
+        report_guard_version=REPORT_GUARD_VERSION if reports is not None else None,
+    )
     step: Callable[[], Coroutine[object, object, bool]] = ExecuteNextJob(queue, executor)
     if tracer is not None or meter is not None:
         step = ObservedAiStep(ExecuteNextJob(ObservedAiQueue(queue), executor), tracer, meter)

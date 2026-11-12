@@ -1,8 +1,8 @@
 .PHONY: check lint typecheck architecture test test-unit test-integration run run-media-worker run-requests-worker run-changes-worker run-ai-worker run-external-delivery-worker
 check: lint typecheck architecture test
 lint:
-	uv run ruff check --config pyproject.toml . ../deployment/backend/manual_stage_verification.py ../deployment/backend/provision_bootstrap.py ../deployment/backend/operator_access.py
-	uv run ruff format --check --config pyproject.toml . ../deployment/backend/manual_stage_verification.py ../deployment/backend/provision_bootstrap.py ../deployment/backend/operator_access.py
+	uv run ruff check --config pyproject.toml . ../deployment/backend
+	uv run ruff format --check --config pyproject.toml . ../deployment/backend
 typecheck:
 	uv run mypy
 architecture:

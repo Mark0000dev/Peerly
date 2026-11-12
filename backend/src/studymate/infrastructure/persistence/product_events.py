@@ -22,6 +22,7 @@ from studymate.domain.onboarding import OnboardingActivation, ProfileLifecycle
 from studymate.domain.operator.audit import OperatorAudit
 from studymate.domain.operator.membership_verification import ManualMembershipVerification
 from studymate.domain.operator.photo_review import PhotoReviewRevision
+from studymate.domain.operator.report_triage import ReportTriageSubmission
 from studymate.domain.profiles import ProfileRevision
 from studymate.domain.relationships import BlockRevision
 from studymate.domain.report_moderation.reviews import ReportReviewRevision
@@ -738,6 +739,36 @@ async def record_photo_review_event(session: AsyncSession, source: PhotoReviewRe
             photo_review_id=source.id,
             photo_review_version=source.version,
             photo_review_action=source.action.value,
+            request_id=source.origin.http_request_id,
+            action_id=source.origin.action_id,
+            trace_id=source.origin.trace_id,
+            span_id=source.origin.span_id,
+        ),
+        foreground=False,
+        capture_origin=False,
+    )
+
+
+async def record_report_triage_submission(
+    session: AsyncSession, source: ReportTriageSubmission
+) -> None:
+    """0060 producer, unmounted until source/job/canonical metadata is integrated.
+
+    Advisory job admission is an actual privileged mutation, never an inspection,
+    student foreground activity, automatic report decision or evidence-content log.
+    """
+    await _append(
+        session,
+        ProductEventRecord(
+            id=source.event_id,
+            account_id=source.operator.account_id,
+            kind="triage.submitted",
+            schema_version=1,
+            occurrence_key=source.occurrence_key,
+            occurred_at=source.submitted_at,
+            triage_job_id=source.job_id,
+            triage_report_id=source.report_id,
+            triage_source_version=source.source_version,
             request_id=source.origin.http_request_id,
             action_id=source.origin.action_id,
             trace_id=source.origin.trace_id,

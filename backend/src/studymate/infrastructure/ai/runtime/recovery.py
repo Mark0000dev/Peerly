@@ -112,3 +112,4 @@ async def recover_stopped_predecessor(
         slot.runtime_prompt = None
         slot.runtime_schema = None
         slot.runtime_adapter = None
+        slot.runtime_report_guard_version = None

@@ -20,6 +20,7 @@ from studymate.infrastructure.persistence.base import Base
 class MessageReportContextRecord(Base):
     __tablename__ = "message_report_contexts"
     __table_args__ = (
+        UniqueConstraint("id", "viewer_id", "target_id", name="uq_message_report_triage_evidence"),
         UniqueConstraint("id", "viewer_id", name="uq_message_report_context_owner"),
         ForeignKeyConstraint(
             ["conversation_id", "low_id", "high_id"],

@@ -414,6 +414,21 @@ HUMAN_REVIEW_EVENT_REFERENCE_SHAPE = (
 EVENT_REFERENCE_SHAPE = HUMAN_REVIEW_EVENT_REFERENCE_SHAPE
 
 
+BEFORE_REPORT_TRIAGE_EVENT_REFERENCE_SHAPE = EVENT_REFERENCE_SHAPE
+_REPORT_TRIAGE_COLUMNS = ("triage_job_id", "triage_report_id", "triage_source_version")
+_REPORT_TRIAGE_EMPTY_REFERENCES = " AND ".join(
+    f"{column} IS NULL" for column in (*_HUMAN_REVIEW_LEGACY_COLUMNS, *_HUMAN_REVIEW_COLUMNS)
+)
+EVENT_REFERENCE_SHAPE = (
+    f"(({BEFORE_REPORT_TRIAGE_EVENT_REFERENCE_SHAPE}) AND "
+    + " AND ".join(f"{column} IS NULL" for column in _REPORT_TRIAGE_COLUMNS)
+    + ") OR (kind='triage.submitted' AND triage_job_id IS NOT NULL "
+    "AND triage_report_id IS NOT NULL AND triage_source_version IS NOT NULL "
+    "AND triage_source_version>0 AND "
+    f"{_REPORT_TRIAGE_EMPTY_REFERENCES})"
+)
+
+
 class ProductEventRecord(Base):
     __tablename__ = "product_events"
     __table_args__ = (
@@ -660,6 +675,18 @@ class ProductEventRecord(Base):
             name="fk_product_events_photo_review_source",
             use_alter=True,
         ),
+        ForeignKeyConstraint(
+            ["triage_job_id", "triage_report_id", "triage_source_version", "account_id"],
+            [
+                "report_triage_submissions.job_id",
+                "report_triage_submissions.report_id",
+                "report_triage_submissions.source_version",
+                "report_triage_submissions.operator_id",
+            ],
+            ondelete="RESTRICT",
+            use_alter=True,
+            name="fk_product_events_triage_submission",
+        ),
         CheckConstraint("schema_version = 1", name="known_schema_version"),
         CheckConstraint("occurrence_key ~ '^[A-Za-z0-9:_-]{1,100}$'", name="occurrence_key_shape"),
         CheckConstraint(EVENT_REFERENCE_SHAPE, name="event_reference_shape"),
@@ -680,6 +707,9 @@ class ProductEventRecord(Base):
     )
     id: Mapped[UUID] = mapped_column(primary_key=True)
     account_id: Mapped[UUID] = mapped_column(ForeignKey("accounts.id", ondelete="RESTRICT"))
+    triage_job_id: Mapped[UUID | None] = mapped_column()
+    triage_report_id: Mapped[UUID | None] = mapped_column()
+    triage_source_version: Mapped[int | None] = mapped_column()
     report_review_id: Mapped[UUID | None] = mapped_column()
     report_review_report_id: Mapped[UUID | None] = mapped_column()
     report_review_version: Mapped[int | None] = mapped_column()

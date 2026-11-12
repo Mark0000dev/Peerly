@@ -16,9 +16,11 @@ from studymate import bootstrap
 from studymate.application.media.storage import MediaStorage
 from studymate.config import AiWorkerRuntimeConfiguration, AiWorkerSettings, MediaConfiguration
 from studymate.infrastructure.ai.runtime.factory import AiWorkerRuntime
+from studymate.infrastructure.ai.runtime.health import REPORT_GUARD_VERSION
 from studymate.infrastructure.ai.telemetry import ObservedAiStep
 from studymate.infrastructure.observability.runtime import TelemetryRuntime
 from studymate.infrastructure.observability.tracing import OtelHttpTracing
+from studymate.infrastructure.operator.report_triage_guard import SqlReportTriageSourceGuard
 from tests.integration.media_fixture import Storage
 from tests.unit.ai.runtime.test_factory import configuration
 
@@ -82,6 +84,8 @@ async def test_worker_root_owns_optional_signals_and_shutdown_on_runtime_failure
 
     async def run(runtime: AiWorkerRuntime, actual_stop: asyncio.Event) -> None:
         assert actual_stop is stop
+        assert isinstance(runtime.queue.reports, SqlReportTriageSourceGuard)
+        assert runtime.health.report_guard_version == REPORT_GUARD_VERSION
         assert isinstance(runtime.supervisor.step, ObservedAiStep) is enabled
         assert (runtime.signals is not None) is enabled
         if enabled:

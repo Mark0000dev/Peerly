@@ -15,7 +15,10 @@ from studymate.infrastructure.operator.models import (
     OperatorAccessRevisionRecord,
     OperatorAuditRecord,
 )
-from studymate.infrastructure.operator.review_event_targets import review_event_targets
+from studymate.infrastructure.operator.review_event_targets import (
+    block_event_targets,
+    review_event_targets,
+)
 from studymate.infrastructure.operator.timeline_values import audit_value, event_value
 from studymate.infrastructure.operator.transactions import (
     OperatorAuditRecorder,
@@ -40,6 +43,7 @@ class SqlOperatorTimelineTransaction(SqlOperatorTransaction):
                     ProductEventRecord.account_id == filters.subject_account_id,
                     ProductEventRecord.lifecycle_account_id == filters.subject_account_id,
                     review_event_targets(filters.subject_account_id),
+                    block_event_targets(filters.subject_account_id),
                 )
             )
         if filters.http_request_id is not None:

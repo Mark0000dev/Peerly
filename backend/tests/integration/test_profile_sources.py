@@ -95,8 +95,10 @@ async def test_bulk_sources_have_constant_select_count_and_empty_scope_performs_
                     session, tuple(owner.id for owner in owners[:size])
                 )
                 assert len(result) == size
+            # Human review adds one bounded latest-decision query, never one per account.
+            assert sum("FROM operator_photo_review_revisions" in sql for sql in statements) == 1
             counts.append(len(statements))
-        expected_select_count = 5
+        expected_select_count = 6
         assert counts[0] == counts[1] == expected_select_count
         statements.clear()
         async with async_sessionmaker(identity_engine)() as session:

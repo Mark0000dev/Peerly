@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from sqlalchemy import SQLColumnExpression, func, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -28,7 +29,7 @@ async def read_photo_replacement_accounts(
     latest = (
         select(OperatorPhotoReviewRecord.account_id, OperatorPhotoReviewRecord.action)
         .where(OperatorPhotoReviewRecord.account_id.in_(account_ids))
-        .distinct(OperatorPhotoReviewRecord.account_id)
+        .ext(distinct_on(OperatorPhotoReviewRecord.account_id))
         .order_by(OperatorPhotoReviewRecord.account_id, OperatorPhotoReviewRecord.version.desc())
         .subquery()
     )

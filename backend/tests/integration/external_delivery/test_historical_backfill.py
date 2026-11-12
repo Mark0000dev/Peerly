@@ -3,7 +3,7 @@
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from studymate.application.external_delivery.maintenance import SeedUmamiBackfill
@@ -19,7 +19,7 @@ from studymate.infrastructure.external_delivery.models import (
     ExternalDeliveryRecord,
 )
 from studymate.infrastructure.external_delivery.source_reads import SelectedSourceLoader
-from studymate.infrastructure.persistence.product_event_models import ProductEventRecord
+from studymate.infrastructure.persistence.base import Base
 from tests.integration.migrations import migrate
 from tests.integration.student_actor import actor
 
@@ -35,8 +35,8 @@ async def test_explicit_history_backfill_preserves_manual_truth_and_never_routes
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     identifier = uuid4()
     async with sessions.begin() as session:
-        session.add(
-            ProductEventRecord(
+        await session.execute(
+            insert(Base.metadata.tables["product_events"]).values(
                 id=identifier,
                 account_id=owner.id,
                 kind="auth.email_confirmed",

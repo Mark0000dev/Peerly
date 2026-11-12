@@ -3,8 +3,10 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from studymate.infrastructure.ai.runtime.preflight import PinnedCli
+if TYPE_CHECKING:
+    from studymate.infrastructure.ai.runtime.preflight import PinnedCli
 
 INSPECTED_VERSION = "codex-cli 0.167.0"
 INSPECTED_SHA256 = "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda"
@@ -76,7 +78,7 @@ class InspectionPolicy:
         ):
             raise ValueError("Dedicated namespace job and private child auth paths required")
 
-    def overrides(self, cli: PinnedCli) -> tuple[str, ...]:
+    def overrides(self, cli: "PinnedCli") -> tuple[str, ...]:
         if cli.version != INSPECTED_VERSION or cli.sha256 != INSPECTED_SHA256:
             raise ValueError("This inspection policy was not reviewed for that CLI identity")
         filesystem = (
