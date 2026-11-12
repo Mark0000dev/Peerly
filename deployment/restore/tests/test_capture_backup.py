@@ -10,12 +10,13 @@ from pathlib import Path
 
 import pytest
 from deployment.restore import capture_backup as capture
-from deployment.restore.accept_restore import REQUIRED, load
+from deployment.restore.accept_restore import MAX_JSON, REQUIRED, digest, load
 
 PRIVATE = "SYNTHETIC_PRIVATE_PASSWORD_MUST_NOT_ESCAPE"
 SNAPSHOT = "00000001-00000001-1"
 RENDITIONS = 2
 EXPORTER_CALL = 3
+CATALOG_CALL = 6
 PRIVATE_DIRECTORY_MODE = 0o700
 FAKE_NATIVE = r"""
 import json, os, pathlib, sys, time
@@ -53,6 +54,12 @@ if config.get('hang')==mode:
     time.sleep(30)
 if config.get('slow')==mode:time.sleep(0.12)
 if config.get('failure')==mode:sys.exit(12)
+if mode=='catalog':
+    assert 'READ ONLY' in text and 'CREATE FUNCTION' not in text
+    assert "SET TRANSACTION SNAPSHOT '00000001-00000001-1';" in text
+    print(json.dumps(config['catalog']))
+    event('catalog_finished')
+    sys.exit(0)
 if mode=='dump':
     sys.stdout.buffer.write(b'PGDMPsynthetic_archive_not_a_real_backup')
 else:
@@ -135,6 +142,13 @@ class StandIn:
         self.config: dict[str, object] = {
             "identity": metadata(self.request),
             "baseline": fixture_data(),
+            "catalog": {
+                "format": 2,
+                "database": self.request.database,
+                "heads": [self.request.head],
+                "invalid_indexes": 0,
+                "entries": [{"kind": "schema", "schema": "public", "name": "", "sha256": "a" * 64}],
+            },
         }
         self.environments: list[dict[str, str]] = []
         self.processes: list[asyncio.subprocess.Process] = []
@@ -165,7 +179,7 @@ class StandIn:
         elif len(self.environments) == EXPORTER_CALL:
             mode, extra = "exporter", ()
         else:
-            mode, extra = "baseline", ()
+            mode, extra = ("catalog" if len(self.environments) == CATALOG_CALL else "baseline"), ()
         assert binary == self.binary
         process = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -194,7 +208,7 @@ class StandIn:
         assert all(process.returncode is not None for process in self.processes)
 
 
-@pytest.mark.parametrize("slow", ["dump", "baseline"])
+@pytest.mark.parametrize("slow", ["dump", "baseline", "catalog"])
 async def test_both_children_finish_before_snapshot_release_and_private_publication(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -210,6 +224,7 @@ async def test_both_children_finish_before_snapshot_release_and_private_publicat
     events = (tmp_path / "events").read_text().splitlines()
     assert events.index("released") > events.index("dump_finished")
     assert events.index("released") > events.index("baseline_finished")
+    assert events.index("released") > events.index("catalog_finished")
     output = scenario.request.destination
     receipt = load(output / "complete.json")
     assert receipt["database_capture_complete"] is True
@@ -217,7 +232,10 @@ async def test_both_children_finish_before_snapshot_release_and_private_publicat
     assert receipt["media_capture_complete"] is False
     assert receipt["full_restore_proven"] is False
     assert load(output / "baseline.json") == fixture_data()
-    for name in ("source.dump", "baseline.json", "complete.json"):
+    assert receipt["source_catalog_sql_sha256"] == capture.CATALOG_SQL_SHA256
+    assert receipt["source_catalog_snapshot"] == SNAPSHOT
+    assert receipt["source_catalog_sha256"] == digest(output / "source-catalog.json", MAX_JSON)
+    for name in ("source.dump", "baseline.json", "source-catalog.json", "complete.json"):
         assert stat.S_IMODE((output / name).stat().st_mode) == capture.PRIVATE_FILE_MODE
     assert stat.S_IMODE(output.stat().st_mode) == PRIVATE_DIRECTORY_MODE
     for env in scenario.environments:
@@ -230,7 +248,7 @@ async def test_both_children_finish_before_snapshot_release_and_private_publicat
     assert list(output.glob("*.part")) == []
 
 
-@pytest.mark.parametrize("failure", ["dump", "baseline"])
+@pytest.mark.parametrize("failure", ["dump", "baseline", "catalog"])
 async def test_partial_native_failure_reaps_peers_and_never_publishes_success(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -455,7 +473,7 @@ def test_durability_failure_removes_own_completion_marker(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    for name in ("source.dump", "baseline.json", "complete.json"):
+    for name in ("source.dump", "baseline.json", "source-catalog.json", "complete.json"):
         capture.save(tmp_path / (name + ".part"), b"synthetic")
     original = os.fsync
     calls = 0
@@ -549,3 +567,41 @@ async def test_available_pinned_cluster_id_is_read_and_verified(
     assert source["system_identifier"] == "12345"
     assert source["cluster_identifier_verified"] is True
     assert source["identity_limitations"] == []
+
+
+@pytest.mark.parametrize("snapshot", ["wrong", "00000001-00000001-1';SELECT secret;--"])
+def test_catalog_snapshot_injection_rejected(snapshot: str) -> None:
+    with pytest.raises(capture.CaptureError, match="catalog_sql_or_snapshot_pin"):
+        capture.catalog_sql(Path(capture.__file__).with_name("recovery_catalog.sql"), snapshot)
+
+
+def test_catalog_sql_exact_pin(tmp_path: Path) -> None:
+    source = Path(capture.__file__).with_name("recovery_catalog.sql")
+    changed = tmp_path / "changed.sql"
+    changed.write_bytes(source.read_bytes() + b"\n")
+    with pytest.raises(capture.CaptureError, match="catalog_sql_or_snapshot_pin"):
+        capture.catalog_sql(changed, SNAPSHOT)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"database": "wrong_source"},
+        {"heads": ["0059_wrong"]},
+        {"invalid_indexes": 1},
+    ],
+)
+async def test_bad_catalog_never_completes_capture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    changes: dict[str, object],
+) -> None:
+    scenario = StandIn(tmp_path, monkeypatch)
+    value = scenario.config["catalog"]
+    assert isinstance(value, dict)
+    value.update(changes)
+    with pytest.raises(ValueError, match=r"catalog_source_identity|recovery_catalog"):
+        await scenario.run()
+    assert not (scenario.request.destination / "complete.json").exists()
+    assert not (scenario.request.destination / "source-catalog.json").exists()
+    assert all(process.returncode is not None for process in scenario.processes)

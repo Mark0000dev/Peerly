@@ -8,7 +8,8 @@ application recovery and RPO/RTO require separate restore acceptance.
 ## Install and configure
 
 Install the `deployment/backup` package and its `deployment/restore` dependencies, including
-`capture_backup.py` and `acceptance.sql` under `/usr/local/lib/peerly-backup`. Use the
+`capture_backup.py`, `acceptance.sql`, `recovery_catalog.sql` and
+`recovery_checks.py` under `/usr/local/lib/peerly-backup`. Use the
 Python runtime required by those packages, PostgreSQL 16 client tools, and a
 root-owned, pinned rclone 1.76.0 binary. The runtime account must not be able to
 modify installed code or binaries. Create the dedicated `peerly-backup` account.

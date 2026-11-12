@@ -16,8 +16,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from deployment.restore.accept_restore import MAX_DUMP_BYTES, MAX_JSON, digest, inventory, unique
+from deployment.restore.recovery_checks import catalog
 
 SQL_SHA256 = "f4be591e5a15edde65eba095a09c4161925be5babe554a6b02539de3cbf38a64"
+CATALOG_SQL_SHA256 = "621fa7039207b1657f78948098afa9c9c279c066d02ff08d36d1d3f43ee710dc"
 PG_MAJOR = 16
 MAX_PORT = 65535
 PRIVATE_FILE_MODE = 0o600
@@ -473,7 +475,7 @@ def publish(directory: Path) -> None:
     descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
     completion_linked = False
     try:
-        for name in ("source.dump", "baseline.json"):
+        for name in ("source.dump", "baseline.json", "source-catalog.json"):
             os.link(directory / (name + ".part"), directory / name, follow_symlinks=False)
             (directory / (name + ".part")).unlink()
         os.fsync(descriptor)
@@ -545,6 +547,9 @@ async def capture_children(  # noqa: PLR0913 - explicit per-attempt resources an
     sql = await asyncio.to_thread(
         readonly_sql, Path(__file__).with_name("acceptance.sql"), snapshot
     )
+    catalog_query = await asyncio.to_thread(
+        catalog_sql, Path(__file__).with_name("recovery_catalog.sql"), snapshot
+    )
     dumper = await spawn(
         request.pg_dump,
         ("--no-password", "--format=custom", "--snapshot=" + snapshot),
@@ -561,13 +566,48 @@ async def capture_children(  # noqa: PLR0913 - explicit per-attempt resources an
     )
     processes.append(reader)
     await feed(reader, sql)
+    catalog_reader = await spawn(
+        request.psql,
+        ("--no-password", "-X", "-Atq", "--set=ON_ERROR_STOP=1"),
+        environment,
+        descriptors,
+    )
+    processes.append(catalog_reader)
+    await feed(catalog_reader, catalog_query)
     dump_task = asyncio.create_task(archive(dumper, request.destination / "source.dump.part"))
     baseline_task = asyncio.create_task(collect(reader, MAX_JSON))
-    tasks.extend((dump_task, baseline_task))
-    # Exporter remains open until BOTH consumers exited successfully.
-    _nothing, captured = await asyncio.gather(dump_task, baseline_task)
+    catalog_task = asyncio.create_task(collect(catalog_reader, MAX_JSON))
+    tasks.extend((dump_task, baseline_task, catalog_task))
+    # Retain one exported snapshot until ALL THREE native consumers exit zero.
+    _nothing, captured, captured_catalog = await asyncio.gather(
+        dump_task, baseline_task, catalog_task
+    )
     encoded = baseline(captured, request.head)
     await asyncio.to_thread(save, request.destination / "baseline.json.part", encoded)
+    encoded_catalog = catalog_bytes(captured_catalog, request)
+    await asyncio.to_thread(save, request.destination / "source-catalog.json.part", encoded_catalog)
+
+
+def catalog_sql(path: Path, snapshot: str) -> bytes:
+    if SNAPSHOT.fullmatch(snapshot) is None or digest(path, MAX_JSON) != CATALOG_SQL_SHA256:
+        raise CaptureError("catalog_sql_or_snapshot_pin")
+    text = path.read_text()
+    marker = "\\if :{?backup_snapshot}\nSET TRANSACTION SNAPSHOT :'backup_snapshot';\n\\endif"
+    if text.count(marker) != 1:
+        raise CaptureError("catalog_snapshot_seam")
+    return text.replace(marker, "SET TRANSACTION SNAPSHOT '" + snapshot + "';").encode()
+
+
+def catalog_bytes(raw: bytes, request: Request) -> bytes:
+    value: object = json.loads(raw, object_pairs_hook=unique)
+    if not isinstance(value, dict) or value.get("database") != request.database:
+        raise CaptureError("catalog_source_identity")
+    normalized = catalog(value, [request.head])
+    value["entries"] = [
+        {"kind": kind, "schema": schema, "name": name, "sha256": hashed}
+        for (kind, schema, name), hashed in sorted(normalized.items())
+    ]
+    return (json.dumps(value, sort_keys=True) + "\n").encode()
 
 
 def receipt_bytes(
@@ -589,6 +629,9 @@ def receipt_bytes(
         "acceptance_sql_sha256": SQL_SHA256,
         "source_dump_sha256": digest(request.destination / "source.dump.part", MAX_DUMP_BYTES),
         "baseline_sha256": digest(request.destination / "baseline.json.part", MAX_JSON),
+        "source_catalog_sha256": digest(request.destination / "source-catalog.json.part", MAX_JSON),
+        "source_catalog_sql_sha256": CATALOG_SQL_SHA256,
+        "source_catalog_snapshot": source["snapshot"],
         "media_capture_complete": False,
         "full_restore_proven": False,
     }
@@ -596,7 +639,12 @@ def receipt_bytes(
 
 
 def failed(directory: Path) -> None:
-    for name in ("source.dump.part", "baseline.json.part", "complete.json.part"):
+    for name in (
+        "source.dump.part",
+        "baseline.json.part",
+        "source-catalog.json.part",
+        "complete.json.part",
+    ):
         (directory / name).unlink(missing_ok=True)
     if not (directory / "complete.json").exists():
         save(directory / "failed.json", b'{"status":"failed","backup_complete":false}\n')
