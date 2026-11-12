@@ -35,6 +35,14 @@ STATES = ("pending", "retry", "dead")
 EXPECTED_COLUMNS = 9
 EXPECTED_QUERY_TIMEOUTS = frozenset({"57014", "55P03"})
 
+# Fixed settings are transaction-local, never retained by a returned pool connection.
+# One parameterized round trip leaves more of the same 250ms budget for observation.
+_SAMPLE_SETTINGS = select(
+    func.set_config("transaction_read_only", "on", True),
+    func.set_config("statement_timeout", "75ms", True),
+    func.set_config("lock_timeout", "25ms", True),
+)
+
 
 @dataclass(frozen=True, slots=True)
 class SinkQueueSnapshot:
@@ -162,9 +170,7 @@ class SqlDeliveryQueueReader:
         )
         try:
             async with open_transaction(self.sessions) as session:
-                await session.execute(text("SET TRANSACTION READ ONLY"))
-                await session.execute(text("SET LOCAL statement_timeout = '75ms'"))
-                await session.execute(text("SET LOCAL lock_timeout = '25ms'"))
+                await session.execute(_SAMPLE_SETTINGS)
                 result = await session.execute(statement)
                 rows: tuple[Sequence[object], ...] = tuple(tuple(row) for row in result)
             return decode(rows)
