@@ -51,7 +51,7 @@ disallow_any_unimported = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 # All public backend operational helpers use the same strict gate as application code.
-files = ["src", "tests", "migrations", "../deployment/backend"]
+files = ["src", "tests", "migrations", "../deployment/backend", "../deployment/load"]
 
 [tool.pytest.ini_options]
 # Keep ordinary make check independent of a caller-supplied PYTHONPATH.
