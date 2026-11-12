@@ -16,6 +16,15 @@ main {
     max(1.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
 }
 
+h1 {
+  margin: 0;
+  font: var(--tui-typography-heading-h4);
+}
+
+p {
+  margin: 0;
+}
+
 .account,
 footer {
   display: flex;
@@ -116,15 +125,6 @@ footer {
   flex-wrap: wrap;
   justify-content: center;
   gap: 1rem;
-}
-
-h1 {
-  margin: 0;
-  font: var(--tui-typography-heading-h4);
-}
-
-p {
-  margin: 0;
 }
 
 form {
