@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["node"], "allowImportingTsExtensions": true, "noEmit": true },
+  "include": [
+    "playwright.config.ts",
+    "testing/**/*.ts",
+    "testing/**/*.mts",
+    "src/**/*.visual.spec.ts"
+  ]
+}

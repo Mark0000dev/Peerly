@@ -1,0 +1,26 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+h3 {
+  font: var(--tui-typography-heading-h6);
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: var(--tui-height-m);
+}

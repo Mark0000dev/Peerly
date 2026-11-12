@@ -1,0 +1,313 @@
+@if (state().error; as error) {
+  <section role="alert">
+    <p>{{ error }}</p>
+    <button tuiButton type="button" (click)="reset()" aria-label="Reset academic filters">
+      Reset filters
+    </button>
+  </section>
+} @else if (tab() === 'goals') {
+  <section aria-label="Goal records">
+    <h2>Goals</h2>
+    <p>Stored goal roots. Open a root to inspect its revisions.</p>
+    <form [formGroup]="form" (ngSubmit)="apply()" aria-label="Goal filters">
+      <div>
+        <label tuiLabel for="operator-goal-state">State</label
+        ><tui-textfield
+          ><select
+            tuiSelect
+            id="operator-goal-state"
+            [items]="states"
+            [formControl]="form.controls.state"
+          ></select
+        ></tui-textfield>
+      </div>
+      <div>
+        <label tuiLabel for="operator-goal-from">Created from</label
+        ><tui-textfield
+          ><input
+            tuiInput
+            id="operator-goal-from"
+            [formControl]="form.controls.created_from"
+            aria-describedby="operator-goal-from-hint"
+        /></tui-textfield>
+        <p id="operator-goal-from-hint">ISO date and time with timezone, inclusive</p>
+      </div>
+      <div>
+        <label tuiLabel for="operator-goal-before">Created before</label
+        ><tui-textfield
+          ><input
+            tuiInput
+            id="operator-goal-before"
+            [formControl]="form.controls.created_before"
+            aria-describedby="operator-goal-before-hint"
+        /></tui-textfield>
+        <p id="operator-goal-before-hint">ISO date and time with timezone, exclusive</p>
+      </div>
+      @if (formError; as error) {
+        <p role="alert">{{ error }}</p>
+      }
+      <button tuiButton type="submit" aria-label="Apply filters">Apply</button>
+    </form>
+    <button tuiButton type="button" (click)="refresh('goals')" aria-label="Refresh goals">
+      Refresh
+    </button>
+    @if (goals.isPending || goals.isFetching) {
+      <p role="status">Loading goals…</p>
+    } @else if (goals.isError) {
+      <section role="alert">
+        <p>{{ errorText(goals.error) }}</p>
+        <button tuiButton type="button" (click)="refresh('goals')" aria-label="Retry goals">
+          Retry
+        </button>
+        @if (cursorError(goals.error)) {
+          <button
+            tuiButton
+            type="button"
+            (click)="page('goals_cursor', null)"
+            aria-label="First goals page"
+          >
+            First page
+          </button>
+        }
+      </section>
+    } @else if (goals.data; as data) {
+      <p>Newest by creation date; Refresh for newer records.</p>
+      <ul>
+        @for (goal of data.goals; track goal.id) {
+          <li>
+            <h3>Goal {{ goal.id }}</h3>
+            <dl>
+              <dt>Account ID</dt>
+              <dd>{{ goal.account_id }}</dd>
+              <dt>Current version</dt>
+              <dd>{{ goal.current_version }}</dd>
+              <dt>Created at</dt>
+              <dd>{{ goal.created_at }}</dd>
+              @if (goal.completed_at !== null) {
+                <dt>Completed at</dt>
+                <dd>{{ goal.completed_at }}</dd>
+              } @else {
+                <dt>State</dt>
+                <dd>Active</dd>
+              }
+            </dl>
+            <button
+              tuiButton
+              type="button"
+              (click)="openGoal(goal.id)"
+              [attr.aria-label]="'Inspect goal ' + goal.id"
+            >
+              Open
+            </button>
+          </li>
+        } @empty {
+          <li>No stored goals match these filters.</li>
+        }
+      </ul>
+      @if (data.next_cursor; as cursor) {
+        <button
+          tuiButton
+          type="button"
+          (click)="page('goals_cursor', cursor)"
+          aria-label="Next goals"
+        >
+          Next
+        </button>
+      }
+      @if (rootsPaged) {
+        <button
+          tuiButton
+          type="button"
+          (click)="page('goals_cursor', null)"
+          aria-label="First goals page"
+        >
+          First page
+        </button>
+      }
+    }
+  </section>
+  @if (state().goalId !== null) {
+    <section aria-label="Goal history">
+      <h2>Goal history</h2>
+      <button tuiButton type="button" (click)="closeGoal()" aria-label="Close goal history">
+        Close</button
+      ><button
+        tuiButton
+        type="button"
+        (click)="refresh('history')"
+        aria-label="Refresh goal history"
+      >
+        Refresh
+      </button>
+      @if (history.isPending || history.isFetching) {
+        <p role="status">Loading goal history…</p>
+      } @else if (history.isError) {
+        <section role="alert">
+          <p>{{ errorText(history.error) }}</p>
+          <button
+            tuiButton
+            type="button"
+            (click)="refresh('history')"
+            aria-label="Retry goal history"
+          >
+            Retry
+          </button>
+          @if (cursorError(history.error)) {
+            <button
+              tuiButton
+              type="button"
+              (click)="page('goal_cursor', null)"
+              aria-label="First goal history page"
+            >
+              First page
+            </button>
+          }
+        </section>
+      } @else if (history.data; as data) {
+        <p>Goal ID: {{ data.goal.id }}</p>
+        <ul>
+          @for (revision of data.revisions; track revision.version) {
+            <li>
+              <h3>Revision {{ revision.version }}</h3>
+              <dl>
+                <dt>Account ID</dt>
+                <dd>{{ revision.account_id }}</dd>
+                <dt>Saved at</dt>
+                <dd>{{ revision.saved_at }}</dd>
+                <dt>Stored subject label</dt>
+                <dd>{{ revision.subject_label }}</dd>
+                @if (revision.subject_id !== null) {
+                  <dt>Subject ID</dt>
+                  <dd>{{ revision.subject_id }}</dd>
+                }
+                @if (revision.topic !== null) {
+                  <dt>Topic</dt>
+                  <dd>{{ revision.topic }}</dd>
+                }
+                @if (revision.topic_match_key !== null) {
+                  <dt>Stored topic match key</dt>
+                  <dd>{{ revision.topic_match_key }}</dd>
+                }
+                @if (revision.context !== null) {
+                  <dt>Context</dt>
+                  <dd>{{ revision.context }}</dd>
+                }
+                <dt>Shared learning</dt>
+                <dd>{{ revision.shared_learning }}</dd>
+                @if (revision.completed_at !== null) {
+                  <dt>Completed at</dt>
+                  <dd>{{ revision.completed_at }}</dd>
+                }
+              </dl>
+            </li>
+          } @empty {
+            <li>No stored goal revisions on this page.</li>
+          }
+        </ul>
+        @if (data.next_cursor; as cursor) {
+          <button
+            tuiButton
+            type="button"
+            (click)="page('goal_cursor', cursor)"
+            aria-label="Older goal revisions"
+          >
+            Older
+          </button>
+        }
+        @if (historyPaged) {
+          <button
+            tuiButton
+            type="button"
+            (click)="page('goal_cursor', null)"
+            aria-label="First goal history page"
+          >
+            First page
+          </button>
+        }
+      }
+    </section>
+  }
+} @else {
+  <section aria-label="Help history">
+    <h2>Help subjects · saved history</h2>
+    <button tuiButton type="button" (click)="refresh('help')" aria-label="Refresh help history">
+      Refresh
+    </button>
+    @if (help.isPending || help.isFetching) {
+      <p role="status">Loading help history…</p>
+    } @else if (help.isError) {
+      <section role="alert">
+        <p>{{ errorText(help.error) }}</p>
+        <button tuiButton type="button" (click)="refresh('help')" aria-label="Retry help history">
+          Retry
+        </button>
+        @if (cursorError(help.error)) {
+          <button
+            tuiButton
+            type="button"
+            (click)="page('help_cursor', null)"
+            aria-label="First help history page"
+          >
+            First page
+          </button>
+        }
+      </section>
+    } @else if (help.data; as data) {
+      <p>Account ID: {{ data.account_id }}</p>
+      <ul>
+        @for (revision of data.revisions; track revision.version) {
+          <li>
+            <h3>Revision {{ revision.version }}</h3>
+            <p>Saved at: {{ revision.saved_at }}</p>
+            <ol>
+              @for (selection of revision.selections; track selection.slot) {
+                <li>
+                  <dl>
+                    <dt>Stored slot</dt>
+                    <dd>{{ selection.slot }}</dd>
+                    <dt>Stored subject label</dt>
+                    <dd>{{ selection.subject_label }}</dd>
+                    <dt>Subject ID</dt>
+                    <dd>{{ selection.subject_id }}</dd>
+                    @if (selection.topic_note !== null) {
+                      <dt>Topic note</dt>
+                      <dd>{{ selection.topic_note }}</dd>
+                    }
+                    @if (selection.topic_match_key !== null) {
+                      <dt>Stored topic match key</dt>
+                      <dd>{{ selection.topic_match_key }}</dd>
+                    }
+                  </dl>
+                </li>
+              } @empty {
+                <li>Stored clear · no subjects selected in this revision.</li>
+              }
+            </ol>
+          </li>
+        } @empty {
+          <li>No stored help revisions.</li>
+        }
+      </ul>
+      @if (data.next_cursor; as cursor) {
+        <button
+          tuiButton
+          type="button"
+          (click)="page('help_cursor', cursor)"
+          aria-label="Older help revisions"
+        >
+          Older
+        </button>
+      }
+      @if (helpPaged) {
+        <button
+          tuiButton
+          type="button"
+          (click)="page('help_cursor', null)"
+          aria-label="First help history page"
+        >
+          First page
+        </button>
+      }
+    }
+  </section>
+}

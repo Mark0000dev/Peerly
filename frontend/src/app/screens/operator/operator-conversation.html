@@ -1,0 +1,168 @@
+<main>
+  <header>
+    <a tuiLink routerLink="/">Peerly</a>
+    <h1>Operator · conversation</h1>
+    <p>Read only · every record inspection is recorded.</p>
+    <a tuiLink routerLink="/operator/accounts">Inspect accounts</a>
+  </header>
+  @if (session.isPending || session.isFetching) {
+    <p role="status">Checking your Google session…</p>
+  } @else if (session.isError) {
+    <section role="alert">
+      <h2>Your session could not be checked</h2>
+      <button tuiButton type="button" (click)="recheck()">Retry</button>
+    </section>
+  } @else if (actorId === null) {
+    <section>
+      <h2>Sign in with your operator Google account</h2>
+      <a tuiLink routerLink="/onboarding">Continue to sign in</a>
+    </section>
+  } @else if (denied) {
+    <section role="alert">
+      <h2>Operator access denied</h2>
+      <p>This account does not currently have access to these records.</p>
+      <button tuiButton type="button" (click)="recheck()" aria-label="Check operator access again">
+        Recheck
+      </button>
+    </section>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="open()" aria-label="Conversation selection">
+      <h2>Open retained conversation</h2>
+      <label tuiLabel for="conversation-id">Conversation ID</label>
+      <tui-textfield
+        ><input
+          tuiInput
+          id="conversation-id"
+          formControlName="conversation"
+          aria-describedby="conversation-hint"
+          autocomplete="off"
+      /></tui-textfield>
+      <p id="conversation-hint">Stored conversation UUID</p>
+      @if (formError; as error) {
+        <p role="alert">{{ error }}</p>
+      }
+      <button tuiButton type="submit" aria-label="Open retained conversation">Open</button>
+    </form>
+    @if (state.error; as error) {
+      <section role="alert">
+        <p>{{ error }}</p>
+        <button tuiButton type="button" (click)="page(null)">First page</button>
+      </section>
+    } @else if (state.id === null) {
+      <p>Select a stored conversation ID to inspect its retained messages.</p>
+    } @else if (messages.isPending || messages.isFetching) {
+      <p role="status">Loading retained messages…</p>
+    } @else if (messages.isError) {
+      <section role="alert">
+        <p>{{ errorText(messages.error) }}</p>
+        @if (cursorError(messages.error)) {
+          <button tuiButton type="button" (click)="page(null)">First page</button>
+        } @else {
+          <button tuiButton type="button" (click)="retry()">Retry</button>
+        }
+      </section>
+    } @else if (messages.data; as record) {
+      <section aria-label="Retained conversation">
+        <h2>Conversation record</h2>
+        <dl>
+          <div>
+            <dt>Conversation ID</dt>
+            <dd>{{ record.conversation_id }}</dd>
+          </div>
+          <div>
+            <dt>Relationship ID</dt>
+            <dd>{{ record.relationship_id }}</dd>
+          </div>
+          <div>
+            <dt>Request ID</dt>
+            <dd>{{ record.request_id }}</dd>
+          </div>
+          <div>
+            <dt>Accepted request version</dt>
+            <dd>{{ record.accepted_request_version }}</dd>
+          </div>
+          <div>
+            <dt>Participant · low ID</dt>
+            <dd>
+              <a
+                tuiLink
+                routerLink="/operator/accounts"
+                [queryParams]="{ account: record.low_id }"
+                >{{ record.low_id }}</a
+              >
+            </dd>
+          </div>
+          <div>
+            <dt>Participant · high ID</dt>
+            <dd>
+              <a
+                tuiLink
+                routerLink="/operator/accounts"
+                [queryParams]="{ account: record.high_id }"
+                >{{ record.high_id }}</a
+              >
+            </dd>
+          </div>
+          <div>
+            <dt>Page anchor sequence</dt>
+            <dd>{{ record.anchor_sequence }}</dd>
+          </div>
+        </dl>
+        <h2>Stored messages</h2>
+        <p>
+          Up to 50 messages per page, in source sequence order. Older pages keep the anchor; First
+          page refreshes newer records.
+        </p>
+        @if (record.messages.length === 0) {
+          <p>No retained messages on this page.</p>
+        }
+        <ol>
+          @for (message of record.messages; track message.message_id) {
+            <li>
+              <article [attr.aria-label]="'Message sequence ' + message.sequence">
+                <h3>Sequence {{ message.sequence }}</h3>
+                <p class="literal">{{ message.text }}</p>
+                <dl>
+                  <div>
+                    <dt>Author ID</dt>
+                    <dd>
+                      <a
+                        tuiLink
+                        routerLink="/operator/accounts"
+                        [queryParams]="{ account: message.author_id }"
+                        >{{ message.author_id }}</a
+                      >
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Message ID</dt>
+                    <dd>{{ message.message_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>Client message ID</dt>
+                    <dd>{{ message.client_message_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>Sent at</dt>
+                    <dd>{{ message.sent_at }}</dd>
+                  </div>
+                </dl>
+              </article>
+            </li>
+          }
+        </ol>
+        <div class="actions">
+          @if (record.next_cursor; as cursor) {
+            <button tuiButton type="button" (click)="page(cursor)" aria-label="Older message page">
+              Older
+            </button>
+          }
+          @if (state.cursor !== null) {
+            <button tuiButton type="button" (click)="page(null)">First page</button>
+          }
+          <button tuiButton type="button" (click)="retry()">Refresh</button>
+        </div>
+      </section>
+    }
+  }
+</main>

@@ -1,0 +1,76 @@
+@if (eligible) {
+  @if (!expanded()) {
+    <button tuiButton type="button" size="s" appearance="flat" (click)="begin()">
+      Report image
+    </button>
+  } @else {
+    <section aria-label="Report image">
+      <h3>Report image</h3>
+      @if (context.isPending) {
+        <p role="status">Opening report…</p>
+      }
+      @if (context.isError) {
+        <p role="alert">The report couldn’t be opened.</p>
+        <button tuiButton type="button" size="s" (click)="begin()">Retry opening report</button>
+      }
+      @if (submission.isSuccess) {
+        <p role="status">Report submitted. Thank you.</p>
+      } @else if (context.isSuccess) {
+        <form [formGroup]="form" (ngSubmit)="submit()">
+          <fieldset [disabled]="submission.isPending || submission.isError">
+            <legend>Why are you reporting this image?</legend>
+            @for (choice of choices; track choice[0]) {
+              <label class="reason"
+                ><input tuiRadio type="radio" formControlName="category" [value]="choice[0]" />{{
+                  choice[1]
+                }}</label
+              >
+            }
+            @if (form.controls.category.touched && form.controls.category.invalid) {
+              <p role="alert">Choose a reason.</p>
+            }
+            <tui-textfield>
+              <label tuiLabel [for]="commentId">Private explanation (required for Other)</label>
+              <textarea
+                tuiTextarea
+                [id]="commentId"
+                formControlName="comment"
+                [maxLength]="1000"
+              ></textarea>
+            </tui-textfield>
+            @if (
+              form.controls.category.value === 'other' &&
+              form.controls.comment.value.trim().length === 0 &&
+              form.controls.comment.touched
+            ) {
+              <p role="alert">Explain why you are reporting this image.</p>
+            }
+          </fieldset>
+          @if (uncertain) {
+            <p role="alert">The result is unknown. Retry the same report to check its outcome.</p>
+          }
+          @if (submission.isError && !uncertain) {
+            <p role="alert">
+              This report wasn’t accepted. Start a new report to review your submission.
+            </p>
+            <button tuiButton type="button" size="s" (click)="restart()">Start a new report</button>
+          } @else {
+            <button tuiButton type="submit" size="s" [disabled]="submission.isPending">
+              {{ uncertain ? 'Retry report' : 'Submit report' }}
+            </button>
+          }
+        </form>
+      }
+      <button
+        tuiButton
+        type="button"
+        size="s"
+        appearance="flat"
+        [disabled]="context.isPending || submission.isPending || uncertain"
+        (click)="close()"
+      >
+        Close report
+      </button>
+    </section>
+  }
+}

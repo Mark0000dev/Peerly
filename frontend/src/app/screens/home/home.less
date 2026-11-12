@@ -1,0 +1,170 @@
+:host {
+  display: block;
+  background: var(--tui-background-base-alt);
+  overflow-wrap: anywhere;
+}
+
+section {
+  max-inline-size: 90rem;
+  margin-inline: auto;
+  padding: 2rem max(1rem, env(safe-area-inset-left)) 2rem max(1rem, env(safe-area-inset-right));
+}
+
+.how,
+.safety {
+  background: var(--tui-background-base);
+}
+
+.hero,
+.safety {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 2rem;
+}
+
+.hero {
+  padding-block: 1rem 2.5rem;
+  gap: 1.25rem;
+  background: var(--tui-background-base-alt);
+}
+
+.hero-art,
+.safety-art {
+  max-inline-size: 100%;
+  block-size: auto;
+  justify-self: center;
+}
+
+.hero-art {
+  display: grid;
+  place-items: center;
+  inline-size: 100%;
+  min-block-size: 14rem;
+  background: var(--sp-surface-indigo);
+  border-radius: var(--tui-radius-xl);
+}
+
+h1 {
+  font: var(--tui-typography-heading-h3);
+  margin-block: 0.75rem 1.5rem;
+}
+
+h2 {
+  font: var(--tui-typography-heading-h4);
+  margin-block: 0.75rem 1.5rem;
+}
+
+h3 {
+  font: var(--tui-typography-heading-h6);
+  margin: 0;
+}
+
+.lead {
+  font: var(--tui-typography-body-l);
+  max-inline-size: 38rem;
+  margin-block-end: 1.5rem;
+  color: var(--tui-text-secondary);
+}
+
+.note {
+  font: var(--tui-typography-body-s);
+  max-inline-size: 36rem;
+  color: var(--tui-text-secondary);
+}
+
+.eyebrow {
+  font: var(--tui-typography-ui-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sp-text-sakura);
+}
+
+.cards {
+  display: grid;
+  gap: 1.25rem;
+}
+
+article {
+  min-inline-size: 0;
+  align-content: start;
+}
+
+article p {
+  margin: 0;
+  color: var(--tui-text-secondary);
+}
+
+.step {
+  inline-size: fit-content;
+}
+
+li {
+  margin-block: 1rem;
+}
+
+.closing {
+  box-sizing: border-box;
+  display: grid;
+  gap: 1rem;
+  inline-size: calc(100% - 2rem);
+  max-inline-size: 82rem;
+  margin: 2rem auto;
+  padding: 1.5rem;
+  border-radius: var(--tui-radius-xl);
+}
+
+.closing h2 {
+  margin: 0;
+}
+
+.closing a {
+  justify-self: start;
+}
+
+@media (width >= 48rem) {
+  section {
+    padding-block: 4rem;
+    padding-inline: 4rem;
+  }
+
+  .cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .hero,
+  .safety {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-art {
+    min-block-size: 22rem;
+  }
+
+  .hero {
+    gap: 2.5rem;
+    padding-block: 3rem 4.5rem;
+  }
+
+  h1 {
+    font: var(--tui-typography-heading-h1);
+  }
+
+  .closing {
+    margin-inline: auto;
+  }
+}
+
+.questions {
+  display: grid;
+  gap: 0.75rem;
+  max-inline-size: 52rem;
+  margin-inline: auto;
+}
+
+summary {
+  cursor: pointer;
+  font: var(--tui-typography-heading-h6);
+  padding-block: 0.5rem;
+}

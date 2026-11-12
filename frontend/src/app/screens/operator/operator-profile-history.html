@@ -1,0 +1,136 @@
+@if (!state().open) {
+  <button
+    tuiButton
+    type="button"
+    (click)="navigate(true)"
+    aria-label="Open retained profile history"
+  >
+    Profile history
+  </button>
+} @else {
+  <section aria-label="Retained profile history">
+    <h2>Retained profile history</h2>
+    <button
+      tuiButton
+      type="button"
+      (click)="navigate(false)"
+      aria-label="Close retained profile history"
+    >
+      Close
+    </button>
+    <p>
+      Stored revisions in version order. Historical text and language slots are preserved as
+      recorded.
+    </p>
+    @if (state().error; as error) {
+      <p role="alert">{{ error }}</p>
+      <button tuiButton type="button" (click)="navigate(true)">First page</button>
+    } @else if (history.isPending || history.isFetching) {
+      <p role="status">Loading profile history…</p>
+    } @else if (history.isError) {
+      <p role="alert">{{ errorText(history.error) }}</p>
+      @if (cursorError(history.error)) {
+        <button tuiButton type="button" (click)="navigate(true)">First page</button>
+      } @else {
+        <button tuiButton type="button" (click)="retry()">Retry history</button>
+      }
+    } @else if (history.data; as page) {
+      <p>Account ID {{ page.account_id }}</p>
+      <p>Page anchor version {{ page.anchor_version }}</p>
+      <ol>
+        @for (revision of page.revisions; track revision.version) {
+          <li>
+            <article [attr.aria-label]="'Profile revision ' + revision.version">
+              <h3>Version {{ revision.version }}</h3>
+              <dl>
+                <div>
+                  <dt>Account ID</dt>
+                  <dd>{{ revision.account_id }}</dd>
+                </div>
+                <div>
+                  <dt>Saved at</dt>
+                  <dd>{{ revision.saved_at }}</dd>
+                </div>
+                <div>
+                  <dt>Display name</dt>
+                  <dd>
+                    {{
+                      revision.display_name === null
+                        ? 'Not recorded'
+                        : revision.display_name === ''
+                          ? 'Empty string'
+                          : revision.display_name
+                    }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>About</dt>
+                  <dd>
+                    {{
+                      revision.about === null
+                        ? 'Not recorded'
+                        : revision.about === ''
+                          ? 'Empty string'
+                          : revision.about
+                    }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Programme</dt>
+                  <dd>
+                    {{
+                      revision.programme === null
+                        ? 'Not recorded'
+                        : revision.programme === ''
+                          ? 'Empty string'
+                          : revision.programme
+                    }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Year label</dt>
+                  <dd>
+                    {{
+                      revision.year_label === null
+                        ? 'Not recorded'
+                        : revision.year_label === ''
+                          ? 'Empty string'
+                          : revision.year_label
+                    }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Task</dt>
+                  <dd>{{ revision.task }}</dd>
+                </div>
+                <div>
+                  <dt>Stored languages · slot order</dt>
+                  <dd>
+                    <ol>
+                      @for (language of revision.languages; track $index) {
+                        <li>{{ language === '' ? 'Empty string' : language }}</li>
+                      } @empty {
+                        <li>No language slots recorded</li>
+                      }
+                    </ol>
+                  </dd>
+                </div>
+              </dl>
+            </article>
+          </li>
+        } @empty {
+          <li>No retained profile revisions on this page.</li>
+        }
+      </ol>
+      <div class="actions">
+        @if (page.next_cursor; as cursor) {
+          <button tuiButton type="button" (click)="navigate(true, cursor)">Older revisions</button>
+        }
+        @if (state().cursor !== null) {
+          <button tuiButton type="button" (click)="navigate(true)">First page</button>
+        }
+        <button tuiButton type="button" (click)="retry()">Refresh history</button>
+      </div>
+    }
+  </section>
+}

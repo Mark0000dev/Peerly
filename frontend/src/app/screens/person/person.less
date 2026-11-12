@@ -1,0 +1,115 @@
+:host {
+  display: block;
+}
+
+main {
+  max-inline-size: 32rem;
+  margin-inline: auto;
+  padding-block: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-bottom));
+  padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  display: grid;
+  gap: 1rem;
+  overflow-wrap: anywhere;
+}
+
+header,
+nav,
+form,
+fieldset,
+article,
+section {
+  display: grid;
+  gap: 1rem;
+}
+
+button,
+a {
+  max-inline-size: 100%;
+}
+
+fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-block-size: 2.75rem;
+}
+
+.photo {
+  min-block-size: 12rem;
+  display: grid;
+  place-items: center;
+}
+
+.photo img {
+  inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--tui-radius-m);
+}
+
+form,
+fieldset {
+  min-inline-size: 0;
+}
+
+h1,
+h2,
+h3,
+p,
+ul {
+  margin-block: 0;
+}
+
+section,
+[role='alert'] {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+form,
+section {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.profile-toolbar h1 {
+  font: inherit;
+}
+
+.profile-identity {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.profile-identity h2 {
+  font: var(--tui-typography-heading-h5);
+}
+
+.verification {
+  color: var(--tui-text-secondary);
+  font: var(--tui-typography-body-s);
+}
+
+.profile-card h3 {
+  font: var(--tui-typography-body-m);
+  font-weight: 600;
+}
+
+.profile-card section {
+  gap: 0.375rem;
+  font: var(--tui-typography-body-s);
+}
+
+.languages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-actions {
+  display: grid;
+  gap: 0.75rem;
+  padding-block: 0.5rem;
+}

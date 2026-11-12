@@ -1,0 +1,228 @@
+<section aria-label="Your profile">
+  @if (profile.isPending && !draftPresent) {
+    <tui-loader [loading]="true" textContent="Loading your profile…" role="status" />
+  } @else if (profile.isError && !cachedRefreshFailed && !draftPresent) {
+    <p role="alert">We couldn’t load your profile.</p>
+    <button tuiButton type="button" (click)="reload()">Try again</button>
+  } @else {
+    @if (profile.isFetching) {
+      <p role="status">Refreshing your profile…</p>
+    }
+    @if (cachedRefreshFailed) {
+      <p role="alert">We couldn’t refresh your profile. Your draft is still here.</p>
+      <button
+        tuiLink
+        type="button"
+        [disabled]="checking() || profile.isFetching"
+        (click)="refreshProfile()"
+      >
+        Retry profile refresh
+      </button>
+    }
+    @if (profile.isError && draftPresent && !cachedRefreshFailed) {
+      <p role="alert">We couldn’t refresh your profile. Your draft is still here.</p>
+      <button tuiLink type="button" [disabled]="checking()" (click)="refreshProfile()">
+        Retry profile refresh
+      </button>
+    }
+    <p>People see your name and photo when you send or receive a request.</p>
+    <peerly-photo-review [actor]="actor()" [checking]="checking()" (expired)="expired.emit()" />
+    @if (actor().capabilities.can_use_student_features && !detailsOpen()) {
+      <button
+        tuiButton
+        type="button"
+        appearance="secondary"
+        [disabled]="locked"
+        (click)="editDetails()"
+      >
+        Edit profile
+      </button>
+    }
+    @if (photoOpen()) {
+      <peerly-photo
+        [actor]="actor()"
+        [checking]="checking()"
+        [photoVersion]="profile.data?.photo?.version ?? 0"
+        [currentPhoto]="profile.data?.photo ?? null"
+        (refreshProfile)="refreshProfile()"
+        (expired)="expired.emit()"
+      />
+    } @else if (profile.data; as own) {
+      <div class="photo-choice">
+        @if (own.photo; as photo) {
+          <img
+            tuiAvatar
+            size="xxl"
+            [round]="true"
+            [src]="photo.display_url"
+            alt="Your current profile photo"
+          />
+        } @else {
+          <span
+            tuiAvatar="@tui.user"
+            size="xxl"
+            [round]="true"
+            appearance="sp-relevance"
+            role="img"
+            aria-label="No profile photo yet"
+          ></span>
+        }
+        <button
+          tuiButton
+          type="button"
+          appearance="secondary"
+          [disabled]="locked"
+          (click)="photoOpen.set(true)"
+        >
+          {{ own.photo === null ? 'Add photo' : 'Change photo' }}
+        </button>
+      </div>
+    }
+    <peerly-photo-assistance
+      [actor]="actor()"
+      [source]="adviceSource"
+      [sourceChecking]="checking() || !profile.isSuccess || profile.isFetching"
+      (chooseAnother)="chooseAnotherPhoto()"
+      (expired)="photoAdviceExpired($event)"
+    />
+    <form #profileForm="ngForm" [formGroup]="form" (ngSubmit)="save()">
+      <div class="field">
+        <label tuiLabel for="profile-name">Display name</label>
+        <tui-textfield>
+          <input
+            tuiInput
+            id="profile-name"
+            autocomplete="nickname"
+            [formControl]="name"
+            [readOnly]="locked"
+            aria-describedby="name-hint"
+            [attr.aria-invalid]="name.touched && name.invalid"
+          />
+        </tui-textfield>
+      </div>
+      <p id="name-hint">2 to 50 characters, any language or script.</p>
+      @if (profileForm.submitted && name.invalid) {
+        <p role="alert">Enter a display name between 2 and 50 characters.</p>
+      }
+      <p>University: APU</p>
+      @if (detailsOpen()) {
+        <div class="field">
+          <label tuiLabel for="profile-about">About · optional</label>
+          <tui-textfield>
+            <textarea
+              tuiTextarea
+              id="profile-about"
+              [formControl]="about"
+              [readOnly]="locked"
+              aria-describedby="profile-about-hint"
+              [attr.aria-invalid]="about.touched && about.invalid"
+            ></textarea>
+          </tui-textfield>
+          <p id="profile-about-hint">Up to 160 characters. Share how you like to learn or help.</p>
+          @if (about.touched && about.invalid) {
+            <p role="alert">Keep About to 160 characters.</p>
+          }
+        </div>
+        <div class="field">
+          <label tuiLabel for="profile-programme">Programme · optional</label>
+          <tui-textfield
+            ><input
+              tuiInput
+              id="profile-programme"
+              [formControl]="programme"
+              [readOnly]="locked"
+              aria-describedby="profile-programme-hint"
+              [attr.aria-invalid]="programme.touched && programme.invalid"
+          /></tui-textfield>
+          <p id="profile-programme-hint">Up to 80 characters.</p>
+          @if (programme.touched && programme.invalid) {
+            <p role="alert">Keep your programme to 80 characters.</p>
+          }
+        </div>
+        <div class="field">
+          <label tuiLabel for="profile-year">Year · optional</label>
+          <tui-textfield
+            ><input
+              tuiInput
+              id="profile-year"
+              [formControl]="year"
+              [readOnly]="locked"
+              aria-describedby="profile-year-hint"
+              [attr.aria-invalid]="year.touched && year.invalid"
+          /></tui-textfield>
+          <p id="profile-year-hint">Up to 32 characters, for example Year 2.</p>
+          @if (year.touched && year.invalid) {
+            <p role="alert">Keep your year to 32 characters.</p>
+          }
+        </div>
+        @if (reference.isPending) {
+          <p role="status">Loading language choices…</p>
+        } @else if (reference.isError) {
+          <p role="alert">We couldn’t load language choices. Your draft is still here.</p>
+          <button tuiLink type="button" (click)="retryReference()">Retry language choices</button>
+        }
+        <div class="field">
+          <label tuiLabel for="profile-languages">Languages · optional</label>
+          <tui-textfield multi tuiChevron [stringify]="languageLabel">
+            <input
+              tuiInputChip
+              tuiSelectLike
+              id="profile-languages"
+              [formControl]="languages"
+              [readOnly]="locked || !reference.isSuccess"
+              placeholder="Choose languages"
+              aria-describedby="profile-languages-hint"
+              [attr.aria-invalid]="languages.touched && languages.invalid"
+            />
+            <tui-input-chip *tuiItem />
+            <tui-data-list-wrapper *tuiDropdown tuiMultiSelectGroup [items]="languageOptions" />
+          </tui-textfield>
+          <p id="profile-languages-hint">
+            Choose up to {{ reference.data?.max_languages ?? 5 }} languages you speak.
+          </p>
+          @if (languages.touched && languages.invalid) {
+            <p role="alert">Choose distinct languages from the list, within the limit.</p>
+          }
+        </div>
+        <button
+          tuiLink
+          type="button"
+          [disabled]="locked || !profile.isSuccess || profile.isFetching"
+          (click)="cancelDetails()"
+        >
+          Cancel changes
+        </button>
+      }
+      <button
+        tuiButton
+        type="submit"
+        [disabled]="
+          checking() ||
+          saving.isPending ||
+          conflict ||
+          !profile.isSuccess ||
+          profile.isFetching ||
+          (detailsOpen() && !reference.isSuccess)
+        "
+      >
+        {{ saving.isPending ? 'Saving…' : uncertain ? 'Retry same save' : 'Save profile' }}
+      </button>
+    </form>
+    @if (message; as error) {
+      <p role="alert">{{ error }}</p>
+    }
+    @if (saving.isSuccess && !conflict) {
+      <p role="status">Profile saved.</p>
+    }
+    @if (saving.isError || remoteChanged) {
+      <button tuiLink type="button" (click)="reload()">Reload saved profile</button>
+    }
+  }
+</section>
+
+@if (actor().capabilities.can_use_student_features && profile.isSuccess && !detailsOpen()) {
+  <app-own-feedback-summary
+    [actorId]="actor().account_id"
+    (sessionFailure)="summaryFailure($event)"
+  />
+}

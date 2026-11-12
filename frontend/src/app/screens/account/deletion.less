@@ -1,0 +1,72 @@
+:host {
+  display: block;
+  background: var(--tui-background-base-alt);
+  overflow-wrap: anywhere;
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-block-size: 60dvh;
+  box-sizing: border-box;
+  max-inline-size: 32rem;
+  margin-inline: auto;
+  padding: max(1.5rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(1.5rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+tui-app-bar h1 {
+  font: inherit;
+  margin: 0;
+}
+
+h2 {
+  font: var(--tui-typography-heading-h6);
+  margin: 0;
+}
+
+p,
+ul {
+  margin: 0;
+}
+
+ul {
+  padding-inline-start: 1.25rem;
+}
+
+li + li {
+  margin-block-start: 0.5rem;
+}
+
+section {
+  min-inline-size: 0;
+  gap: 0.75rem;
+}
+
+.status-surface {
+  padding-block: 2rem;
+}
+
+.public-guidance {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+@media (width >= 48rem) {
+  .public-page {
+    max-inline-size: 64rem;
+  }
+
+  .public-guidance {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

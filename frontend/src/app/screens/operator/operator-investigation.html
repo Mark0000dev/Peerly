@@ -1,0 +1,369 @@
+<section aria-label="Investigation">
+  <h2>Canonical event investigation</h2>
+  <p>
+    Stored metadata only. This is not all telemetry, replay, commit order or proof that an absent
+    event never happened.
+  </p>
+  @if (!state().opened) {
+    <button
+      tuiButton
+      type="button"
+      (click)="navigate({ timeline: '1' })"
+      aria-label="Open canonical timeline"
+    >
+      Timeline
+    </button>
+  } @else {
+    <button
+      tuiButton
+      type="button"
+      (click)="navigate({ timeline: null, events_cursor: null })"
+      aria-label="Close canonical timeline"
+    >
+      Close
+    </button>
+    <form [formGroup]="form" (ngSubmit)="search()" aria-label="Event search">
+      <div class="filters">
+        @for (field of fields; track field.key) {
+          <div>
+            <label tuiLabel [for]="'event-' + field.key">{{ field.label }}</label>
+            <tui-textfield
+              ><input
+                tuiInput
+                [id]="'event-' + field.key"
+                [formControl]="form.controls[field.key]"
+                [attr.aria-describedby]="'event-hint-' + field.key"
+                autocomplete="off"
+            /></tui-textfield>
+            <p [id]="'event-hint-' + field.key">{{ field.hint }}</p>
+          </div>
+        }
+        <div>
+          <label tuiLabel for="event-kind">Kind</label>
+          <tui-textfield
+            ><select
+              tuiSelect
+              id="event-kind"
+              [items]="kinds"
+              [formControl]="form.controls.kind"
+            ></select
+          ></tui-textfield>
+        </div>
+      </div>
+      @if (formError; as error) {
+        <p role="alert">{{ error }}</p>
+      }
+      <button tuiButton type="submit" aria-label="Search canonical events">Search</button>
+    </form>
+  }
+  @if (state().error; as error) {
+    <p role="alert">{{ error }}</p>
+    <button
+      tuiButton
+      type="button"
+      (click)="navigate({ events_cursor: null, event: null, audit: null })"
+    >
+      Reset
+    </button>
+  } @else {
+    @if (state().opened) {
+      <section aria-label="Event results">
+        @if (events.isPending || events.isFetching) {
+          <p role="status">Loading events…</p>
+        } @else if (events.isError) {
+          <div role="alert">
+            <p>{{ errorText(events.error) }}</p>
+            <button tuiButton type="button" (click)="retry('list')" aria-label="Retry event search">
+              Retry
+            </button>
+            @if (cursorError(events.error)) {
+              <button tuiButton type="button" (click)="navigate({ events_cursor: null })">
+                First page
+              </button>
+            }
+          </div>
+        } @else if (events.data; as data) {
+          <p>Anchored search · up to 50 events per page. Refresh for newer records.</p>
+          <ul>
+            @for (event of data.events; track event.id) {
+              <li>
+                <h3>{{ event.kind }}</h3>
+                <p>{{ event.id }}</p>
+                <p>{{ event.occurred_at }}</p>
+                <p>Subject {{ event.subject_account_id }}</p>
+                <button
+                  tuiButton
+                  type="button"
+                  [attr.aria-label]="'Inspect event ' + event.id"
+                  (click)="navigate({ event: event.id, audit: null })"
+                >
+                  Open
+                </button>
+              </li>
+            } @empty {
+              <li>
+                No canonical events matched these filters. This does not prove that nothing
+                happened.
+              </li>
+            }
+          </ul>
+          @if (data.next_cursor; as cursor) {
+            <button
+              tuiButton
+              type="button"
+              (click)="navigate({ events_cursor: cursor, event: null, audit: null })"
+              aria-label="Next event page"
+            >
+              Next
+            </button>
+          }
+          @if (state().filters.cursor) {
+            <button
+              tuiButton
+              type="button"
+              (click)="navigate({ events_cursor: null, event: null, audit: null })"
+            >
+              First page
+            </button>
+          }
+          <button tuiButton type="button" (click)="retry('list')" aria-label="Refresh event page">
+            Refresh
+          </button>
+        }
+      </section>
+    }
+    @if (state().eventId) {
+      <section aria-label="Canonical event">
+        <h3>Event record</h3>
+        <button
+          tuiButton
+          type="button"
+          (click)="navigate({ event: null, audit: null })"
+          aria-label="Close event"
+        >
+          Close
+        </button>
+        @if (event.isPending || event.isFetching) {
+          <p role="status">Loading event…</p>
+        } @else if (event.isError) {
+          <div role="alert">
+            <p>{{ errorText(event.error) }}</p>
+            <button
+              tuiButton
+              type="button"
+              (click)="retry('event')"
+              aria-label="Retry event record"
+            >
+              Retry
+            </button>
+          </div>
+        } @else if (event.data; as data) {
+          <dl>
+            <div>
+              <dt>Event ID</dt>
+              <dd>{{ data.id }}</dd>
+            </div>
+            <div>
+              <dt>Kind</dt>
+              <dd>{{ data.kind }}</dd>
+            </div>
+            <div>
+              <dt>Occurred</dt>
+              <dd>{{ data.occurred_at }}</dd>
+            </div>
+            <div>
+              <dt>Subject</dt>
+              <dd>
+                <a
+                  tuiLink
+                  routerLink="/operator/accounts"
+                  [queryParams]="{ account: data.subject_account_id }"
+                  >{{ data.subject_account_id }}</a
+                >
+              </dd>
+            </div>
+            <div>
+              <dt>Initiator ID</dt>
+              <dd>{{ data.initiator_account_id ?? 'Not recorded' }}</dd>
+            </div>
+            <div>
+              <dt>Schema version</dt>
+              <dd>{{ data.schema_version ?? 1 }}</dd>
+            </div>
+          </dl>
+          <app-operator-origin [origin]="data.origin" />
+          <h4>Stored facts</h4>
+          <dl>
+            @for (row of factRows; track row[0]) {
+              <div>
+                <dt>{{ row[0] }}</dt>
+                <dd>{{ row[1] ?? 'Not recorded' }}</dd>
+              </div>
+            }
+          </dl>
+          <h4>Stored source references</h4>
+          <ul>
+            @for (source of data.sources; track source.kind + source.id) {
+              <li>
+                <dl>
+                  <div>
+                    <dt>Kind</dt>
+                    <dd>{{ source.kind }}</dd>
+                  </div>
+                  <div>
+                    <dt>ID</dt>
+                    <dd>{{ source.id }}</dd>
+                  </div>
+                  <div>
+                    <dt>Owner ID</dt>
+                    <dd>{{ source.owner_id ?? 'Not recorded' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Version</dt>
+                    <dd>{{ source.version ?? 'Not recorded' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Conversation ID</dt>
+                    <dd>{{ source.conversation_id ?? 'Not recorded' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Related account ID</dt>
+                    <dd>{{ source.related_account_id ?? 'Not recorded' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Operator access version</dt>
+                    <dd>{{ source.operator_access_version ?? 'Not recorded' }}</dd>
+                  </div>
+                </dl>
+                @if (source.kind === 'operator_audit') {
+                  <button
+                    tuiButton
+                    type="button"
+                    [attr.aria-label]="'Inspect audit ' + source.id"
+                    (click)="navigate({ audit: source.id })"
+                  >
+                    Audit
+                  </button>
+                } @else if (source.kind === 'account') {
+                  <a tuiLink routerLink="/operator/accounts" [queryParams]="{ account: source.id }"
+                    >Inspect account</a
+                  >
+                } @else if (source.kind === 'profile_report') {
+                  <button
+                    tuiButton
+                    type="button"
+                    [attr.aria-label]="'Inspect source report ' + source.id"
+                    (click)="navigate({ report: source.id })"
+                  >
+                    Report
+                  </button>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
+    @if (state().auditId) {
+      <section aria-label="Access audit">
+        <h3>Recorded operator access</h3>
+        <button
+          tuiButton
+          type="button"
+          (click)="navigate({ audit: null })"
+          aria-label="Close audit"
+        >
+          Close
+        </button>
+        @if (!auditLinked) {
+          <p>
+            Open an event with this stored operator-audit source reference to inspect the audit.
+          </p>
+        } @else if (audit.isPending || audit.isFetching) {
+          <p role="status">Loading audit…</p>
+        } @else if (audit.isError) {
+          <div role="alert">
+            <p>{{ errorText(audit.error) }}</p>
+            <button
+              tuiButton
+              type="button"
+              (click)="retry('audit')"
+              aria-label="Retry access audit"
+            >
+              Retry
+            </button>
+          </div>
+        } @else if (audit.data; as data) {
+          <p>Inspection of this audit is itself recorded. Metadata contains no private content.</p>
+          <dl>
+            <div>
+              <dt>Audit ID</dt>
+              <dd>{{ data.id }}</dd>
+            </div>
+            <div>
+              <dt>Operator ID</dt>
+              <dd>{{ data.operator_id }}</dd>
+            </div>
+            <div>
+              <dt>Access version</dt>
+              <dd>{{ data.operator_access_version }}</dd>
+            </div>
+            <div>
+              <dt>Access changed</dt>
+              <dd>{{ data.operator_access_changed_at }}</dd>
+            </div>
+            <div>
+              <dt>Action</dt>
+              <dd>{{ data.action }}</dd>
+            </div>
+            <div>
+              <dt>Outcome</dt>
+              <dd>{{ data.outcome }}</dd>
+            </div>
+            <div>
+              <dt>Occurred</dt>
+              <dd>{{ data.occurred_at }}</dd>
+            </div>
+            <div>
+              <dt>Query fingerprint recorded</dt>
+              <dd>{{ data.query_fingerprinted ? 'Yes' : 'No' }}</dd>
+            </div>
+            <div>
+              <dt>Requested kind</dt>
+              <dd>{{ data.requested_kind ?? 'Not recorded' }}</dd>
+            </div>
+            <div>
+              <dt>Requested ID</dt>
+              <dd>{{ data.requested_id ?? 'Not recorded' }}</dd>
+            </div>
+            <div>
+              <dt>Media owner ID</dt>
+              <dd>{{ data.requested_media_owner_id ?? 'Not recorded' }}</dd>
+            </div>
+            <div>
+              <dt>Media attempt ID</dt>
+              <dd>{{ data.requested_media_attempt_id ?? 'Not recorded' }}</dd>
+            </div>
+            <div>
+              <dt>Media kind</dt>
+              <dd>{{ data.requested_media_kind ?? 'Not recorded' }}</dd>
+            </div>
+            <div>
+              <dt>Actual source upload ID</dt>
+              <dd>{{ data.actual_source_upload_id ?? 'Not recorded' }}</dd>
+            </div>
+          </dl>
+          <app-operator-origin [origin]="data.origin" />
+          <h4>Stored result references</h4>
+          <ul>
+            @for (result of data.results; track result.kind + result.id) {
+              <li>{{ result.kind }} · {{ result.id }}</li>
+            } @empty {
+              <li>No result references recorded.</li>
+            }
+          </ul>
+        }
+      </section>
+    }
+  }
+</section>

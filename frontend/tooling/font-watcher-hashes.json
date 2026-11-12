@@ -1,0 +1,22 @@
+{
+  "index.esm.js": {
+    "original": "89d441f15050fb47c1c0b2bf2ce5eae58f4a84f201579a770055b862c3199281",
+    "patched": "4d48aa37f6d589e9c4c157ea07041b2daf071e14c05abd5b8c49864f108bbcbf"
+  },
+  "index.cjs.js": {
+    "original": "830c6df250946ccafc4e7c6c9c8f79f92479b5cb117f1b1a4dd68d4206aad02b",
+    "patched": "b9a5424d590c21408fa01e3272d4249de7ab8bd1ab28515a0f6d84a5bfff7cbd"
+  },
+  "index.cjs.mjs": {
+    "original": "cc926d114da8d83b563cbd09a08ceb48c500dd3bdb0f91d5924c3af460f5c8c8",
+    "patched": "cc926d114da8d83b563cbd09a08ceb48c500dd3bdb0f91d5924c3af460f5c8c8"
+  },
+  "index.cjs.default.js": {
+    "original": "2295a3ae17c0d0a71b56159a5f00a19e49ac83f2e27bc00f4b1c595a5c813534",
+    "patched": "2295a3ae17c0d0a71b56159a5f00a19e49ac83f2e27bc00f4b1c595a5c813534"
+  },
+  "index.d.ts": {
+    "original": "ce202f44e9af19a3b835666c028b5f5b65e4dbf308ea46b00bbe2c17ab30b175",
+    "patched": "ce202f44e9af19a3b835666c028b5f5b65e4dbf308ea46b00bbe2c17ab30b175"
+  }
+}

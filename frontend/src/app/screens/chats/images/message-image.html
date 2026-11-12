@@ -1,0 +1,42 @@
+@if (url(); as source) {
+  <figure>
+    <img [src]="source" alt="Image shared in this conversation" (error)="imageFailed($event)" />
+    <figcaption>
+      <button tuiButton type="button" size="s" appearance="floating" (click)="show()">
+        View image
+      </button>
+    </figcaption>
+  </figure>
+} @else if (query.isPending || query.isFetching) {
+  <p role="status">Loading image…</p>
+}
+@if (query.isError || failed()) {
+  <p role="status">This image couldn’t be displayed.</p>
+  <button
+    tuiButton
+    type="button"
+    size="s"
+    appearance="secondary"
+    [disabled]="query.isFetching"
+    (click)="retry()"
+  >
+    Retry image
+  </button>
+}
+<ng-template [tuiPreviewDialog]="open()" (tuiPreviewDialogChange)="close()">
+  <tui-preview [rotatable]="false">
+    <tui-preview-title>
+      {{ authorLabel() }} ·
+      <time [attr.datetime]="message().sent_at">{{ absoluteChatTime(message().sent_at) }}</time>
+    </tui-preview-title>
+    <button tuiButton tuiPreviewAction type="button" (click)="close()">Close image</button>
+    @if (url(); as source) {
+      <img [src]="source" alt="Image shared in this conversation" (error)="imageFailed($event)" />
+    }
+  </tui-preview>
+</ng-template>
+<app-chat-image-report
+  [actorId]="actorId()"
+  [message]="message()"
+  (sessionFailure)="sessionFailed()"
+/>

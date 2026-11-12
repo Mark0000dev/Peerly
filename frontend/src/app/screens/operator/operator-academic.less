@@ -1,0 +1,55 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+section,
+form,
+li {
+  min-inline-size: 0;
+}
+
+section,
+form {
+  display: grid;
+  gap: 1rem;
+}
+
+form > div {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+}
+
+p,
+dd,
+h3 {
+  overflow-wrap: anywhere;
+}
+
+p {
+  margin-block: 0;
+}
+
+dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+dl {
+  display: grid;
+  gap: 0.5rem;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1.5rem;
+}
+
+ol {
+  padding-inline-start: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}

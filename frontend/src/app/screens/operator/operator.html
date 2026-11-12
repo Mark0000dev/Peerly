@@ -1,0 +1,237 @@
+<main>
+  <header>
+    <a tuiLink routerLink="/">Peerly</a>
+    <h1>Operator · accounts</h1>
+    <p>Privileged workspace · every search and record inspection is recorded.</p>
+    <p>Read only</p>
+  </header>
+  @if (session.isPending || session.isFetching) {
+    <p role="status">Checking your Google session…</p>
+  } @else if (resettingAcademicCursor()) {
+    <p role="status">Updating account view…</p>
+  } @else if (session.isError) {
+    <section role="alert">
+      <h2>Your session could not be checked</h2>
+      <button tuiButton type="button" (click)="recheck()">Try again</button>
+    </section>
+  } @else if (actor === null) {
+    <section>
+      <h2>Sign in with your operator Google account</h2>
+      <a tuiLink routerLink="/onboarding">Continue to sign in</a>
+    </section>
+  } @else if (denied) {
+    <section role="alert">
+      <h2>Operator access denied</h2>
+      <p>This account does not currently have access to these records.</p>
+      <button tuiButton type="button" (click)="recheck()">Check access again</button>
+    </section>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="search()" aria-label="Account search">
+      <h2>Find accounts</h2>
+      <div class="filters">
+        @for (field of fields; track field.key) {
+          <div>
+            <label tuiLabel [for]="'operator-' + field.key">{{ field.label }}</label>
+            <tui-textfield>
+              <input
+                tuiInput
+                [id]="'operator-' + field.key"
+                [formControl]="form.controls[field.key]"
+                [attr.aria-describedby]="'hint-' + field.key"
+                autocomplete="off"
+              />
+            </tui-textfield>
+            <p [id]="'hint-' + field.key">{{ field.hint }}</p>
+          </div>
+        }
+        <div>
+          <label tuiLabel for="operator-lifecycle">Lifecycle</label>
+          <tui-textfield
+            ><select
+              tuiSelect
+              id="operator-lifecycle"
+              [items]="lifecycles"
+              [formControl]="form.controls.lifecycle"
+            ></select
+          ></tui-textfield>
+        </div>
+        <div>
+          <label tuiLabel for="operator-hidden">Profile visibility</label>
+          <tui-textfield
+            ><select
+              tuiSelect
+              id="operator-hidden"
+              [items]="visibility"
+              [formControl]="form.controls.hidden"
+            ></select
+          ></tui-textfield>
+        </div>
+      </div>
+      @if (formError; as error) {
+        <p role="alert">{{ error }}</p>
+      }
+      <button tuiButton type="submit" aria-label="Search accounts">Search</button>
+    </form>
+    @if (urlError; as error) {
+      <section role="alert">
+        <p>{{ error }}</p>
+        <button tuiButton type="button" (click)="firstPage()">First page</button
+        ><button tuiButton type="button" (click)="close()" aria-label="Close account">Close</button>
+      </section>
+    } @else {
+      @if (searched) {
+        <section aria-label="Account results">
+          <h2>Accounts</h2>
+          @if (accounts.isPending || accounts.isFetching) {
+            <p role="status">Loading accounts…</p>
+          } @else if (accounts.isError) {
+            <section role="alert">
+              <p>{{ listError }}</p>
+              <button tuiButton type="button" (click)="retryList()">Retry search</button>
+              @if (cursorInvalid) {
+                <button tuiButton type="button" (click)="firstPage()">First page</button>
+              }
+            </section>
+          } @else if (accounts.data; as data) {
+            <ul>
+              @for (account of data.accounts; track account.account_id) {
+                <li>
+                  <h3>{{ account.display_name ?? account.account_id }}</h3>
+                  <p>{{ account.account_id }}</p>
+                  @if (account.membership; as membership) {
+                    <p>{{ membership.email }}</p>
+                  }
+                  @if (account.google_link; as google) {
+                    <p>Google subject: {{ google.subject }}</p>
+                  }
+                  <p>
+                    Created:
+                    <time [attr.datetime]="account.created_at">{{ account.created_at }}</time>
+                  </p>
+                  @if (account.banned_at !== null) {
+                    <p>
+                      Banned:
+                      <time [attr.datetime]="account.banned_at">{{ account.banned_at }}</time>
+                    </p>
+                  }
+                  @if (account.deleted_at !== null) {
+                    <p>
+                      Deleted:
+                      <time [attr.datetime]="account.deleted_at">{{ account.deleted_at }}</time>
+                    </p>
+                  }
+                  @if (account.hidden_at !== null) {
+                    <p>
+                      Hidden:
+                      <time [attr.datetime]="account.hidden_at">{{ account.hidden_at }}</time>
+                    </p>
+                  }
+                  <a
+                    tuiLink
+                    routerLink="/operator/accounts"
+                    [queryParams]="accountSelection(account.account_id)"
+                    queryParamsHandling="merge"
+                    [attr.aria-label]="'Inspect account ' + account.account_id"
+                    >Open account</a
+                  >
+                </li>
+              } @empty {
+                <li>No accounts match these filters.</li>
+              }
+            </ul>
+            @if (data.next_cursor; as cursor) {
+              <button tuiButton type="button" (click)="next(cursor)">Next results</button>
+            }
+            @if (accountsQueryIsPaged) {
+              <button tuiButton type="button" (click)="firstPage()">First page</button>
+            }
+          }
+        </section>
+      } @else {
+        <p>Submit a search or open an account link to inspect stored records.</p>
+      }
+      @if (selected !== null) {
+        <section aria-label="Selected account">
+          <button
+            tuiButton
+            appearance="flat"
+            type="button"
+            (click)="close()"
+            aria-label="Close account"
+          >
+            Close
+          </button>
+          <tui-tabs
+            vertical="start"
+            aria-orientation="vertical"
+            [activeItemIndex]="tabIndex"
+            (activeItemIndexChange)="changeTab($event)"
+            aria-label="Account records"
+            role="tablist"
+          >
+            <button
+              tuiTab
+              type="button"
+              role="tab"
+              id="operator-tab-overview"
+              aria-controls="operator-record-panel"
+              [attr.aria-selected]="tab === 'overview'"
+            >
+              Overview
+            </button>
+            <button
+              tuiTab
+              type="button"
+              role="tab"
+              id="operator-tab-goals"
+              aria-controls="operator-record-panel"
+              [attr.aria-selected]="tab === 'goals'"
+            >
+              Goals
+            </button>
+            <button
+              tuiTab
+              type="button"
+              role="tab"
+              id="operator-tab-help"
+              aria-controls="operator-record-panel"
+              [attr.aria-selected]="tab === 'help'"
+            >
+              Help
+            </button>
+          </tui-tabs>
+          <section
+            role="tabpanel"
+            id="operator-record-panel"
+            [attr.aria-labelledby]="'operator-tab-' + tab"
+          >
+            @if (tab !== 'overview') {
+              <app-operator-academic
+                [actorId]="actor.account_id"
+                [accountId]="selected"
+                [tab]="tab"
+                (authorityFailure)="privateChanged($event.error, $event.actorId)"
+              />
+            } @else {
+              @if (detail.isPending || detail.isFetching) {
+                <p role="status">Loading account…</p>
+              } @else if (detail.isError) {
+                <section role="alert">
+                  <p>{{ detailError }}</p>
+                  <button tuiButton type="button" (click)="retryDetail()">Retry account</button>
+                </section>
+              } @else if (detail.data; as record) {
+                <app-operator-overview [detail]="record" />
+              }
+              <app-operator-profile-history
+                [actorId]="actor.account_id"
+                [accountId]="selected"
+                (authorityFailure)="privateChanged($event.error, $event.actorId)"
+              />
+            }
+          </section>
+        </section>
+      }
+    }
+  }
+</main>

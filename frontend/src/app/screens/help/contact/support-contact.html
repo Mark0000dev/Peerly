@@ -1,0 +1,114 @@
+@if (embedded()) {
+  <section aria-labelledby="contact-support-title">
+    <h2 id="contact-support-title">Contact the team</h2>
+    <ng-container [ngTemplateOutlet]="content" />
+  </section>
+} @else {
+  <main>
+    <tui-app-bar size="m">
+      <a tuiAppBarBack tuiSlot="start" routerLink="/help" aria-label="Back to help">Back</a>
+      <h1>Access support</h1>
+    </tui-app-bar>
+    <ng-container [ngTemplateOutlet]="content" />
+  </main>
+}
+<ng-template #content>
+  <p>
+    A person on the team can look into your request. This doesn’t confirm, restore, move or change
+    your account by itself.
+  </p>
+  @if (!sessionReady) {
+    <p role="status">Checking your sign-in state. Sending is paused.</p>
+    <button tuiButton appearance="secondary" type="button" (click)="reloadIdentity()">
+      Check sign-in state
+    </button>
+  }
+  @if (result.data; as receipt) {
+    <section
+      tuiCardLarge="compact"
+      appearance="floating"
+      aria-label="Support receipt"
+      role="status"
+    >
+      <h2>Request received</h2>
+      <p>Reference: {{ receipt.case_id }}</p>
+      <p>This confirms receipt, not a reply or a resolution.</p>
+      <a tuiButton routerLink="/help/contact/status">Check request status</a>
+    </section>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="send()">
+      <fieldset [disabled]="locked || !sessionReady">
+        <legend>What’s happening?</legend>
+        @for (topic of topics; track topic.value) {
+          <label class="choice"
+            ><input tuiRadio type="radio" formControlName="topic" [value]="topic.value" />{{
+              topic.label
+            }}</label
+          >
+        }
+        <label for="support-reply">Where we can reply</label>
+        <tui-textfield
+          ><input
+            tuiInput
+            id="support-reply"
+            type="email"
+            autocomplete="email"
+            maxlength="254"
+            formControlName="reply"
+        /></tui-textfield>
+        <p>Required. Used for this request. You can use an address you can access.</p>
+        <label for="support-message">What’s happening?</label>
+        <tui-textfield>
+          <textarea
+            tuiTextarea
+            id="support-message"
+            maxlength="4000"
+            formControlName="message"
+          ></textarea>
+        </tui-textfield>
+        <label for="support-details">Details · optional</label>
+        <tui-textfield>
+          <textarea
+            tuiTextarea
+            id="support-details"
+            maxlength="2000"
+            formControlName="details"
+          ></textarea>
+        </tui-textfield>
+      </fieldset>
+      @if (attempted() && !valid) {
+        <p role="alert">
+          Choose a topic, enter a valid reply address and a message of up to 4,000 characters.
+          Optional details can contain up to 2,000 characters.
+        </p>
+      }
+      @if (!locked) {
+        <button tuiButton class="submit" type="submit" [disabled]="!sessionReady">
+          Send to the team
+        </button>
+      }
+    </form>
+    @if (busy) {
+      <p role="status">Sending your request…</p>
+    }
+    @if (result.isError) {
+      <p role="alert">{{ errorText }}</p>
+      @if (reference; as id) {
+        <p>Technical reference: {{ id }}</p>
+      }
+      <button tuiButton type="button" [disabled]="!sessionReady" (click)="retry()">
+        Retry identical request
+      </button>
+      @if (!uncertain) {
+        <button tuiButton appearance="secondary" type="button" (click)="edit()">
+          Edit request
+        </button>
+      }
+    }
+  }
+  <a tuiLink routerLink="/help/contact/status">Recent requests and status</a>
+  <p>
+    Your unsent text stays only in this open form. Leaving or reloading clears it. Don’t include
+    passwords or verification codes.
+  </p>
+</ng-template>

@@ -1,0 +1,25 @@
+# G01 / O03 goal and catalogue slice
+
+This is a real draft editor under verified onboarding entry, not completed onboarding/Discover/AI acceptance. It consumes actual generated own-goal/catalogue contracts. Request text/preview, AI clarification, help subjects, goal completion and final registration remain separate capabilities; no fake CTA or future endpoint.
+
+| Scenario                     | Behavior and named screenshots across all three projects                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Loading → saved goal         | Response gate; actual subject/topic hydrated only after own-goal GET                                                                                                     |
+| Canonical search/save/reload | Server aliases shown, explicit real option, closed canonical id payload, current goal id/version, shared preference and saved/reloaded value                             |
+| Custom subject               | Empty catalogue, explicit Other option, honest fewer/no matching note, subject-only new goal at version0; no implicit selection from typed text                          |
+| Uncertain save               | No auto retry, readonly draft, original key/body replay only after explicit action                                                                                       |
+| Stale revision               | Preserve draft, block overwrite, explicit reload adopts server value                                                                                                     |
+| Validation /320px/200%       | No write; missing subject and long topic/context; keyboard focus, all content/reflow. Submit-first messages prevent blur-time layout movement swallowing a pointer click |
+| Catalogue unavailable/retry  | Controlled first loading/error, safe error, no automatic retry/private title, real dropdown action restores options                                                      |
+| Catalogue next page/loading  | Exact opaque cursor, loading checkpoint, chosen subject preserved while options change                                                                                   |
+| Goal read unavailable/retry  | Safe initial failure and explicit retry                                                                                                                                  |
+| Retired subject              | Actual409 subject_unavailable copy; do not pretend goal revision changed                                                                                                 |
+| Save401                      | Real session boundary revalidation and no private goal draft in guest UI                                                                                                 |
+
+Unit tests include optional response discriminator defaults, missing/malformed DTO fields, alias metadata exclusion from writes, input cancellation, actual Taiga portal/option selection, actor replacement, exact idempotent retry, explicit server409 meanings and permission denial. Every browser case uses behavioral assertions and screenshot checkpoints. HTTP boundary checks supplement real FastAPI/PostgreSQL canonical alias/save/reload checks across all three projects; real custom version2 save/reload is also covered. Sequential all30 real integration scenarios passed ordinary comparison with no live provider calls. Browser reduced motion is enabled; real OS keyboard/native/device integration is still external.
+
+Options group their own label/aliases in a grid for mobile readability. The public Taiga emptyContent template prevents a false Nothing found fallback during explicit loading/failure; browser assertions cover both states.
+
+Layout fixes are ordinary minmax(0,1fr) grid tracks, with no clipping/internal Taiga overrides. Validation uses Angular FormGroupDirective.submitted (form-owned state), preventing context blur errors from inserting text between pointer-down/up. Tests dispatch actual native clicks/submits; no template-handler shortcut hides a missed form submission. This does not resolve the separate intermittent font-watcher ResizeObserver runtime gate.
+
+Adaptive catalogue loading/error/pagination snapshots use the actual viewport via the public Playwright fullPage:false option. A full-page Chromium capture can select a different native CSS anchor fallback while capturing beyond the viewport. Each popup capture asserts unchanged before/after geometry, full viewport containment and zero horizontal document overflow; after Escape, a separate full-page screenshot preserves all form content. No direction override, crop, mask, animation/style workaround or tolerance exception. Settled fonts and explicit response gates alone did not remove the observed difference. Finite6 update/normal/geometry runs pass; this is not a claim that the separate ResizeObserver issue is fixed.

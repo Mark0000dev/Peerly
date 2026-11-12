@@ -1,0 +1,153 @@
+:host {
+  display: block;
+}
+
+.chats {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-block-size: 100dvh;
+  gap: 1rem;
+  margin: auto;
+  max-inline-size: 90rem;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  overflow-wrap: anywhere;
+}
+
+header,
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+header {
+  justify-content: space-between;
+}
+
+.panes,
+.conversation-list,
+.thread {
+  display: grid;
+  min-inline-size: 0;
+  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.conversation-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.panes.selected .conversation-list {
+  display: none;
+}
+
+article,
+section {
+  min-inline-size: 0;
+}
+
+ol {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.message-text {
+  white-space: pre-wrap;
+}
+
+@media (width >= 60rem) {
+  .panes.selected {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+
+  .panes.selected .conversation-list {
+    display: flex;
+  }
+}
+
+.row-copy p {
+  margin-block: 0.25rem;
+  color: var(--tui-text-secondary);
+}
+
+.context-copy p {
+  margin-block: 0.25rem;
+}
+
+.panes {
+  flex: 1;
+  align-content: stretch;
+}
+
+.row-heading,
+.thread-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.row-heading {
+  justify-content: space-between;
+}
+
+tui-app-bar h1 {
+  font: inherit;
+  margin: 0;
+}
+
+.row-heading h2 {
+  font: var(--tui-typography-body-m);
+  font-weight: 600;
+  margin: 0;
+}
+
+.row-copy {
+  min-inline-size: 0;
+  flex: 1;
+  font: var(--tui-typography-body-s);
+}
+
+.thread-identity {
+  color: var(--tui-text-secondary);
+}
+
+.unread .message-text {
+  font-weight: 600;
+  color: var(--tui-text-primary);
+}
+
+.unread-count {
+  color: var(--tui-text-action);
+}
+
+.conversation-row {
+  align-items: start;
+  padding-block: 0.75rem;
+  border-block-end: 0.0625rem solid var(--tui-border-normal);
+}
+
+.accepted-context {
+  gap: 0.5rem;
+}
+
+.accepted-context h3 {
+  font: var(--tui-typography-body-m);
+  font-weight: 600;
+  margin: 0;
+}
+
+.context-copy {
+  font: var(--tui-typography-body-s);
+}
+
+.empty-chats {
+  flex: 1;
+}

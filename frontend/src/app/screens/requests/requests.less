@@ -1,0 +1,101 @@
+:host {
+  display: block;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-block-size: 100dvh;
+  gap: 1rem;
+  min-inline-size: 0;
+  max-inline-size: 36rem;
+  margin-inline: auto;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+
+header,
+nav,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+article,
+section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3,
+p,
+blockquote {
+  margin: 0;
+}
+
+tui-app-bar h1 {
+  font: inherit;
+}
+
+.request-boxes > button {
+  flex: 1 1 0;
+}
+
+.request-views {
+  font: var(--tui-typography-body-s);
+}
+
+.request-heading {
+  justify-content: space-between;
+}
+
+.request-heading h2 {
+  font: var(--tui-typography-body-m);
+  font-weight: 600;
+}
+
+.unread {
+  color: var(--tui-text-action);
+  font: var(--tui-typography-body-s);
+  font-weight: 600;
+}
+
+.request-reason {
+  font-weight: 600;
+}
+
+.request-state,
+.request-note {
+  color: var(--tui-text-secondary);
+  font: var(--tui-typography-body-s);
+}
+
+blockquote {
+  white-space: pre-wrap;
+  padding: 0.75rem;
+  border-inline-start: 0.125rem solid var(--tui-border-normal);
+  background: var(--tui-background-base-alt);
+  border-radius: var(--tui-radius-s);
+}
+
+.empty-state {
+  flex: 1;
+  padding-block: 2rem;
+}
+
+.request-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font: var(--tui-typography-body-s);
+  color: var(--tui-text-secondary);
+}

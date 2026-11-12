@@ -1,0 +1,164 @@
+@if (visible) {
+  <section aria-label="AI photo tips">
+    <p>
+      AI assistance · optional tips for your current saved photo. The photo is checked only when you
+      ask.
+    </p>
+    <button tuiButton type="button" appearance="flat" size="s" [disabled]="!canAsk" (click)="ask()">
+      Get photo tips
+    </button>
+    @if (!permitted) {
+      <p role="status">Photo tips need a current verified session. Your photo is unchanged.</p>
+    } @else if (sourceChecking()) {
+      <p role="status">
+        Checking your current saved photo… Existing tips are kept until this check finishes.
+      </p>
+      @if (knownJob) {
+        <div class="actions">
+          <button
+            tuiButton
+            type="button"
+            appearance="flat"
+            size="s"
+            [disabled]="cancelling"
+            (click)="check()"
+          >
+            Check photo tips job
+          </button>
+          <button
+            tuiButton
+            type="button"
+            appearance="flat"
+            size="s"
+            [disabled]="cancelling"
+            (click)="cancel()"
+          >
+            Cancel photo tips
+          </button>
+        </div>
+      }
+    } @else if (submitting) {
+      <p role="status">Requesting photo tips… Your photo choices are unchanged.</p>
+    } @else if (uncertain) {
+      <p role="status">{{ message }}</p>
+      <button tuiButton type="button" appearance="secondary" size="s" (click)="retry()">
+        Retry the same photo tips request
+      </button>
+    } @else if (changed) {
+      <p role="status">You have a different saved photo. This request was for the previous one.</p>
+      <div class="actions">
+        <button
+          tuiButton
+          type="button"
+          appearance="secondary"
+          size="s"
+          [disabled]="!readySource"
+          (click)="forCurrentPhoto()"
+        >
+          Get tips for this photo
+        </button>
+        <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+          Dismiss earlier tips
+        </button>
+      </div>
+    } @else if (admissionError !== null) {
+      <p role="status">{{ message }}</p>
+      <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+        Keep choosing myself
+      </button>
+    } @else if (hasRequest) {
+      @if (cancelling) {
+        <p role="status">Checking photo tips cancellation… Your photo is unchanged.</p>
+      } @else if (cancelFailed) {
+        <p role="status">Cancellation isn’t confirmed. Your photo choices are unchanged.</p>
+        <div class="actions">
+          <button tuiButton type="button" appearance="secondary" size="s" (click)="cancel()">
+            Retry photo tips cancellation
+          </button>
+          <button tuiButton type="button" appearance="flat" size="s" (click)="check()">
+            Check photo tips job
+          </button>
+          <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+            Keep choosing myself
+          </button>
+        </div>
+      } @else if (readFailed) {
+        <p role="status">We couldn’t check these photo tips. Your photo choices are unchanged.</p>
+        <button tuiButton type="button" appearance="secondary" size="s" (click)="check()">
+          Check photo tips again
+        </button>
+        <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+          Keep choosing myself
+        </button>
+      } @else if (checking) {
+        <p role="status">Checking your photo tips… Your photo is unchanged.</p>
+      } @else if (job; as current) {
+        @switch (current.state) {
+          @case ('queued') {
+            <p role="status">
+              AI photo tips · waiting. You can keep or change your photo as usual.
+            </p>
+          }
+          @case ('running') {
+            <p role="status">
+              AI assistance · looking at your saved photo. Your photo choices are unchanged.
+            </p>
+          }
+          @case ('cancelled') {
+            <p role="status">Photo tips cancelled. Your photo is unchanged.</p>
+          }
+          @case ('expired') {
+            <p role="status">
+              These photo tips expired. You can ask again or keep choosing yourself.
+            </p>
+          }
+          @case ('failed') {
+            <p role="status">
+              We couldn’t get photo tips. You can ask again or keep choosing yourself.
+            </p>
+          }
+          @case ('succeeded') {
+            <p>
+              Advice only. These tips do not decide whether a photo is accepted or must be replaced.
+            </p>
+            <ul>
+              @for (tip of tips; track tip) {
+                <li>{{ tip }}</li>
+              }
+            </ul>
+            <div class="actions">
+              <button tuiButton type="button" appearance="secondary" size="s" (click)="choose()">
+                Choose another photo
+              </button>
+              <button tuiButton type="button" appearance="secondary" size="s" (click)="dismiss()">
+                Keep this photo
+              </button>
+            </div>
+          }
+        }
+        @if (pendingJob) {
+          @if (pollingStopped) {
+            <p role="status">
+              Automatic checking has stopped. Check the job for its current outcome.
+            </p>
+            <button tuiButton type="button" appearance="flat" size="s" (click)="check()">
+              Check photo tips job
+            </button>
+          }
+          <button tuiButton type="button" appearance="flat" size="s" (click)="cancel()">
+            Cancel photo tips
+          </button>
+        } @else if (mayAskAgain) {
+          <div class="actions">
+            <button tuiButton type="button" appearance="secondary" size="s" (click)="askAgain()">
+              Ask for photo tips again
+            </button>
+            <button tuiButton type="button" appearance="flat" size="s" (click)="dismiss()">
+              Keep choosing myself
+            </button>
+          </div>
+        }
+      }
+    }
+  </section>
+}

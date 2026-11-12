@@ -1,0 +1,71 @@
+<section aria-label="Blocked people">
+  <p>
+    Unblocking allows future contact when both accounts are eligible. It does not send a request.
+  </p>
+  @if (checking()) {
+    <p role="status">Checking sign-in. Actions are paused.</p>
+  }
+  @if (result.isPending) {
+    <p role="status">Loading blocked people…</p>
+  }
+  @if (result.isError) {
+    <p role="alert">Blocked people could not be loaded.</p>
+  }
+  @if (result.data; as list) {
+    @if (list.people.length === 0) {
+      <p>No blocked people on this page.</p>
+    }
+    <ul>
+      @for (person of list.people; track person.block.person_id) {
+        <li tuiCell="m">
+          <span tuiAvatar="@tui.user" [round]="true" size="m" aria-hidden="true"></span>
+          <span class="person">{{
+            person.deleted ? 'Deleted account' : (person.display_name ?? 'Peerly student')
+          }}</span>
+          <button
+            tuiLink
+            type="button"
+            [disabled]="locked || action.isError || result.isFetching"
+            (click)="unblock(person)"
+          >
+            Unblock
+          </button>
+        </li>
+      }
+    </ul>
+    @if (list.next_cursor !== null) {
+      <button
+        tuiLink
+        type="button"
+        [disabled]="locked || action.isError || result.isFetching"
+        (click)="next()"
+      >
+        Next page
+      </button>
+    }
+    <button tuiLink type="button" [disabled]="locked || action.isError" (click)="first()">
+      First page
+    </button>
+  }
+  @if (action.isPending) {
+    <p role="status">Unblocking…</p>
+  }
+  @if (action.isSuccess) {
+    <p role="status">Person unblocked.</p>
+  }
+  @if (uncertain) {
+    <p role="alert">
+      We could not confirm unblocking. Retry the same action or reload the current list.
+    </p>
+    <button tuiButton type="button" [disabled]="locked" (click)="retry()">
+      Retry same unblock
+    </button>
+  } @else if (action.isError) {
+    <p role="alert">
+      Unblocking could not be completed. Reload the current list before trying again.
+    </p>
+  }
+  <button tuiLink type="button" [disabled]="locked" (click)="refresh()">
+    Reload blocked people
+  </button>
+</section>

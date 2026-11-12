@@ -1,0 +1,173 @@
+:host {
+  display: block;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-sizing: border-box;
+  min-block-size: 100dvh;
+  max-inline-size: 32rem;
+  margin-inline: auto;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+
+header,
+.context,
+.actions,
+.undo,
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+header h1 {
+  margin: 0;
+}
+
+article,
+section {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+article h2,
+article p {
+  margin: 0;
+}
+
+.actions > button {
+  flex: 1 1 auto;
+}
+
+.context p {
+  margin: 0;
+}
+
+.context-copy {
+  flex: 1 1 8rem;
+  min-inline-size: 0;
+  font: var(--tui-typography-body-s);
+}
+
+.context-caption {
+  color: var(--tui-text-secondary);
+}
+
+ul {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding-inline-start: 1rem;
+}
+
+li {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.mode-switch {
+  gap: 0.25rem;
+}
+
+.mode-switch > button {
+  flex: 1 1 auto;
+}
+
+.context {
+  padding: 0.75rem;
+  border-radius: var(--tui-radius-m);
+  background: var(--tui-background-base-alt);
+}
+
+.candidate-details {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.candidate-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.candidate-heading h2 {
+  font: var(--tui-typography-heading-h5);
+}
+
+.verification {
+  color: var(--tui-text-secondary);
+  font: var(--tui-typography-body-s);
+}
+
+.relevance {
+  font-weight: 600;
+}
+
+.reciprocal {
+  color: var(--tui-text-secondary);
+}
+
+.candidate-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-block-start: 0.0625rem solid var(--tui-border-normal);
+  padding-block-start: 0.5rem;
+}
+
+.passed-people {
+  list-style: none;
+  padding: 0;
+  gap: 0;
+}
+
+.passed-people > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding-block: 1rem;
+  border-block-end: 0.0625rem solid var(--tui-border-normal);
+}
+
+.passed-person {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1 1 100%;
+}
+
+.passed-person h2 {
+  margin: 0;
+  font: var(--tui-typography-heading-h6);
+}
+
+.passed-person p {
+  margin: 0;
+  color: var(--tui-text-secondary);
+}
+
+.empty-state {
+  flex: 1;
+  padding-block: 2rem;
+}
+
+.empty-state p {
+  max-inline-size: 32rem;
+}
+
+.empty-illustration img {
+  object-fit: contain;
+}
+
+.passed-context {
+  margin: 0;
+  color: var(--tui-text-secondary);
+  font: var(--tui-typography-body-s);
+}
