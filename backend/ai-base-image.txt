@@ -1,1 +1,1 @@
-ghcr.io/mark0000dev/peerly-backend@sha256:444d775cf7becf434a41cf29685bdc2f28497c26b3aa851ea20883961b89bc49
+ghcr.io/mark0000dev/peerly-backend@sha256:6b0ba9d3811ffe822d8c177424c3a65303bb4c3f5e5c7978c491b0fe3620788f
