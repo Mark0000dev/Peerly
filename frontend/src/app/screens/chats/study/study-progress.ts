@@ -4,9 +4,10 @@ import {
   ChangeDetectorRef,
   ErrorHandler,
   computed,
-  effect,
+  afterRenderEffect,
   untracked,
   viewChild,
+  ViewContainerRef,
   Component,
   DestroyRef,
   inject,
@@ -115,22 +116,26 @@ export class StudyProgress implements OnChanges, OnInit {
     () => this.view() === 'feedback' || this.view() === 'saved',
   );
   private readonly feedbackDialog = viewChild.required<TemplateRef<unknown>>('feedbackDialog');
+  private readonly feedbackContent = viewChild('feedbackContent', { read: ViewContainerRef });
   private readonly dialogs = inject(TuiDialogService);
   private readonly errors = inject(ErrorHandler);
   private readonly breakpoint = inject(TUI_BREAKPOINT);
 
   public constructor() {
-    // Only the explicit feedback view owns a modal. Automatic offers stay inline.
-    effect((cleanup) => {
+    // Taiga retains leaving dialogs for their native exit animation. Retire the
+    // template's private content in Angular's render before releasing its portal,
+    // so a conversation or actor change cannot animate the previous draft.
+    // Only explicit feedback owns a modal; automatic offers stay inline.
+    afterRenderEffect((cleanup) => {
       if (!this.feedbackOpen()) return;
       const template = this.feedbackDialog();
       const subscription = untracked(() =>
         this.dialogs
           .open(template, {
-            label: 'Feedback',
+            label: '',
             closable: false,
             size: 'm',
-            appearance: this.breakpoint() === 'mobile' ? 'fullscreen' : 'floating',
+            appearance: this.breakpoint() === 'mobile' ? 'fullscreen' : 'taiga',
           })
           .subscribe({
             complete: () => {
@@ -143,6 +148,16 @@ export class StudyProgress implements OnChanges, OnInit {
           }),
       );
       cleanup(() => {
+        if (this.destroy.destroyed) {
+          // The route owner cannot render again once destruction has started.
+          // Its portal content still has a live, app-owned embedded view: clear
+          // that view before Taiga preserves its DOM for the exit animation.
+          this.view.set('hidden');
+          this.form.reset();
+          const content = this.feedbackContent()?.get(0);
+          if (content !== undefined && content !== null && !content.destroyed)
+            content.detectChanges();
+        }
         subscription.unsubscribe();
       });
     });

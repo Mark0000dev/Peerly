@@ -118,6 +118,69 @@ jobs:
         timeout-minutes: 105
         run: |
           set -euo pipefail
+          # Native disclosure markers use platform fonts. Match the immutable
+          # browser/font environment used to review committed WebKit references.
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          import { createRequire } from 'node:module';
+          const require = createRequire(import.meta.url);
+          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          for (const name of ['@playwright/test', 'playwright', 'playwright-core']) {
+            if (require(`${name}/package.json`).version !== '1.65.0' ||
+                lock.packages[`node_modules/${name}`]?.version !== '1.65.0') {
+              throw new Error('Pinned browser image requires locked Playwright 1.65.0');
+            }
+          }
+          JS
+          image='mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d'
+          cid_file="$QUALITY_RECEIPTS/webkit-container.cid"
+          cleanup_webkit() {
+            original_status=$?
+            trap - EXIT
+            set +e
+            if [ -s "$cid_file" ]; then
+              owned_cid=$(cat "$cid_file")
+              docker logs "$owned_cid" > "$QUALITY_RECEIPTS/webkit-server.log" 2>&1
+              docker rm --force "$owned_cid" > "$QUALITY_RECEIPTS/webkit-cleanup.log" 2>&1
+              cleanup_status=$?
+              if [ "$original_status" -eq 0 ] && [ "$cleanup_status" -ne 0 ]; then
+                original_status=$cleanup_status
+              fi
+            fi
+            exit "$original_status"
+          }
+          trap cleanup_webkit EXIT
+          docker pull "$image" 2>&1 | tee "$QUALITY_RECEIPTS/webkit-image.log"
+          docker run --detach --cidfile "$cid_file" --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,size=512m --shm-size=256m --memory=1536m \
+            --publish 127.0.0.1::3000 \
+            --mount "type=bind,src=$PWD/node_modules,dst=/opt/peerly/node_modules,readonly" \
+            "$image" node /opt/peerly/node_modules/playwright-core/cli.js \
+            run-server --host 0.0.0.0 --port 3000
+          owned_cid=$(cat "$cid_file")
+          published_port=$(docker inspect --format '{{(index (index .NetworkSettings.Ports "3000/tcp") 0).HostPort}}' "$owned_cid")
+          export STUDYMATE_WEBKIT_WS_ENDPOINT="ws://127.0.0.1:$published_port/"
+          docker inspect --format '{{.Image}}' "$owned_cid" > "$QUALITY_RECEIPTS/webkit-image-id.txt"
+          node --input-type=module <<'JS'
+          import { connect } from 'node:net';
+          import { setTimeout } from 'node:timers/promises';
+          const endpoint = new URL(process.env.STUDYMATE_WEBKIT_WS_ENDPOINT);
+          const deadline = Date.now() + 45_000;
+          for (;;) {
+            const ready = await new Promise((resolve) => {
+              const socket = connect({ host: endpoint.hostname, port: Number(endpoint.port) });
+              socket.setTimeout(1_000);
+              socket.once('connect', () => { socket.destroy(); resolve(true); });
+              socket.once('error', () => { socket.destroy(); resolve(false); });
+              socket.once('timeout', () => { socket.destroy(); resolve(false); });
+            });
+            if (ready) break;
+            if (Date.now() >= deadline) throw new Error('Owned WebKit server did not become ready');
+            await setTimeout(100);
+          }
+          JS
+          # Inherited by public, integration AND every real-PG cohort. Existing
+          # Playwright config forwards loopback through the supported connection.
           node --input-type=module <<'JS' 2>&1 | tee "$QUALITY_RECEIPTS/browser-check.log"
           import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
           import { createRequire } from 'node:module';
@@ -245,5 +308,6 @@ jobs:
             frontend/playwright-report/
             frontend/test-results/
             frontend/coverage/
+            frontend/src/**/__screenshots__/*.spec.ts/*.png
           if-no-files-found: error
           retention-days: 14

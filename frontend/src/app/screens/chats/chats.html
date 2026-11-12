@@ -44,14 +44,11 @@
                 role="region"
                 aria-label="No conversations"
               >
-                <tui-icon
-                  class="empty-icon"
-                  tuiSlot="top"
-                  icon="@tui.message-circle"
-                  aria-hidden="true"
-                />
+                <peerly-mascot tuiSlot="top" name="chat" [width]="240" [height]="200" />
                 <h2>No chats yet</h2>
-                <p>Accepted requests appear here. No message is sent when a request is accepted.</p>
+                <p>
+                  When someone accepts your request, or you accept theirs, your chat appears here.
+                </p>
                 <a tuiButton appearance="secondary" routerLink="/requests">View requests</a>
               </tui-block-status>
             }
@@ -72,56 +69,70 @@
                     } @else {
                       <span tuiAvatar="@tui.user" size="m" [round]="true" aria-hidden="true"></span>
                     }
-                    <div class="row-copy">
-                      <div tuiTitle>
-                        <div class="row-heading">
-                          <h2>
-                            <a
-                              tuiLink
-                              appearance="action-grayscale"
-                              routerLink="/chats"
-                              [queryParams]="{ conversation: item.conversation_id, cursor: cursor }"
-                              [attr.aria-current]="
-                                selectedId === item.conversation_id ? 'page' : null
-                              "
-                              >{{ peerName(item.peer) }}</a
-                            >
-                          </h2>
-                        </div>
-                        <div tuiSubtitle>
-                          <div class="row-preview">
-                            <p>
-                              <span>{{ contextSubject(item.original_context) }}</span>
-                              @if (item.last_message; as message) {
-                                <span> · </span>
-                                <span class="message-text"
-                                  >{{ message.author_id === owner.account_id ? 'You: ' : ''
-                                  }}{{ message.text ?? 'Image' }}</span
-                                >
-                              } @else {
-                                <span> · </span>
-                                <span>Connected · no messages yet</span>
-                              }
-                            </p>
-                            @if (!item.can_send) {
-                              <p>Read-only conversation</p>
-                            }
+                    <a
+                      tuiLink
+                      appearance="action-grayscale"
+                      class="conversation-link"
+                      routerLink="/chats"
+                      [queryParams]="{ conversation: item.conversation_id, cursor: cursor }"
+                      [attr.aria-current]="selectedId === item.conversation_id ? 'page' : null"
+                      [attr.aria-label]="peerName(item.peer)"
+                      [attr.aria-describedby]="
+                        'conversation-context-' +
+                        item.conversation_id +
+                        ' conversation-meta-' +
+                        item.conversation_id
+                      "
+                    >
+                      <div class="conversation-link-content">
+                        <div class="row-copy">
+                          <div tuiTitle>
+                            <div class="row-heading">
+                              <h2>{{ peerName(item.peer) }}</h2>
+                            </div>
+                            <div tuiSubtitle>
+                              <div class="row-preview">
+                                <p class="preview-line">
+                                  @if (item.last_message; as message) {
+                                    <span [id]="'conversation-context-' + item.conversation_id">{{
+                                      contextSubject(item.original_context)
+                                    }}</span>
+                                    <span> · </span>
+                                    <span class="message-text"
+                                      >{{ message.author_id === owner.account_id ? 'You: ' : ''
+                                      }}{{ message.text ?? 'Image' }}</span
+                                    >
+                                  } @else {
+                                    <span [id]="'conversation-context-' + item.conversation_id"
+                                      >Connected about
+                                      {{ contextSubject(item.original_context) }}</span
+                                    >
+                                  }
+                                </p>
+                                @if (!item.can_send) {
+                                  <p>Read-only conversation</p>
+                                }
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                    <div class="row-metadata">
-                      <time
-                        [attr.datetime]="item.activity_at"
-                        [title]="absoluteChatTime(item.activity_at)"
-                        >{{ when(item.activity_at) }}</time
-                      >
-                      @if (item.unread_count > 0) {
-                        <tui-badge-notification
-                          >{{ item.unread_count }} unread</tui-badge-notification
+                        <div
+                          class="row-metadata"
+                          [id]="'conversation-meta-' + item.conversation_id"
                         >
-                      }
-                    </div>
+                          <time
+                            [attr.datetime]="item.activity_at"
+                            [title]="absoluteChatTime(item.activity_at)"
+                            >{{ when(item.activity_at) }}</time
+                          >
+                          @if (item.unread_count > 0) {
+                            <tui-badge-notification
+                              >{{ item.unread_count }} unread</tui-badge-notification
+                            >
+                          }
+                        </div>
+                      </div>
+                    </a>
                   </div>
                 </article>
               }
@@ -182,7 +193,9 @@
               <section class="accepted-context" aria-label="Original accepted context">
                 <tui-accordion size="s">
                   <button tuiAccordion type="button" aria-label="Original accepted context">
-                    Original request · {{ contextSubject(conversation.original_context) }}
+                    <span class="context-label">
+                      Original request · {{ contextSubject(conversation.original_context) }}
+                    </span>
                   </button>
                   <tui-expand>
                     <h3>Original accepted context · read only</h3>

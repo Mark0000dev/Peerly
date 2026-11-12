@@ -1,0 +1,6 @@
+[tool.ruff]
+extend = "../../backend/pyproject.toml"
+
+[tool.ruff.lint.per-file-ignores]
+"test_ai_log_relay.py" = ["S101"] # Exact synthetic pytest assertions, never runtime validation.
+"test_storage_budget.py" = ["S101"] # Existing pure pytest budget assertions.

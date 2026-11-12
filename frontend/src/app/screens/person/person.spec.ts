@@ -167,6 +167,14 @@ describe('person screen and actor-bound safety commands', () => {
     expect(host().querySelector('.verification tui-icon')?.getAttribute('aria-hidden')).toBe(
       'true',
     );
+    expect(host().querySelector('.profile-relevance')?.textContent).toContain('Can help with SQL');
+    const help = academic.querySelector('.profile-values p');
+    if (help === null) throw new Error('Missing published help subjects');
+    expect(help.querySelectorAll('strong')).toHaveLength(person.help_subjects.subjects.length);
+    expect(help.textContent).toContain('JOINs and subqueries');
+    expect(help.textContent).toContain('Python');
+    expect(academic.textContent.replace(/\s+/gu, ' ')).toContain('Software Engineering · Year 3');
+    expect(host().querySelector('.profile-content .profile-actions')).toBeNull();
     expect(actor.capabilities.can_use_student_features).toBe(true);
     const review = host().querySelector('.profile-actions a');
     if (!(review instanceof HTMLAnchorElement)) throw new Error('Missing permitted preview link');
@@ -211,6 +219,16 @@ describe('person screen and actor-bound safety commands', () => {
     });
     await shown(person.display_name);
     expect(host().textContent).not.toContain('Learning goal');
+    expect(host().querySelector('.profile-relevance')).toBeNull();
+    expect(host().querySelector('article[aria-label="Academic profile"]')).toBeNull();
+    for (const label of ['About', 'Programme', 'Languages']) {
+      expect(
+        Array.from(host().querySelectorAll('h3')).some(
+          (heading: Readonly<HTMLHeadingElement>) => heading.textContent.trim() === label,
+        ),
+      ).toBe(false);
+    }
+    expect(host().querySelector('.profile-actions a')).not.toBeNull();
   });
   it('blocks, rereads canonical state, then unblocks using current own version', async () => {
     await load();

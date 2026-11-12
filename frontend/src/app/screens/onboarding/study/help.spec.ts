@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import type { ComponentFixture } from '@angular/core/testing';
 import { TuiRoot } from '@taiga-ui/core';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import type { Mutation } from '@tanstack/angular-query-experimental';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { Api } from '../../../api.generated';
 import { appConfig } from '../../../app.config';
@@ -17,10 +18,11 @@ import { catalogue } from './goal.fixtures';
   selector: 'peerly-help-test-host',
   imports: [TuiRoot, HelpSubjects],
   template:
-    '<tui-root><peerly-help-subjects [actor]="actor()" (expired)="expired.emit()" /></tui-root>',
+    '<tui-root><peerly-help-subjects [actor]="actor()" [checking]="checking()" (expired)="expired.emit()" /></tui-root>',
 })
 class HelpTestHost {
   public readonly actor = input.required<Api['schemas']['IdentityResponse']>();
+  public readonly checking = input(false);
   public readonly expired = output();
 }
 
@@ -289,4 +291,167 @@ describe('real helper selection forms and query boundary', () => {
       expect(expired).not.toHaveBeenCalled();
       backend.expectNone({ url: '/api/v1/me/help-subjects', method: 'GET' });
     });
+  it('retains a queued helper draft across a sign-in pause and retries the same intent with fresh CSRF', async () => {
+    await load();
+    edit('Queued helper draft');
+    submit(fixture);
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    await shown(fixture, 'Your save paused during a sign-in check.');
+    backend.expectNone({ url: '/api/v1/me/help-subjects', method: 'PUT' });
+    const original = client
+      .getMutationCache()
+      .getAll()
+      .find((entry: Readonly<Mutation>) => entry.state.status === 'error')?.state.variables;
+    const rotated = { ...verifiedActor, csrf_token: 'fresh-after-helper-check' };
+    client.setQueryData(['session'], rotated);
+    fixture.componentRef.setInput('actor', rotated);
+    fixture.componentRef.setInput('checking', false);
+    fixture.detectChanges();
+    // The same-owner canonical selection remains fresh through this checking pause.
+    expect(control(fixture, '#help-note-0').value).toBe('Queued helper draft');
+    backend.expectNone({ url: '/api/v1/me/help-subjects', method: 'GET' });
+    await shown(fixture, 'Your save paused during a sign-in check.');
+    click(fixture, 'Retry same save');
+    const retry = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/help-subjects', method: 'PUT' }),
+    );
+    expect(retry.request.headers.get('x-csrf-token')).toBe(rotated.csrf_token);
+    expect(original).toMatchObject({ key: retry.request.headers.get('idempotency-key') });
+    expect(retry.request.body).toEqual({
+      expected_version: 2,
+      subjects: [
+        { subject_id: helpSelection.subjects[0].subject_id, topic_note: 'Queued helper draft' },
+      ],
+    });
+    const saved = {
+      ...helpSelection,
+      version: 3,
+      subjects: [{ ...helpSelection.subjects[0], topic_note: 'Queued helper draft' }],
+    };
+    retry.flush(saved);
+    await load({ selection: saved });
+  });
+  it('does not refetch private helper state while an owned save receipt arrives during a sign-in check', async () => {
+    await load();
+    edit('Committed helper draft');
+    const save = await saveRequest();
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    save.flush({
+      ...helpSelection,
+      version: 3,
+      subjects: [{ ...helpSelection.subjects[0], topic_note: 'Committed helper draft' }],
+    });
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(
+        client
+          .getMutationCache()
+          .getAll()
+          .some((entry: Readonly<Mutation>) => entry.state.status === 'success'),
+      ).toBe(true);
+    });
+    expect(control(fixture, '#help-note-0').value).toBe('Committed helper draft');
+    expect(
+      client.getQueryState(['account', verifiedActor.account_id, 'help-subjects'])?.isInvalidated,
+    ).toBe(true);
+    backend.expectNone({ url: '/api/v1/me/help-subjects', method: 'GET' });
+  });
+  it('never rolls a committed helper selection back to a lagging canonical revision', async () => {
+    await load();
+    edit('Committed helper draft');
+    const save = await saveRequest();
+    save.flush({
+      ...helpSelection,
+      version: 3,
+      subjects: [{ ...helpSelection.subjects[0], topic_note: 'Committed helper draft' }],
+    });
+    await load({ selection: { ...helpSelection, version: 1 } });
+    expect(control(fixture, '#help-note-0').value).toBe('Committed helper draft');
+    submit(fixture);
+    backend.expectNone({ url: '/api/v1/me/help-subjects', method: 'PUT' });
+  });
+  it('adopts an authoritative empty helper projection after a confirmed save rather than keeping optimistic rows', async () => {
+    await load();
+    edit('Committed helper draft');
+    const save = await saveRequest();
+    save.flush({ ...helpSelection, version: 3 });
+    await load({ selection: null });
+    await shown(fixture, 'Helping is always optional.');
+    expect(host(fixture).querySelector('#help-note-0')).toBeNull();
+    backend.expectNone({ url: '/api/v1/me/help-subjects', method: 'PUT' });
+  });
+  it('preserves a dirty helper draft after an actual newer canonical read and reloads only explicitly', async () => {
+    await load();
+    edit('Unsaved local note');
+    const current = {
+      ...helpSelection,
+      version: 3,
+      subjects: [{ ...helpSelection.subjects[0], topic_note: 'Changed elsewhere' }],
+    };
+    const refresh = client.refetchQueries({
+      queryKey: ['account', verifiedActor.account_id, 'help-subjects'],
+    });
+    (
+      await vi.waitFor(() => backend.expectOne({ url: '/api/v1/me/help-subjects', method: 'GET' }))
+    ).flush({ selection: current });
+    await refresh;
+    await shown(fixture, 'Your help areas changed elsewhere.');
+    expect(control(fixture, '#help-note-0').value).toBe('Unsaved local note');
+    submit(fixture);
+    backend.expectNone({ url: '/api/v1/me/help-subjects', method: 'PUT' });
+    click(fixture, 'Reload saved areas');
+    await load({ selection: current });
+    expect(control(fixture, '#help-note-0').value).toBe('Changed elsewhere');
+  });
+  it('replays the original unknown helper intent against a newer canonical revision without overwriting that newer state', async () => {
+    await load();
+    edit('Original helper intent');
+    const save = await saveRequest();
+    const key = save.request.headers.get('idempotency-key');
+    save.flush({ code: 'unavailable' }, { status: 503, statusText: 'Unavailable' });
+    await shown(fixture, 'We couldn’t confirm your save.');
+    const current = {
+      ...helpSelection,
+      version: 4,
+      subjects: [{ ...helpSelection.subjects[0], topic_note: 'Newer canonical note' }],
+    };
+    const refresh = client.refetchQueries({
+      queryKey: ['account', verifiedActor.account_id, 'help-subjects'],
+    });
+    (
+      await vi.waitFor(() => backend.expectOne({ url: '/api/v1/me/help-subjects', method: 'GET' }))
+    ).flush({ selection: current });
+    await refresh;
+    await shown(fixture, 'Your help areas changed elsewhere.');
+    click(fixture, 'Retry same save');
+    const retry = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/help-subjects', method: 'PUT' }),
+    );
+    expect(retry.request.headers.get('idempotency-key')).toBe(key);
+    expect(retry.request.body).toEqual({
+      expected_version: 2,
+      subjects: [
+        { subject_id: helpSelection.subjects[0].subject_id, topic_note: 'Original helper intent' },
+      ],
+    });
+    retry.flush({ ...helpSelection, version: 3 });
+    await load({ selection: current });
+    expect(control(fixture, '#help-note-0').value).toBe('Newer canonical note');
+  });
+  it('cancels the old actor catalogue before binding the replacement helper editor', async () => {
+    await load();
+    click(fixture, 'Add an area');
+    const old = await vi.waitFor(() => backend.expectOne('/api/v1/subjects?query=&limit=20'));
+    const replacement = { ...verifiedActor, account_id: 'replacement-helper-actor' };
+    client.setQueryData(['session'], replacement);
+    fixture.componentRef.setInput('actor', replacement);
+    fixture.detectChanges();
+    expect(old.cancelled).toBe(true);
+    await load();
+    expect(control(fixture, '#help-note-0').value).toBe('Limits');
+    backend.expectNone('/api/v1/subjects?query=&limit=20');
+    backend.expectNone({ url: '/api/v1/me/help-subjects', method: 'PUT' });
+  });
 });

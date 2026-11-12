@@ -126,6 +126,11 @@ describe('Discovery actor-owned deck and private decisions', () => {
       'Can help with SQL · JOINs',
     );
     expect(host().querySelectorAll('.relevance')).toHaveLength(1);
+    expect(host().querySelector('.candidate-subject')?.textContent).toContain('Helps with');
+    expect(host().querySelector('.candidate-subject strong')?.textContent).toBe('SQL');
+    expect(host().querySelector('.candidate-subject')?.textContent).toContain('JOINs');
+    expect(host().querySelector('.deck-next')).toBeNull();
+    expect(host().querySelector('tui-segmented')).not.toBeNull();
     expect(
       host()
         .querySelector('section[aria-label="Saved discovery context"]')
@@ -293,6 +298,7 @@ describe('Discovery actor-owned deck and private decisions', () => {
   it('changes mode and view by navigation and clears cursor/card', async () => {
     await ready();
     click('Offer help');
+    expect(navigation).toHaveBeenCalledTimes(1);
     expect(navigation).toHaveBeenLastCalledWith(
       [],
       expect.objectContaining({
@@ -621,5 +627,73 @@ describe('Discovery actor-owned deck and private decisions', () => {
       }),
     );
     backend.expectNone((request) => request.method !== 'GET');
+  });
+  it('renders only the selected real card while a decorative next edge reflects a second returned person', async () => {
+    const second = {
+      ...card,
+      id: '10000000-0000-0000-0000-000000000009',
+      display_name: 'Second eligible person',
+      own_pass: { ...card.own_pass, person_id: '10000000-0000-0000-0000-000000000009' },
+    };
+    await ready({ ...deck, people: [card, second] });
+    await shown(card.display_name);
+    expect(host().querySelectorAll('article.candidate-card')).toHaveLength(1);
+    expect(host().querySelectorAll('.deck-next')).toHaveLength(1);
+    expect(host().querySelector('.deck-next')?.getAttribute('aria-hidden')).toBe('true');
+    expect(host().querySelector('.deck-next')?.querySelector('button, a, input')).toBeNull();
+    expect(host().querySelector('article.candidate-card')?.textContent).not.toContain(
+      second.display_name,
+    );
+    backend.expectNone('/api/v1/requests/preview');
+    backend.expectNone((request) => request.method !== 'GET');
+  });
+  it('retires the stale visible card during a real canonical refetch and rejects its captured actions until fresh data returns', async () => {
+    await ready();
+    const oldPass = Array.from(host().querySelectorAll('button')).find(
+      (button: Readonly<HTMLButtonElement>) => button.textContent.trim() === 'Pass',
+    );
+    const oldReview = host().querySelector('button[aria-label="Review request"]');
+    if (oldPass === undefined || !(oldReview instanceof HTMLButtonElement))
+      throw new Error('Missing actual candidate actions');
+    const refresh = client.refetchQueries({
+      queryKey: ['account', identity.account_id, 'discovery'],
+    });
+    const request = await vi.waitFor(() =>
+      backend.expectOne('/api/v1/discovery?mode=find_help&view=candidates'),
+    );
+    oldPass.click();
+    oldReview.click();
+    await shown('Loading people');
+    expect(host().querySelector('article.candidate-card')).toBeNull();
+    expect(host().querySelector('.deck-next')).toBeNull();
+    expect(navigation).not.toHaveBeenCalled();
+    backend.expectNone((pending) => pending.method !== 'GET');
+    request.flush({
+      ...deck,
+      people: [
+        {
+          ...card,
+          version: 2,
+          about: null,
+          relevance: {
+            ...card.relevance,
+            reciprocal_subject_id: null,
+            reciprocal_subject_label: null,
+          },
+        },
+      ],
+    });
+    await refresh;
+    await shown(card.display_name);
+    photos();
+    expect(host().querySelector('.candidate-about')).toBeNull();
+    expect(host().querySelector('.reciprocal')).toBeNull();
+    expect(host().querySelector('article.candidate-card')?.textContent).not.toContain(
+      'Feedback is still building',
+    );
+    expect(host().querySelectorAll('article.candidate-card')).toHaveLength(1);
+    expect(
+      host().querySelector('button[aria-label="Review request"]')?.hasAttribute('disabled'),
+    ).toBe(false);
   });
 });

@@ -31,10 +31,14 @@ describe('Google identity and institutional verification screen', () => {
     fixture.detectChanges();
   });
   afterEach(() => {
-    fixture.destroy();
-    client.clear();
-    backend.verify();
-    vi.restoreAllMocks();
+    try {
+      fixture.destroy();
+      client.clear();
+      backend.verify();
+    } finally {
+      vi.restoreAllMocks();
+      TestBed.resetTestingModule();
+    }
   });
   async function me(value: Readonly<Record<string, unknown>> = actor, status = 200): Promise<void> {
     const request = await vi.waitFor(() => backend.expectOne('/api/v1/me'));
@@ -82,6 +86,36 @@ describe('Google identity and institutional verification screen', () => {
     expect(host(fixture).textContent).not.toContain('Review your setup');
     backend.expectNone('/api/v1/me/onboarding');
   });
+  for (const transition of ['cancelled', 'checking', 'failed'] as const) {
+    it(`does not advance an editor leave decision while authority is ${transition}`, async () => {
+      await me(verifiedActor);
+      await shown(fixture, 'Your help areas');
+      click(fixture, 'Your help areas');
+      const request = await vi.waitFor(() => backend.expectOne('/api/v1/me/help-subjects'));
+      request.flush({ selection: null });
+      await shown(fixture, 'Add something you can help with.');
+      const editor = fixture.debugElement
+        .query(By.directive(HelpSubjects))
+        .injector.get(HelpSubjects);
+      const decision = new Subject<boolean>();
+      vi.spyOn(editor, 'confirmLeave').mockReturnValue(firstValueFrom(decision));
+      click(fixture, 'Review saved setup');
+      if (transition !== 'cancelled') click(fixture, 'Check status');
+      if (transition === 'failed') await me({ code: 'unavailable' }, 503);
+      decision.next(transition !== 'cancelled');
+      decision.complete();
+      await fixture.whenStable();
+      expect(host(fixture).textContent).not.toContain('Review your setup');
+      backend.expectNone('/api/v1/me/onboarding');
+      if (transition === 'checking') {
+        await me(verifiedActor);
+        const renewed = await vi.waitFor(() => backend.expectOne('/api/v1/me/help-subjects'));
+        renewed.flush({ selection: null });
+      }
+      if (transition !== 'failed') await shown(fixture, 'Add something you can help with.');
+      backend.expectNone((operation) => operation.method !== 'GET');
+    });
+  }
   it('renders Google navigation without manufacturing legal receipts or identity data', async () => {
     await me({ code: 'unauthenticated' }, 401);
     await shown(fixture, 'Continue with Google');
@@ -305,6 +339,104 @@ describe('Google identity and institutional verification screen', () => {
       expect(host(fixture).textContent).not.toContain('Nothing was sent');
     });
   }
+  for (const outcome of [200, 401, 503]) {
+    it(`ignores an old account's verification ${String(outcome)} after identity replacement`, async () => {
+      await me(pending);
+      await status();
+      await shown(fixture, 'Check your APU email');
+      control(fixture, '#verification-code').setValue('123456');
+      const verify = await vi.waitFor(() =>
+        backend.expectOne(`/api/v1/auth/email-challenges/${challenge.id}/verify`),
+      );
+      click(fixture, 'Check status');
+      await me({ ...actor, account_id: '00000000-0000-0000-0000-000000000088' });
+      await shown(fixture, 'Confirm your APU email');
+      control(fixture, '#student-email').setValue('replacement@mail.apu.edu.my');
+      verify.flush(
+        outcome === 200 ? { verified_at: verifiedActor.verified_at } : { code: 'unavailable' },
+        { status: outcome, statusText: outcome === 200 ? 'OK' : 'Failure' },
+      );
+      await shown(fixture, 'Confirm your APU email');
+      expect(control(fixture, '#student-email').value).toBe('replacement@mail.apu.edu.my');
+      expect(client.getQueryData(['session'])).toMatchObject({
+        account_id: '00000000-0000-0000-0000-000000000088',
+        membership_status: 'unverified',
+      });
+      backend.expectNone('/api/v1/me');
+    });
+  }
+  it('retries an uncertain code verification with its exact intent and fresh same-actor CSRF', async () => {
+    await me(pending);
+    await status();
+    await shown(fixture, 'Check your APU email');
+    control(fixture, '#verification-code').setValue('123456');
+    const first = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/auth/email-challenges/${challenge.id}/verify`),
+    );
+    const key = first.request.headers.get('idempotency-key');
+    expect(key).not.toBeNull();
+    first.error(new ProgressEvent('error'));
+    await me({ ...pending, csrf_token: 'rotated-code-csrf' });
+    await status();
+    await shown(fixture, 'We couldn’t confirm the result');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(control(fixture, '#verification-code').value).toBe('123456');
+      const confirm = Array.from(host(fixture).querySelectorAll('button')).find(
+        (button: Readonly<HTMLButtonElement>) => button.textContent.trim() === 'Confirm code',
+      );
+      expect(confirm?.disabled).toBe(false);
+    });
+    backend.expectNone((request) => request.method === 'POST');
+    submit(fixture);
+    const retry = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/auth/email-challenges/${challenge.id}/verify`),
+    );
+    expect(retry.request.body).toEqual(first.request.body);
+    expect(retry.request.headers.get('idempotency-key')).toBe(key);
+    expect(retry.request.headers.get('x-csrf-token')).toBe('rotated-code-csrf');
+    retry.flush({ verified_at: verifiedActor.verified_at });
+    await me(verifiedActor);
+    await shown(fixture, 'Your APU email is confirmed');
+  });
+  it('preserves the email draft and exposes the actual rate-limit deadline and reference', async () => {
+    await me();
+    await shown(fixture, 'Confirm your APU email');
+    control(fixture, '#student-email').setValue(challenge.email);
+    submit(fixture);
+    const send = await vi.waitFor(() => backend.expectOne('/api/v1/auth/email-challenges'));
+    send.flush(
+      {
+        code: 'rate_limited',
+        request_id: 'otp-rate-limit-reference',
+        recovery: { retry_at: '2026-11-07T12:05:00Z' },
+      },
+      { status: 429, statusText: 'Too Many Requests' },
+    );
+    await me();
+    await shown(fixture, 'Too many attempts');
+    expect(host(fixture).textContent).toContain('Try again after');
+    expect(host(fixture).textContent).toContain('otp-rate-limit-reference');
+    expect(control(fixture, '#student-email').value).toBe(challenge.email);
+    backend.expectNone((request) => request.method === 'POST');
+  });
+  it('never verifies incomplete digits or duplicates a pending explicit code submission', async () => {
+    await me(pending);
+    await status();
+    await shown(fixture, 'Check your APU email');
+    control(fixture, '#verification-code').setValue('12345');
+    submit(fixture);
+    backend.expectNone((request) => request.method === 'POST');
+    control(fixture, '#verification-code').setValue('123456');
+    const pendingVerification = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/auth/email-challenges/${challenge.id}/verify`),
+    );
+    submit(fixture);
+    backend.expectNone((request) => request.method === 'POST');
+    pendingVerification.flush({ verified_at: verifiedActor.verified_at });
+    await me(verifiedActor);
+    await shown(fixture, 'Your APU email is confirmed');
+  });
   it('clears drafts and private cache on logout without persisting credentials', async () => {
     await me();
     await shown(fixture, 'Confirm your APU email');

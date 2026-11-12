@@ -164,7 +164,7 @@ def telegram_payload(lease: DeliveryLease, configuration: TelegramConfig) -> dic
         + source.received_at.astimezone(UTC).isoformat()
         + "\nOpen: "
         + configuration.operator_origin
-        + "/operator/cases/"
+        + "/operator/support?case="
         + str(source.id),
         "link_preview_options": {"is_disabled": True},
     }

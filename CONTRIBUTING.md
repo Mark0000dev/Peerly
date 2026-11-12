@@ -54,3 +54,7 @@ regenerate baselines just to make them pass.
   Use synthetic fixtures for demonstrations and tests.
 - Deployment, live provider calls and messages are separate operations; merging
   code does not authorize them or establish that a service is running correctly.
+
+## Delivery
+
+Deliver coherent packages after their required quality and integration checks pass. Merge accepted packages into `main`, publish immutable images through GitHub Actions/GHCR, then deploy those verified digests to internal staging. Verify actual running versions, readiness and representative affected flows after each deployment before marking that deployment accepted. Preserve database history, queued work and runtime ownership during transitions. Production release remains a separate operation.

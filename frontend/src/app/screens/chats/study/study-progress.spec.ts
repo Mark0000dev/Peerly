@@ -19,9 +19,10 @@ import { offered, outcome, ownFeedback, receipt } from './study.fixtures';
   selector: 'study-test-host',
   imports: [TuiRoot, StudyProgress],
   template:
-    '<tui-root><app-study-progress [actor]="actor()" [conversationId]="conversation()" [peerLabel]="\'Maya Lim\'" [contextLabel]="\'Databases · SQL JOINs\'" [manualOpen]="manual()" [visit]="visit()" (closed)="closed.update(increment)" (sessionFailure)="failure($event)" /></tui-root>',
+    '<tui-root>@if (present()) {<app-study-progress [actor]="actor()" [conversationId]="conversation()" [peerLabel]="\'Maya Lim\'" [contextLabel]="\'Databases · SQL JOINs\'" [manualOpen]="manual()" [visit]="visit()" (closed)="closed.update(increment)" (sessionFailure)="failure($event)" />}</tui-root>',
 })
 class StudyHost {
+  public readonly present = signal(true);
   public readonly actor = signal(identity);
   public readonly conversation = signal(conversation.conversation_id);
   public readonly manual = signal(0);
@@ -428,6 +429,13 @@ describe('F01/F02 explicit foreground study progress', () => {
     const pending = await request('PUT', 'feedback');
     fixture.componentInstance.conversation.set('00000000-0000-4000-8000-000000000099');
     fixture.detectChanges();
+    // A modal is rendered in TuiRoot's portal, outside this fixture's child tree.
+    // Retirement must clear the native draft immediately, then remove the portal
+    // through the normal Angular render lifecycle before an old response settles.
+    expect(host().querySelector('textarea')?.value ?? '').toBe('');
+    await fixture.whenStable();
+    expect(host().textContent).not.toContain('Must not leak');
+    expect(host().querySelector('textarea')).toBeNull();
     pending.flush(receipt);
     await vi.waitFor(() => {
       expect(client.getMutationCache().getAll()).toHaveLength(0);
@@ -448,6 +456,32 @@ describe('F01/F02 explicit foreground study progress', () => {
       expect(host().querySelector('section')).toBeNull();
     });
   });
+  for (const retirement of ['actor replacement', 'logout', 'screen removal'] as const) {
+    it(`removes an open private feedback dialog on ${retirement} before a late save settles`, async () => {
+      await feedback();
+      note('Private draft from the previous screen');
+      click('Update feedback');
+      const pending = await request('PUT', 'feedback');
+      if (retirement === 'actor replacement') {
+        const next = { ...identity, account_id: '00000000-0000-4000-8000-000000000098' };
+        client.setQueryData(['session'], next);
+        fixture.componentInstance.actor.set(next);
+      } else if (retirement === 'logout') client.setQueryData(['session'], null);
+      else fixture.componentInstance.present.set(false);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(host().textContent).not.toContain('Private draft from the previous screen');
+      expect(host().querySelector('textarea')).toBeNull();
+      expect(host().querySelector('section[aria-label="Study progress"]')).toBeNull();
+      expect(client.getMutationCache().getAll()).toHaveLength(0);
+      pending.flush(receipt);
+      await fixture.whenStable();
+      expect(host().textContent).not.toContain('Private draft from the previous screen');
+      expect(host().querySelector('textarea')).toBeNull();
+      expect(host().querySelector('section[aria-label="Study progress"]')).toBeNull();
+      backend.expectNone((value) => value.method === 'PUT');
+    });
+  }
   it('cancels active GET on destroy instead of allowing late private data to reappear', async () => {
     fixture.componentInstance.manual.set(1);
     fixture.detectChanges();

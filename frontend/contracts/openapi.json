@@ -3828,6 +3828,22 @@
         "title": "OperatorGoalsResponse",
         "type": "object"
       },
+      "OperatorGoogleClaimResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": { "format": "date-time", "title": "Created At", "type": "string" },
+          "id": { "format": "uuid", "title": "Id", "type": "string" },
+          "issuer": { "title": "Issuer", "type": "string" },
+          "retired_at": {
+            "anyOf": [{ "format": "date-time", "type": "string" }, { "type": "null" }],
+            "title": "Retired At"
+          },
+          "subject": { "title": "Subject", "type": "string" }
+        },
+        "required": ["id", "issuer", "subject", "created_at", "retired_at"],
+        "title": "OperatorGoogleClaimResponse",
+        "type": "object"
+      },
       "OperatorHelpHistoryResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3881,6 +3897,92 @@
         },
         "required": ["slot", "subject_id", "subject_label", "topic_note", "topic_match_key"],
         "title": "OperatorHelpHistorySelectionResponse",
+        "type": "object"
+      },
+      "OperatorIdentityAccountResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": { "format": "uuid", "title": "Account Id", "type": "string" },
+          "banned_at": {
+            "anyOf": [{ "format": "date-time", "type": "string" }, { "type": "null" }],
+            "title": "Banned At"
+          },
+          "created_at": { "format": "date-time", "title": "Created At", "type": "string" },
+          "deleted_at": {
+            "anyOf": [{ "format": "date-time", "type": "string" }, { "type": "null" }],
+            "title": "Deleted At"
+          },
+          "google": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/OperatorGoogleClaimResponse" },
+              { "type": "null" }
+            ]
+          },
+          "institutional": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/OperatorInstitutionalClaimResponse" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "required": [
+          "account_id",
+          "created_at",
+          "banned_at",
+          "deleted_at",
+          "google",
+          "institutional"
+        ],
+        "title": "OperatorIdentityAccountResponse",
+        "type": "object"
+      },
+      "OperatorIdentityLinkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account": { "$ref": "#/components/schemas/OperatorIdentityAccountResponse" },
+          "shared_google_claim": { "title": "Shared Google Claim", "type": "boolean" },
+          "shared_institutional_email": { "title": "Shared Institutional Email", "type": "boolean" }
+        },
+        "required": ["account", "shared_google_claim", "shared_institutional_email"],
+        "title": "OperatorIdentityLinkResponse",
+        "type": "object"
+      },
+      "OperatorIdentityLinksResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": { "format": "date-time", "title": "As Of", "type": "string" },
+          "links": {
+            "items": { "$ref": "#/components/schemas/OperatorIdentityLinkResponse" },
+            "maxItems": 50,
+            "title": "Links",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Next Cursor"
+          },
+          "target": { "$ref": "#/components/schemas/OperatorIdentityAccountResponse" }
+        },
+        "required": ["target", "links", "next_cursor", "as_of"],
+        "title": "OperatorIdentityLinksResponse",
+        "type": "object"
+      },
+      "OperatorInstitutionalClaimResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "email": { "title": "Email", "type": "string" },
+          "retired_at": {
+            "anyOf": [{ "format": "date-time", "type": "string" }, { "type": "null" }],
+            "title": "Retired At"
+          },
+          "revoked_at": {
+            "anyOf": [{ "format": "date-time", "type": "string" }, { "type": "null" }],
+            "title": "Revoked At"
+          },
+          "verified_at": { "format": "date-time", "title": "Verified At", "type": "string" }
+        },
+        "required": ["email", "verified_at", "revoked_at", "retired_at"],
+        "title": "OperatorInstitutionalClaimResponse",
         "type": "object"
       },
       "OperatorLifecycleHistoryResponse": {
@@ -15357,6 +15459,80 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/OperatorHelpHistoryResponse" }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [{ "SessionCookie": [] }],
+        "summary": "History",
+        "tags": ["operator"]
+      }
+    },
+    "/api/v1/operator/accounts/{account_id}/identity-links": {
+      "get": {
+        "operationId": "history_api_v1_operator_accounts__account_id__identity_links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": { "format": "uuid", "title": "Account Id", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "maxLength": 1024, "minLength": 1, "type": "string" },
+                { "type": "null" }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OperatorIdentityLinksResponse" }
               }
             },
             "description": "Successful Response"

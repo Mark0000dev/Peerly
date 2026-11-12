@@ -29,7 +29,7 @@ from studymate.domain.client_observations.events import (
     QualityObserved,
     ScreenViewed,
 )
-from studymate.domain.external_delivery.delivery import UmamiEvent
+from studymate.domain.external_delivery.delivery import SupportTelegramNotice, UmamiEvent
 from studymate.domain.external_delivery.sources import (
     CanonicalSource,
     CapturedSource,
@@ -42,7 +42,10 @@ from studymate.domain.external_delivery.sources import (
 from studymate.domain.operator.timeline import OperatorEventFacts, OperatorEventKind
 from studymate.domain.support.cases import SupportTopic
 from studymate.infrastructure.external_delivery.http_adapters import target_fingerprint
-from studymate.infrastructure.external_delivery.http_adapters.projections import umami_payload
+from studymate.infrastructure.external_delivery.http_adapters.projections import (
+    telegram_payload,
+    umami_payload,
+)
 
 
 def client_events() -> tuple[Observation, ...]:
@@ -161,3 +164,15 @@ def test_umami_target_identity_is_website_and_origin_not_delivery_revision() -> 
     assert target_fingerprint(config) == target_fingerprint(
         replace(config, destination=replace(config.destination, revision=2))
     )
+
+
+def test_support_notice_links_to_actual_operator_support_case_route() -> None:
+    configuration = telegram()
+    job = lease(configuration.destination.sink)
+    source = SupportCaseSource(uuid4(), None, SupportTopic.CODE_NOT_ARRIVING, job.started_at)
+    result = telegram_payload(replace(job, payload=SupportTelegramNotice(source)), configuration)
+    text = result["text"]
+    assert isinstance(text, str)
+    assert text.endswith(configuration.operator_origin + "/operator/support?case=" + str(source.id))
+    assert "/operator/cases/" not in text
+    assert result["link_preview_options"] == {"is_disabled": True}

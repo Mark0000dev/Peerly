@@ -7,7 +7,7 @@ import { HttpClient } from '@angular/common/http';
 import { ChangeDetectorRef, Component, DestroyRef, inject, viewChild } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TuiButton, TuiLink, TuiCell, TuiIcon, TuiTitle } from '@taiga-ui/core';
-import { TuiAvatar, TuiStatus } from '@taiga-ui/kit';
+import { TuiAvatar, TuiStatus, TuiBadge } from '@taiga-ui/kit';
 import { TuiCardLarge } from '@taiga-ui/layout';
 import {
   CancelledError,
@@ -34,6 +34,7 @@ import { isSetupStatus } from './setup/setup-contract';
   imports: [
     StudentLayout,
     TuiAvatar,
+    TuiBadge,
     TuiStatus,
     TuiCell,
     SettingsHeader,

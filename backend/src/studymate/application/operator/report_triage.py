@@ -2,15 +2,24 @@
 
 import hmac
 from dataclasses import dataclass, field
+from datetime import datetime
 from uuid import UUID, uuid4
 
-from studymate.application.ai.ports import Admission
 from studymate.application.idempotency import IntentFingerprinter, IntentKey
-from studymate.application.identity.sessions import SessionCredential, SessionHasher
-from studymate.application.operator.authority import finish_operator, require_operator
+from studymate.application.identity.sessions import (
+    SessionCredential,
+    SessionHasher,
+    UnauthenticatedError,
+)
+from studymate.application.operator.authority import (
+    OperatorAccessDeniedError,
+    OperatorPrincipal,
+    finish_operator,
+)
 from studymate.application.operator.report_triage_ports import (
     OperatorReportTriageTransaction,
     OperatorReportTriageUnitOfWork,
+    ReportTriageAdmission,
     ReportTriageSourceCodec,
     ReportTriageSourceUnavailableError,
     StoredReportTriage,
@@ -60,11 +69,31 @@ class EnqueueReportTriageCommand:
             raise ValueError("Triage requires the bounded server-issued source token")
 
 
+async def require_triage_operator(
+    transaction: OperatorReportTriageTransaction,
+    credential: SessionCredential,
+    hasher: SessionHasher,
+) -> OperatorPrincipal:
+    facts = await transaction.lock_triage_authority(await hasher.digest(credential))
+    identity, access, at = facts.identity, facts.access, facts.checked_at
+    if identity is None or identity.deleted_at is not None or not identity.session.is_active(at):
+        raise UnauthenticatedError
+    transaction.authenticated(identity.session.account_id)
+    if identity.banned or access is None or not access.is_active(at):
+        raise OperatorAccessDeniedError
+    if access.account_id != identity.session.account_id:
+        raise RuntimeError("Triage role differs from its actual authenticated actor")
+    principal = OperatorPrincipal(identity, access)
+    transaction.bind_triage_operator(principal)
+    return principal
+
+
 async def audit_triage_read(
     transaction: OperatorReportTriageTransaction,
     access: OperatorAccess,
     report_id: UUID,
     found: bool,
+    at: datetime,
 ) -> None:
     reference = OperatorResourceRef(OperatorResourceKind.REPORT, report_id)
     await transaction.save_operator_audit(
@@ -74,7 +103,7 @@ async def audit_triage_read(
             OperatorAction.READ_REPORT,
             reference,
             (reference,) if found else (),
-            await transaction.now(),
+            at,
             OperatorAuditOutcome.READ if found else OperatorAuditOutcome.NOT_FOUND,
         )
     )
@@ -113,16 +142,16 @@ class ReadReportTriageContext:
     ) -> ReportTriageContextView | None:
         digest = await self.hasher.digest(credential)
         async with self.unit_of_work.transaction(digest, report_id) as transaction:
-            principal = await require_operator(transaction, credential, self.hasher)
+            principal = await require_triage_operator(transaction, credential, self.hasher)
             preview = await transaction.lock_triage_context(report_id)
             result = None
+            at = await transaction.now()
             if preview is not None:
                 token = None
                 context = preview.context
                 if preview.report.id != report_id:
                     raise RuntimeError("Triage source preview differs from requested report")
                 if context is not None:
-                    at = await transaction.now()
                     token = self.source_codec.encode_source(
                         ReportTriageSourceClaims(
                             report_id,
@@ -136,7 +165,9 @@ class ReadReportTriageContext:
                         )
                     )
                 result = ReportTriageContextView(preview, token)
-            await audit_triage_read(transaction, principal.access, report_id, preview is not None)
+            await audit_triage_read(
+                transaction, principal.access, report_id, preview is not None, at
+            )
             await finish_operator(transaction, principal)
             return result
 
@@ -154,15 +185,15 @@ class EnqueueReportTriage:
             ("operator.report-triage.v1", str(command.report_id), command.source_token)
         )
         async with self.unit_of_work.transaction(actor_digest, command.report_id) as transaction:
-            principal = await require_operator(transaction, command.credential, self.hasher)
-            prior = await transaction.replay_triage(
+            principal = await require_triage_operator(transaction, command.credential, self.hasher)
+            observed = await transaction.replay_triage(
                 principal.access.account_id, command.intent_key, digest
             )
-            if prior is not None:
-                result = await triage_view(transaction, prior, command.report_id)
+            if observed.stored is not None:
+                result = await triage_view(transaction, observed.stored, command.report_id)
                 await finish_operator(transaction, principal)
                 return result
-            at = await transaction.now()
+            at = observed.observed_at
             claims = self.source_codec.decode_source(
                 command.source_token,
                 principal.access,
@@ -179,9 +210,10 @@ class EnqueueReportTriage:
                 or not hmac.compare_digest(context.evidence_digest, claims.evidence_digest)
             ):
                 raise ReportTriageSourceUnavailableError
-            snapshot = await transaction.materialize_triage_source(
+            prepared = await transaction.prepare_triage_source(
                 context, principal.access, principal.identity.session.id, at
             )
+            snapshot = prepared.snapshot
             if (
                 snapshot.report != context.report
                 or snapshot.operator != principal.access
@@ -190,17 +222,10 @@ class EnqueueReportTriage:
                 or snapshot.review_version != context.review_version
             ):
                 raise RuntimeError("Triage snapshot differs from its actual selected source/actor")
-            versions = await transaction.runtime_versions(await transaction.now())
-            job = await transaction.admit_triage(
-                Admission(
-                    principal.access.account_id, snapshot.task, command.intent_key, digest, versions
-                ),
-                await transaction.now(),
+            stored = await transaction.admit_triage_submission(
+                ReportTriageAdmission(prepared, command.intent_key, digest, uuid4())
             )
-            proof = await transaction.record_triage_submission(snapshot, job, uuid4())
-            result = await triage_view(
-                transaction, StoredReportTriage(job, snapshot, proof), command.report_id
-            )
+            result = await triage_view(transaction, stored, command.report_id)
             await finish_operator(transaction, principal)
             return result
 
@@ -221,7 +246,7 @@ class ReadReportTriage:
     ) -> ReportTriageRead | None:
         digest = await self.hasher.digest(credential)
         async with self.unit_of_work.transaction(digest, report_id) as transaction:
-            principal = await require_operator(transaction, credential, self.hasher)
+            principal = await require_triage_operator(transaction, credential, self.hasher)
             preview = await transaction.lock_triage_context(report_id)
             if preview is not None and preview.report.id != report_id:
                 raise RuntimeError("Triage read differs from its actual report source")
@@ -229,6 +254,12 @@ class ReadReportTriage:
             result = (
                 await triage_view(transaction, stored, report_id) if stored is not None else None
             )
-            await audit_triage_read(transaction, principal.access, report_id, preview is not None)
+            await audit_triage_read(
+                transaction,
+                principal.access,
+                report_id,
+                preview is not None,
+                await transaction.now(),
+            )
             await finish_operator(transaction, principal)
             return ReportTriageRead(report_id, result) if preview is not None else None

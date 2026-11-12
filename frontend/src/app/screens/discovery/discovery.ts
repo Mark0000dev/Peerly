@@ -4,8 +4,9 @@ import { StudentLayout } from '../student-layout';
 import { HttpClient } from '@angular/common/http';
 import { Component, DestroyRef, ChangeDetectorRef, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { TuiButton, TuiIcon, TuiCell, TuiTitle } from '@taiga-ui/core';
+import { TuiButton, TuiIcon, TuiCell, TuiTitle, TuiAppearance } from '@taiga-ui/core';
 import { TuiBadge } from '@taiga-ui/kit/components/badge';
+import { TuiSegmented } from '@taiga-ui/kit/components/segmented';
 import { TuiCardLarge, TuiBlockStatus } from '@taiga-ui/layout';
 import { TuiAutoFocus } from '@taiga-ui/cdk';
 import {
@@ -52,6 +53,8 @@ interface Intent {
     TuiCardLarge,
     TuiBlockStatus,
     TuiBadge,
+    TuiSegmented,
+    TuiAppearance,
     DiscoveryPhoto,
     RequestComposer,
     TuiAutoFocus,

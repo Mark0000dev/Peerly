@@ -49,7 +49,7 @@ test('P02 real verified preactivation student explicit preference CAS survives r
   expect(receipt.changed_at).not.toBeNull();
   await expect(page.getByText('Checking your saved preference…', { exact: true })).toHaveCount(0);
   await expect(
-    page.getByRole('button', { name: 'Use current saved preference', exact: true }),
+    page.getByRole('button', { name: 'Use saved preference', exact: true }),
   ).toBeEnabled();
   await expect(page.getByRole('status').filter({ hasText: 'Your choice was saved' })).toBeVisible();
   await checkpoint('pg-notifications-saved.png');

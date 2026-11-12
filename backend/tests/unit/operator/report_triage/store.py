@@ -6,7 +6,14 @@ from uuid import UUID, uuid4
 
 from studymate.application.ai.ports import Admission, AiQuotaError, AiUnavailableError
 from studymate.application.idempotency import IdempotencyConflictError, IntentKey
-from studymate.application.operator.report_triage_ports import StoredReportTriage
+from studymate.application.operator.authority import OperatorPrincipal
+from studymate.application.operator.report_triage_ports import (
+    PreparedReportTriageSource,
+    ReportTriageAdmission,
+    StoredReportTriage,
+    TriageAuthorityFacts,
+    TriageIntentObservation,
+)
 from studymate.domain.ai.jobs import AiJob, Failure, Versions
 from studymate.domain.operator.access import OperatorAccess
 from studymate.domain.operator.profile_reports import OperatorReportKind
@@ -66,6 +73,19 @@ class TriageStore(Store):
             self.snapshots, self.jobs, self.proofs, self.intents, self.events = before
             raise
 
+    async def lock_triage_authority(self, digest: bytes) -> TriageAuthorityFacts:
+        identity = await self.lock_identity(digest)
+        access = (
+            await self.operator_access(identity.session.account_id)
+            if identity is not None
+            else None
+        )
+        return TriageAuthorityFacts(identity, access, await self.now())
+
+    def bind_triage_operator(self, principal: OperatorPrincipal) -> None:
+        assert principal.identity == self.actor
+        assert principal.access == self.access
+
     async def lock_triage_context(self, report_id: UUID) -> ReportTriageSourcePreview | None:
         self.queried()
         return (
@@ -85,22 +105,22 @@ class TriageStore(Store):
 
     async def replay_triage(
         self, actor_id: UUID, key: IntentKey, digest: bytes
-    ) -> StoredReportTriage | None:
+    ) -> TriageIntentObservation:
         value = self.intents.get((actor_id, key.value))
         if value is None:
-            return None
+            return TriageIntentObservation(None, self.clock)
         previous, job_id = value
         if previous != digest:
             raise IdempotencyConflictError
-        return self.stored(job_id)
+        return TriageIntentObservation(self.stored(job_id), self.clock)
 
-    async def materialize_triage_source(
+    async def prepare_triage_source(
         self,
         context: ReportTriageEvidenceContext,
         access: OperatorAccess,
         actor_session_id: UUID,
         at: datetime,
-    ) -> ReportTriageEvidenceSnapshot:
+    ) -> PreparedReportTriageSource:
         for previous in self.snapshots:
             if (
                 previous.report == context.report
@@ -109,7 +129,7 @@ class TriageStore(Store):
                 and previous.review_version == context.review_version
                 and previous.evidence_digest == context.evidence_digest
             ):
-                return previous
+                return PreparedReportTriageSource(previous, True)
         previous_version = self.snapshots[-1].version if self.snapshots else None
         snapshot = ReportTriageEvidenceSnapshot(
             context.report,
@@ -122,8 +142,24 @@ class TriageStore(Store):
             context.evidence_digest,
             at,
         )
-        self.snapshots.append(snapshot)
-        return snapshot
+        return PreparedReportTriageSource(snapshot, False)
+
+    async def admit_triage_submission(self, request: ReportTriageAdmission) -> StoredReportTriage:
+        snapshot = request.source.snapshot
+        if not request.source.exists:
+            self.snapshots.append(snapshot)
+        job = await self.admit_triage(
+            Admission(
+                snapshot.operator.account_id,
+                snapshot.task,
+                request.key,
+                request.digest,
+                await self.runtime_versions(self.clock),
+            ),
+            self.clock,
+        )
+        proof = await self.record_triage_submission(snapshot, job, request.event_id)
+        return StoredReportTriage(job, snapshot, proof)
 
     async def runtime_versions(self, at: datetime) -> Versions:
         assert at == self.clock

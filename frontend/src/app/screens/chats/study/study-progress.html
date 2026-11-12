@@ -3,367 +3,384 @@
     <ng-container [ngTemplateOutlet]="studyContent" />
   </section>
 }
-<ng-template #feedbackDialog>
-  <ng-container [ngTemplateOutlet]="studyContent" />
+<ng-template #feedbackDialog let-dialogId="id" let-appearance="appearance">
+  <ng-container
+    #feedbackContent
+    [ngTemplateOutlet]="studyContent"
+    [ngTemplateOutletContext]="{ $implicit: dialogId, fullscreen: appearance === 'fullscreen' }"
+  />
 </ng-template>
-<ng-template #studyContent>
+<ng-template #studyContent let-dialogId let-fullscreen="fullscreen">
   @if (view() !== 'hidden') {
     <section
       aria-label="Study progress"
       class="study"
       [class.feedback-layout]="view() !== 'checkin'"
+      [class.fullscreen-feedback]="fullscreen === true"
     >
-      <header>
-        <div>
+      <div class="study-scroll">
+        <header>
           @if (view() === 'checkin') {
-            <h2>Study progress</h2>
+            <div>
+              <h2>Study progress</h2>
+              @if (contextLabel(); as context) {
+                <p>{{ context }}</p>
+              }
+            </div>
+            <button tuiButton type="button" appearance="flat" size="m" (click)="close()">
+              Close
+            </button>
+          } @else {
+            <h2 class="feedback-title" [id]="dialogId">Feedback</h2>
           }
+        </header>
+
+        <div class="study-body">
           @if (view() !== 'checkin') {
-            @if (peerLabel(); as peer) {
-              <p>{{ peer }}</p>
-            }
-          }
-          @if (contextLabel(); as context) {
-            <p>{{ context }}</p>
-          }
-        </div>
-        <button tuiButton type="button" appearance="flat" size="m" (click)="close()">Close</button>
-      </header>
-
-      <div class="study-body">
-        @if (command.isError || readError) {
-          <div role="alert">
-            <p>{{ errorText }}</p>
-            @if (command.isError && !conflict) {
-              <button
-                tuiButton
-                tuiButtonVertical
-                type="button"
-                appearance="secondary"
-                size="m"
-                [disabled]="busy"
-                (click)="retry()"
-              >
-                Retry same action
-              </button>
-            }
-            @if (!uncertain) {
-              <button
-                tuiButton
-                tuiButtonVertical
-                type="button"
-                appearance="secondary"
-                size="m"
-                [disabled]="busy"
-                (click)="reload()"
-              >
-                Reload current record
-              </button>
-            }
-          </div>
-        }
-        @if (busy) {
-          <p role="status">Saving study progress…</p>
-        }
-
-        @switch (view()) {
-          @case ('checkin') {
-            @if (outcome.isPending || outcome.isFetching) {
-              <p role="status">Loading study progress…</p>
-            } @else if (outcome.isSuccess) {
-              @switch (outcome.data.outcome?.answer) {
-                @case ('yes') {
-                  <h3>You said you’ve started</h3>
-                  <p>Would you like to say how it went? It takes a few seconds.</p>
-                  <button
-                    tuiButton
-                    tuiButtonVertical
-                    type="button"
-                    size="m"
-                    [disabled]="locked"
-                    (click)="showFeedback()"
-                  >
-                    Give feedback
-                  </button>
-                }
-                @case ('not_yet') {
-                  <h3>Got it</h3>
-                  <p>
-                    You said you haven’t started yet. You can change your answer here when you do.
-                  </p>
-                }
-                @case ('did_not_work_out') {
-                  <h3>Thanks for letting us know</h3>
-                  <p>
-                    You said it didn’t work out. You can keep chatting, and change your answer here
-                    later.
-                  </p>
-                }
+            <div class="feedback-context">
+              @if (peerLabel(); as peer) {
+                <p>{{ peer }}</p>
               }
-              <fieldset [disabled]="locked">
-                <legend>Have you started working on your goal together?</legend>
-                <div class="actions">
-                  <button
-                    tuiButton
-                    type="button"
-                    appearance="secondary"
-                    size="m"
-                    (click)="answer('yes')"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    tuiButton
-                    type="button"
-                    appearance="secondary"
-                    size="m"
-                    (click)="answer('not_yet')"
-                  >
-                    Not yet
-                  </button>
-                  <button
-                    tuiButton
-                    tuiButtonVertical
-                    type="button"
-                    appearance="secondary"
-                    size="m"
-                    (click)="answer('did_not_work_out')"
-                  >
-                    It didn’t work out
-                  </button>
-                </div>
-              </fieldset>
-              <p>Each person answers independently. Skipping stays unknown.</p>
-              <button tuiButton type="button" appearance="flat" size="m" (click)="close()">
-                Dismiss
-              </button>
-            }
-          }
-          @case ('feedback') {
-            @if (feedback.isPending) {
-              <p role="status">Loading your feedback…</p>
-            } @else if (feedback.isSuccess) {
-              @if (feedback.isFetching) {
-                <p role="status">Refreshing your feedback…</p>
+              @if (contextLabel(); as context) {
+                <p>{{ context }}</p>
               }
-              @if (draftChanged) {
-                @let reviewedVersion = feedback.data.current?.version ?? 0;
-                <section aria-label="Latest saved feedback" class="review">
-                  <h3>Saved answers changed</h3>
-                  <p role="status">
-                    Your draft is kept. Review the latest saved answers before replacing them.
-                  </p>
-                  @if (feedback.data.current; as saved) {
-                    <dl>
-                      <dt>Saved answer</dt>
-                      <dd>{{ againLabels[saved.again] }}</dd>
-                      <dt>Saved descriptors</dt>
-                      <dd>
-                        @if (saved.descriptors.includes('easy_to_communicate')) {
-                          <p>Easy to communicate</p>
-                        }
-                        @if (saved.descriptors.includes('prepared')) {
-                          <p>Prepared</p>
-                        }
-                        @if (saved.descriptors.includes('supportive')) {
-                          <p>Supportive</p>
-                        }
-                        @if (saved.descriptors.length === 0) {
-                          None
-                        }
-                      </dd>
-                      <dt>Saved note for the team</dt>
-                      <dd class="saved-note">{{ saved.team_note ?? 'No note' }}</dd>
-                    </dl>
-                  } @else {
-                    <p>There are no saved answers.</p>
+            </div>
+          }
+          @if (command.isError || readError) {
+            <div role="alert">
+              <p>{{ errorText }}</p>
+              @if (command.isError && !conflict) {
+                <button
+                  tuiButton
+                  tuiButtonVertical
+                  type="button"
+                  appearance="secondary"
+                  size="m"
+                  [disabled]="busy"
+                  (click)="retry()"
+                >
+                  Retry same action
+                </button>
+              }
+              @if (!uncertain) {
+                <button
+                  tuiButton
+                  tuiButtonVertical
+                  type="button"
+                  appearance="secondary"
+                  size="m"
+                  [disabled]="busy"
+                  (click)="reload()"
+                >
+                  Reload current record
+                </button>
+              }
+            </div>
+          }
+          @if (busy) {
+            <p role="status">Saving study progress…</p>
+          }
+
+          @switch (view()) {
+            @case ('checkin') {
+              @if (outcome.isPending || outcome.isFetching) {
+                <p role="status">Loading study progress…</p>
+              } @else if (outcome.isSuccess) {
+                @switch (outcome.data.outcome?.answer) {
+                  @case ('yes') {
+                    <h3>You said you’ve started</h3>
+                    <p>Would you like to say how it went? It takes a few seconds.</p>
+                    <button
+                      tuiButton
+                      tuiButtonVertical
+                      type="button"
+                      size="m"
+                      [disabled]="locked"
+                      (click)="showFeedback()"
+                    >
+                      Give feedback
+                    </button>
                   }
+                  @case ('not_yet') {
+                    <h3>Got it</h3>
+                    <p>
+                      You said you haven’t started yet. You can change your answer here when you do.
+                    </p>
+                  }
+                  @case ('did_not_work_out') {
+                    <h3>Thanks for letting us know</h3>
+                    <p>
+                      You said it didn’t work out. You can keep chatting, and change your answer
+                      here later.
+                    </p>
+                  }
+                }
+                <fieldset [disabled]="locked">
+                  <legend>Have you started working on your goal together?</legend>
+                  <div class="actions">
+                    <button
+                      tuiButton
+                      type="button"
+                      appearance="secondary"
+                      size="m"
+                      (click)="answer('yes')"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      tuiButton
+                      type="button"
+                      appearance="secondary"
+                      size="m"
+                      (click)="answer('not_yet')"
+                    >
+                      Not yet
+                    </button>
+                    <button
+                      tuiButton
+                      tuiButtonVertical
+                      type="button"
+                      appearance="secondary"
+                      size="m"
+                      (click)="answer('did_not_work_out')"
+                    >
+                      It didn’t work out
+                    </button>
+                  </div>
+                </fieldset>
+                <p>Each person answers independently. Skipping stays unknown.</p>
+                <button tuiButton type="button" appearance="flat" size="m" (click)="close()">
+                  Dismiss
+                </button>
+              }
+            }
+            @case ('feedback') {
+              @if (feedback.isPending) {
+                <p role="status">Loading your feedback…</p>
+              } @else if (feedback.isSuccess) {
+                @if (feedback.isFetching) {
+                  <p role="status">Refreshing your feedback…</p>
+                }
+                @if (draftChanged) {
+                  @let reviewedVersion = feedback.data.current?.version ?? 0;
+                  <section aria-label="Latest saved feedback" class="review">
+                    <h3>Saved answers changed</h3>
+                    <p role="status">
+                      Your draft is kept. Review the latest saved answers before replacing them.
+                    </p>
+                    @if (feedback.data.current; as saved) {
+                      <dl>
+                        <dt>Saved answer</dt>
+                        <dd>{{ againLabels[saved.again] }}</dd>
+                        <dt>Saved descriptors</dt>
+                        <dd>
+                          @if (saved.descriptors.includes('easy_to_communicate')) {
+                            <p>Easy to communicate</p>
+                          }
+                          @if (saved.descriptors.includes('prepared')) {
+                            <p>Prepared</p>
+                          }
+                          @if (saved.descriptors.includes('supportive')) {
+                            <p>Supportive</p>
+                          }
+                          @if (saved.descriptors.length === 0) {
+                            None
+                          }
+                        </dd>
+                        <dt>Saved note for the team</dt>
+                        <dd class="saved-note">{{ saved.team_note ?? 'No note' }}</dd>
+                      </dl>
+                    } @else {
+                      <p>There are no saved answers.</p>
+                    }
+                    <div class="actions">
+                      <button
+                        tuiButton
+                        tuiButtonVertical
+                        type="button"
+                        appearance="secondary"
+                        size="m"
+                        [disabled]="reviewLocked"
+                        (click)="reviewAnswers(reviewedVersion, false)"
+                      >
+                        Keep my answers
+                      </button>
+                      <button
+                        tuiButton
+                        tuiButtonVertical
+                        type="button"
+                        appearance="secondary"
+                        size="m"
+                        [disabled]="reviewLocked"
+                        (click)="reviewAnswers(reviewedVersion, true)"
+                      >
+                        Load saved answers
+                      </button>
+                    </div>
+                  </section>
+                }
+                @if (needsConfirmation) {
+                  <h3>Have you worked on your study goal together?</h3>
+                  <p>In chat, in person or on a call.</p>
                   <div class="actions">
                     <button
                       tuiButton
                       tuiButtonVertical
                       type="button"
-                      appearance="secondary"
                       size="m"
-                      [disabled]="reviewLocked"
-                      (click)="reviewAnswers(reviewedVersion, false)"
+                      [disabled]="locked || !outcome.isSuccess"
+                      (click)="confirm()"
                     >
-                      Keep my answers
+                      Yes, we worked together
                     </button>
                     <button
                       tuiButton
-                      tuiButtonVertical
                       type="button"
                       appearance="secondary"
                       size="m"
-                      [disabled]="reviewLocked"
-                      (click)="reviewAnswers(reviewedVersion, true)"
+                      [disabled]="locked || !outcome.isSuccess"
+                      (click)="answer('not_yet')"
                     >
-                      Load saved answers
+                      Not yet
                     </button>
                   </div>
-                </section>
-              }
-              @if (needsConfirmation) {
-                <h3>Have you worked on your study goal together?</h3>
-                <p>In chat, in person or on a call.</p>
-                <div class="actions">
-                  <button
-                    tuiButton
-                    tuiButtonVertical
-                    type="button"
-                    size="m"
-                    [disabled]="locked || !outcome.isSuccess"
-                    (click)="confirm()"
-                  >
-                    Yes, we worked together
-                  </button>
-                  <button
-                    tuiButton
-                    type="button"
-                    appearance="secondary"
-                    size="m"
-                    [disabled]="locked || !outcome.isSuccess"
-                    (click)="answer('not_yet')"
-                  >
-                    Not yet
-                  </button>
-                </div>
-              } @else if (!feedback.data.can_submit) {
-                <p role="status">Feedback is unavailable for this conversation right now.</p>
-              } @else {
-                @if (feedback.data.current; as current) {
-                  <p>Changing your feedback replaces your earlier answer.</p>
-                  @if (feedback.data.current_publication === 'removed') {
-                    <p>Your current feedback has been removed from the public summary.</p>
-                  }
-                }
-                @if (publication === 'private_only') {
-                  <h3>This goes to the team only</h3>
-                  <p>This feedback won’t count toward the other person’s public summary.</p>
-                }
-                <form [id]="feedbackFormId" [formGroup]="form" (ngSubmit)="save()">
-                  <fieldset [disabled]="locked">
-                    <legend>Would you study together again?</legend>
-                    <div class="choices">
-                      <label
-                        ><input tuiRadio type="radio" formControlName="again" value="yes" />
-                        Yes</label
-                      >
-                      <label
-                        ><input tuiRadio type="radio" formControlName="again" value="maybe" />
-                        Maybe</label
-                      >
-                      <label
-                        ><input tuiRadio type="radio" formControlName="again" value="no" />
-                        No</label
-                      >
-                    </div>
-                    @if (form.controls.again.touched && form.controls.again.invalid) {
-                      <p role="alert">Choose Yes, Maybe or No.</p>
+                } @else if (!feedback.data.can_submit) {
+                  <p role="status">Feedback is unavailable for this conversation right now.</p>
+                } @else {
+                  @if (feedback.data.current; as current) {
+                    <p>Changing your feedback replaces your earlier answer.</p>
+                    @if (feedback.data.current_publication === 'removed') {
+                      <p>Your current feedback has been removed from the public summary.</p>
                     }
-                  </fieldset>
-                  <fieldset [disabled]="locked">
-                    <legend>What stood out? · optional</legend>
-                    <div class="choices">
-                      <label
-                        ><input tuiCheckbox type="checkbox" formControlName="easy" /> Easy to
-                        communicate</label
-                      >
-                      <label
-                        ><input tuiCheckbox type="checkbox" formControlName="prepared" />
-                        Prepared</label
-                      >
-                      <label
-                        ><input tuiCheckbox type="checkbox" formControlName="supportive" />
-                        Supportive</label
-                      >
-                    </div>
-                  </fieldset>
-                  <tui-textfield>
-                    <label tuiLabel for="study-team-note">Note for the team · optional</label>
-                    <textarea
-                      id="study-team-note"
-                      tuiTextarea
-                      formControlName="note"
-                      [readOnly]="locked"
-                      aria-describedby="study-note-help"
-                      rows="3"
-                    ></textarea>
-                  </tui-textfield>
-                  <p id="study-note-help" class="note-help">
-                    Only the team can see this. Maximum 1,000 characters.
-                  </p>
-                  @if (form.controls.note.touched && form.controls.note.invalid) {
-                    <p role="alert">Keep your note within 1,000 characters.</p>
                   }
-                </form>
+                  @if (publication === 'private_only') {
+                    <h3>This goes to the team only</h3>
+                    <p>This feedback won’t count toward the other person’s public summary.</p>
+                  }
+                  <form [id]="feedbackFormId" [formGroup]="form" (ngSubmit)="save()">
+                    <fieldset [disabled]="locked">
+                      <legend>Would you study together again?</legend>
+                      <div class="choices">
+                        <label
+                          ><input tuiRadio type="radio" formControlName="again" value="yes" />
+                          Yes</label
+                        >
+                        <label
+                          ><input tuiRadio type="radio" formControlName="again" value="maybe" />
+                          Maybe</label
+                        >
+                        <label
+                          ><input tuiRadio type="radio" formControlName="again" value="no" />
+                          No</label
+                        >
+                      </div>
+                      @if (form.controls.again.touched && form.controls.again.invalid) {
+                        <p role="alert">Choose Yes, Maybe or No.</p>
+                      }
+                    </fieldset>
+                    <fieldset [disabled]="locked">
+                      <legend>What stood out? · optional</legend>
+                      <div class="choices">
+                        <label
+                          ><input tuiCheckbox type="checkbox" formControlName="easy" /> Easy to
+                          communicate</label
+                        >
+                        <label
+                          ><input tuiCheckbox type="checkbox" formControlName="prepared" />
+                          Prepared</label
+                        >
+                        <label
+                          ><input tuiCheckbox type="checkbox" formControlName="supportive" />
+                          Supportive</label
+                        >
+                      </div>
+                    </fieldset>
+                    <label tuiLabel for="study-team-note">Note for the team · optional</label>
+                    <tui-textfield [tuiTextfieldCleaner]="false">
+                      <textarea
+                        id="study-team-note"
+                        tuiTextarea
+                        formControlName="note"
+                        [readOnly]="locked"
+                        aria-describedby="study-note-help"
+                        [minRows]="2"
+                        [maxRows]="2"
+                      ></textarea>
+                    </tui-textfield>
+                    <p id="study-note-help" class="note-help">
+                      Only the team can see this. Maximum 1,000 characters.
+                    </p>
+                    @if (form.controls.note.touched && form.controls.note.invalid) {
+                      <p role="alert">Keep your note within 1,000 characters.</p>
+                    }
+                  </form>
+                }
+                <p>
+                  Your answers aren’t shown individually to the other person. Public summaries
+                  appear after three different partners respond, but people in a small community may
+                  still guess.
+                </p>
               }
-              <p>
-                Your answers aren’t shown individually to the other person. Public summaries appear
-                after three different partners respond, but people in a small community may still
-                guess.
-              </p>
+            }
+            @case ('saved') {
+              <h3>Thanks, your feedback is saved</h3>
+              @if (feedback.isFetching || feedback.isPending) {
+                <p role="status">Checking current publication…</p>
+              } @else if (feedback.isSuccess) {
+                @switch (feedback.data.current_publication) {
+                  @case ('eligible') {
+                    <p>
+                      It counts once toward the other person’s summary. You can change it later from
+                      Study progress.
+                    </p>
+                  }
+                  @case ('private_only') {
+                    <p>It goes to the team only and does not count toward the public summary.</p>
+                  }
+                  @case ('removed') {
+                    <p>Your current feedback is removed from the public summary.</p>
+                  }
+                  @default {
+                    <p>You can review its current status later from Study progress.</p>
+                  }
+                }
+              }
+              <button
+                tuiButton
+                tuiButtonVertical
+                tuiAutoFocus
+                type="button"
+                size="m"
+                (click)="close()"
+              >
+                Back to chat
+              </button>
             }
           }
-          @case ('saved') {
-            <h3>Thanks, your feedback is saved</h3>
-            @if (feedback.isFetching || feedback.isPending) {
-              <p role="status">Checking current publication…</p>
-            } @else if (feedback.isSuccess) {
-              @switch (feedback.data.current_publication) {
-                @case ('eligible') {
-                  <p>
-                    It counts once toward the other person’s summary. You can change it later from
-                    Study progress.
-                  </p>
-                }
-                @case ('private_only') {
-                  <p>It goes to the team only and does not count toward the public summary.</p>
-                }
-                @case ('removed') {
-                  <p>Your current feedback is removed from the public summary.</p>
-                }
-                @default {
-                  <p>You can review its current status later from Study progress.</p>
-                }
-              }
-            }
+        </div>
+      </div>
+      @if (view() === 'feedback') {
+        <footer>
+          @if (feedback.isSuccess && !needsConfirmation && feedback.data.can_submit) {
             <button
               tuiButton
               tuiButtonVertical
-              tuiAutoFocus
-              type="button"
+              type="submit"
+              [attr.form]="feedbackFormId"
               size="m"
-              (click)="close()"
+              [disabled]="locked || feedback.isFetching || draftChanged"
             >
-              Back to chat
+              {{
+                feedback.data.current !== null
+                  ? 'Update feedback'
+                  : publication === 'private_only'
+                    ? 'Send to the team'
+                    : 'Save feedback'
+              }}
             </button>
           }
-        }
-      </div>
-      @if (
-        view() === 'feedback' &&
-        feedback.isSuccess &&
-        !needsConfirmation &&
-        feedback.data.can_submit
-      ) {
-        <footer>
-          <button
-            tuiButton
-            tuiButtonVertical
-            type="submit"
-            [attr.form]="feedbackFormId"
-            size="m"
-            [disabled]="locked || feedback.isFetching || draftChanged"
-          >
-            {{
-              feedback.data.current !== null
-                ? 'Update feedback'
-                : publication === 'private_only'
-                  ? 'Send to the team'
-                  : 'Save feedback'
-            }}
+          <button tuiButton type="button" appearance="flat" size="m" (click)="close()">
+            Close
           </button>
         </footer>
       }

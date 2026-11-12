@@ -1,3 +1,4 @@
+import { assertNaturalWordWrapping } from '../../../../../testing/readable-text';
 import type { Locator, Page, Request, Route, TestInfo } from '@playwright/test';
 import { test, expect } from '../../../../../testing/visual';
 import type { Api } from '../../../api.generated';
@@ -85,6 +86,12 @@ async function open(page: Readonly<Page>): Promise<void> {
 async function feedback(page: Readonly<Page>): Promise<void> {
   await open(page);
   await page.getByRole('button', { name: 'Give feedback', exact: true }).click();
+}
+type VisibleBounds = Readonly<NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>>;
+async function requiredBounds(locator: Readonly<Locator>): Promise<VisibleBounds> {
+  const bounds = await locator.boundingBox();
+  if (bounds === null) throw new Error('Missing focused control bounds');
+  return bounds;
 }
 function releaseHeldFeedback(release: (() => void) | undefined): void {
   if (release === undefined) throw new Error('Missing held feedback response');
@@ -472,15 +479,49 @@ test('F02 initial 320px / 200% text, reduced motion and keyboard controls remain
   });
   await setup(page);
   await feedback(page);
+  const heading = page.getByRole('heading', { name: 'Feedback', exact: true });
+  await expect(heading).toBeInViewport({ ratio: 1 });
+  await assertNaturalWordWrapping(heading);
   await page.getByRole('radio', { name: 'Maybe', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('radio', { name: 'No', exact: true })).toBeChecked();
-  await page.getByRole('textbox', { name: 'Note for the team · optional' }).focus();
+  for (const label of ['Easy to communicate', 'Prepared', 'Supportive']) {
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('checkbox', { name: label, exact: true })).toBeFocused();
+  }
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('textbox', { name: 'Note for the team · optional' })).toBeFocused();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.type('Keyboard draft');
-  await expect(page.getByRole('textbox', { name: 'Note for the team · optional' })).toHaveValue(
-    'Keyboard draft',
-  );
+  const note = page.getByRole('textbox', { name: 'Note for the team · optional' });
+  await expect(note).toHaveValue('Keyboard draft');
+  // Taiga clips the native textarea's painted content inside its own padding.
+  // Its public Textfield owns the complete visible border and focus outline.
+  const textfield = page.locator('tui-textfield').filter({ has: note });
+  await expect(textfield).toBeInViewport({ ratio: 1 });
+  const noteBox = await requiredBounds(note);
+  const fieldBox = await requiredBounds(textfield);
+  const scrollBox = await requiredBounds(page.locator('.study-scroll'));
+  expect(noteBox).toEqual(fieldBox);
+  expect(noteBox.y).toBeGreaterThanOrEqual(scrollBox.y);
+  expect(noteBox.y + noteBox.height).toBeLessThanOrEqual(scrollBox.y + scrollBox.height);
+  expect(noteBox.x).toBeGreaterThanOrEqual(scrollBox.x);
+  expect(noteBox.x + noteBox.width).toBeLessThanOrEqual(scrollBox.x + scrollBox.width);
+  await page.keyboard.type('\nAnother line\nFinal line');
+  await expect(note).toHaveValue('Keyboard draft\nAnother line\nFinal line');
+  await expect(textfield).toBeInViewport({ ratio: 1 });
+  await expect(note).toBeFocused();
+  expect(
+    await note.evaluate(
+      (element: Readonly<HTMLElement | SVGElement>) => element.scrollHeight > element.clientHeight,
+    ),
+  ).toBe(true);
+  // The title shares the natural scrolling content, rather than covering the
+  // native caret's reveal area. The action footer remains independently usable.
+  await expect(page.getByRole('dialog', { name: 'Feedback', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Update feedback', exact: true })).toBeInViewport({
+    ratio: 1,
+  });
   expect(page.viewportSize()?.width).toBe(320);
   const geometry = await page.evaluate(
     (limit: number) => ({
@@ -877,4 +918,50 @@ test('F02 Escape closes the explicit native dialog while a late save cannot reop
     ),
   ).toHaveLength(1);
   await checkpoint('f02-native-dialog-closed-late-save.png', { fullPage: true });
+});
+
+test('F02 browser Back retires the open feedback owner before a late save returns', async ({
+  page,
+  checkpoint,
+}: Scenario) => {
+  const writes = await setup(page);
+  await page.goto('/chats');
+  await page.getByRole('link', { name: 'Maya Lim', exact: true }).click();
+  await page.getByRole('button', { name: 'Study progress', exact: true }).click();
+  await page.getByRole('button', { name: 'Give feedback', exact: true }).click();
+  await page
+    .getByRole('textbox', { name: 'Note for the team · optional', exact: true })
+    .fill('Private feedback owned by the previous conversation screen');
+  let release: (() => void) | undefined;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**${base}/feedback`, async (route: Readonly<Route>) => {
+    if (route.request().method() === 'PUT') await pending;
+    await route.fallback();
+  });
+  const response = page.waitForResponse(
+    (value) => value.url().endsWith('/feedback') && value.request().method() === 'PUT',
+  );
+  await page.getByRole('button', { name: 'Update feedback', exact: true }).click();
+  await expect(page.getByText('Saving study progress…', { exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/chats$/u);
+  await expect(page.getByRole('heading', { name: 'Chats', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Study progress', exact: true })).toHaveCount(0);
+  await expect(page.locator('#study-team-note')).toHaveCount(0);
+  await expect(
+    page.getByText('Private feedback owned by the previous conversation screen', { exact: true }),
+  ).toHaveCount(0);
+  releaseHeldFeedback(release);
+  expect((await response).status()).toBe(200);
+  await expect(page.getByRole('region', { name: 'Study progress', exact: true })).toHaveCount(0);
+  await expect(page.locator('#study-team-note')).toHaveCount(0);
+  expect(
+    writes().filter(
+      (request) =>
+        request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/feedback'),
+    ),
+  ).toHaveLength(1);
+  await checkpoint('f02-route-retired-private-feedback.png', { fullPage: false });
 });

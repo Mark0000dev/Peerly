@@ -5,7 +5,7 @@ import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, ChangeDetectorRef, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { TuiTextarea } from '@taiga-ui/kit';
+import { TuiBadge, TuiTextarea } from '@taiga-ui/kit';
 import {
   TuiButton,
   TuiDialog,
@@ -71,6 +71,7 @@ interface ReportIntent {
     TuiIcon,
     TuiTextfield,
     TuiTextarea,
+    TuiBadge,
     PersonFeedbackSummary,
   ],
   templateUrl: './person.html',

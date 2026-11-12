@@ -97,7 +97,8 @@ async def test_telegram_is_exact_metadata_notice_and_retains_actual_message_rece
     assert body["message_thread_id"] == config.topic_id
     assert body["link_preview_options"] == {"is_disabled": True}
     assert "parse_mode" not in body
-    assert b"/operator/cases/" in requests[0].content
+    assert b"/operator/support?case=" in requests[0].content
+    assert b"/operator/cases/" not in requests[0].content
     assert "actor_id" not in requests[0].content.decode()
     assert TOKEN not in repr(config) + repr(result) + caplog.text
     assert "/bot" not in caplog.text

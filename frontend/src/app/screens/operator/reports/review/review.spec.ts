@@ -218,6 +218,72 @@ describe('M02 human decision intent ownership', () => {
     expect(await stale).toBe(false);
     await shown('Operator access must be checked');
   });
+  for (const failure of [
+    { status: 401, text: 'Operator access must be checked' },
+    { status: 404, text: 'This report is unavailable for review.' },
+    { status: 409, text: 'Read the current state before reviewing a new decision.' },
+    { status: 422, text: 'The report, history cursor or decision could not be accepted.' },
+    { status: 503, text: 'The report review could not be loaded or confirmed.' },
+  ]) {
+    it(`keeps an actual history ${String(failure.status)} read failure explicit without recording a decision`, async () => {
+      (await request('GET')).flush(
+        { code: 'report_review_unavailable' },
+        { status: failure.status, statusText: 'Failure' },
+      );
+      await shown(failure.text);
+      expect(host().textContent).not.toContain('Decision stored');
+      backend.expectNone((value) => value.method === 'POST');
+    });
+  }
+  for (const changed of [
+    { field: 'report', patch: { report_id: 'b4444444-4444-4444-8444-444444444444' } },
+    { field: 'operator', patch: { operator_id: 'b5555555-5555-4555-8555-555555555555' } },
+    { field: 'action', patch: { action: 'escalate' } },
+    { field: 'reason', patch: { reason: 'A different recorded reason' } },
+    { field: 'version', patch: { version: 2, previous_version: 1 } },
+  ] satisfies readonly Readonly<{
+    readonly field: string;
+    readonly patch: Readonly<Partial<ReturnType<typeof revision>>>;
+  }>[]) {
+    it(`cannot confirm a review receipt for a different ${changed.field} and recovers only the original intent`, async () => {
+      await open();
+      const reason = 'Reason under explicit review';
+      draft(reason);
+      click('Review decision');
+      click('Record reviewed decision');
+      const first = await request('POST');
+      const key = first.request.headers.get('Idempotency-Key');
+      expect(key).not.toBeNull();
+      first.flush({ ...revision(1), reason, ...changed.patch });
+      await shown('The decision outcome is unknown.');
+      expect(host().textContent).toContain(reason);
+      expect(host().textContent).not.toContain('Decision stored');
+      backend.expectNone((value) => value.method === 'GET');
+      click('Retry identical decision');
+      const retry = await request('POST');
+      expect(retry.request.body).toEqual(first.request.body);
+      expect(retry.request.headers.get('Idempotency-Key')).toBe(key);
+      retry.flush({ ...revision(1), reason });
+      (await request('GET')).flush({
+        ...emptyHistory,
+        current: { ...revision(1), reason },
+        revisions: [{ ...revision(1), reason }],
+        anchor_version: 1,
+      });
+      await shown('Decision stored');
+    });
+  }
+  it('retires a queued review before dispatch when operator authority disappears', async () => {
+    await open();
+    draft('Private reason before authority retirement');
+    click('Review decision');
+    click('Record reviewed decision');
+    client.setQueryData(['session'], null);
+    fixture.detectChanges();
+    await shown('Operator access must be checked');
+    expect(host().textContent).not.toContain('Private reason before authority retirement');
+    backend.expectNone((value) => value.method === 'POST');
+  });
   it('emits actual forbidden authority and preserves its query sentinel for parent resource revalidation', async () => {
     const component: unknown = fixture.debugElement.query(
       By.directive(OperatorReportReview),

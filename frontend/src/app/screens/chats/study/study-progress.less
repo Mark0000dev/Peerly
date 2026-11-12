@@ -75,9 +75,15 @@ legend {
 }
 
 header p,
+.feedback-context,
 .note-help {
   font: var(--tui-typography-body-s);
   color: var(--tui-text-secondary);
+}
+
+.feedback-title {
+  flex-basis: 100%;
+  font: var(--tui-typography-heading-h6);
 }
 
 .choices {
@@ -95,13 +101,19 @@ header p,
 }
 
 .feedback-layout {
-  contain: size;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-block-size: 0;
 }
 
+// A fullscreen dialog supplies a viewport-sized flex area. Keep its intrinsic
+// form height in the scrolling body; desktop dialogs keep natural sizing.
+.fullscreen-feedback {
+  contain: size;
+}
+
+.study-scroll,
 .study-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -110,12 +122,18 @@ header p,
   min-inline-size: 0;
 }
 
-.feedback-layout .study-body {
+.feedback-layout .study-scroll {
   min-block-size: 0;
   overflow: auto;
+  scroll-padding-block: 1rem;
   flex: 1;
 }
 
 footer > button {
   flex: 1 1 auto;
+}
+
+.feedback-layout footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }

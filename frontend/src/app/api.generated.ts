@@ -1206,6 +1206,13 @@ export interface Api {
       readonly observed_at: string;
       readonly pagination?: 'anchored_search_not_commit_order';
     };
+    readonly OperatorGoogleClaimResponse: {
+      readonly created_at: string;
+      readonly id: string;
+      readonly issuer: string;
+      readonly retired_at: string | null;
+      readonly subject: string;
+    };
     readonly OperatorHelpHistoryResponse: {
       readonly account_id: string;
       readonly anchor_version: number;
@@ -1224,6 +1231,31 @@ export interface Api {
       readonly subject_label: string;
       readonly topic_match_key: string | null;
       readonly topic_note: string | null;
+    };
+    readonly OperatorIdentityAccountResponse: {
+      readonly account_id: string;
+      readonly banned_at: string | null;
+      readonly created_at: string;
+      readonly deleted_at: string | null;
+      readonly google: Api['schemas']['OperatorGoogleClaimResponse'] | null;
+      readonly institutional: Api['schemas']['OperatorInstitutionalClaimResponse'] | null;
+    };
+    readonly OperatorIdentityLinkResponse: {
+      readonly account: Api['schemas']['OperatorIdentityAccountResponse'];
+      readonly shared_google_claim: boolean;
+      readonly shared_institutional_email: boolean;
+    };
+    readonly OperatorIdentityLinksResponse: {
+      readonly as_of: string;
+      readonly links: readonly Api['schemas']['OperatorIdentityLinkResponse'][];
+      readonly next_cursor: string | null;
+      readonly target: Api['schemas']['OperatorIdentityAccountResponse'];
+    };
+    readonly OperatorInstitutionalClaimResponse: {
+      readonly email: string;
+      readonly retired_at: string | null;
+      readonly revoked_at: string | null;
+      readonly verified_at: string;
     };
     readonly OperatorLifecycleHistoryResponse: {
       readonly account_id: string;
@@ -4081,6 +4113,24 @@ export interface Api {
         readonly body: undefined;
         readonly responses: {
           readonly '200': Api['schemas']['OperatorHelpHistoryResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/identity-links': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorIdentityLinksResponse'];
           readonly '401': Api['schemas']['ProblemResponse'];
           readonly '403': Api['schemas']['ProblemResponse'];
           readonly '404': Api['schemas']['ProblemResponse'];

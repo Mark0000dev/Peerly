@@ -86,29 +86,36 @@
                       aria-hidden="true"
                     ></span>
                   }
-                  <div>
+                  <div class="profile-identity-copy">
                     @if (details.display_name; as name) {
                       <h2>{{ name }}</h2>
                     } @else {
                       <p>Your name hasn’t been set.</p>
                     }
-                    <p class="verified">
+                    <span class="verified" tuiBadge appearance="sp-subject" size="m">
                       <tui-icon icon="@tui.shield-check" aria-hidden="true" />
                       APU email confirmed
-                    </p>
+                    </span>
                     @if (discoverSummary; as summary) {
                       <p [tuiStatus]="summary.color" class="discover-status">{{ summary.label }}</p>
                     }
                   </div>
                 </header>
-                @if (details.about) {
-                  <p>{{ details.about }}</p>
-                }
-                @if (details.programme) {
-                  <p>{{ details.programme }}</p>
-                }
-                @if (details.year_label) {
-                  <p>{{ details.year_label }}</p>
+                @if (details.about || details.programme || details.year_label) {
+                  <div class="profile-details">
+                    @if (details.about) {
+                      <p>{{ details.about }}</p>
+                    }
+                    @if (details.programme || details.year_label) {
+                      <p>
+                        {{ details.programme }}
+                        @if (details.programme && details.year_label) {
+                          ·
+                        }
+                        {{ details.year_label }}
+                      </p>
+                    }
+                  </div>
                 }
               }
               @if (goal.data?.goal; as active) {
@@ -119,8 +126,14 @@
                       <h2 tuiTitle class="study-copy">
                         {{ active.subject.label }}
                         @if (active.topic) {
-                          <span tuiSubtitle>{{ active.topic }}</span>
+                          · {{ active.topic }}
                         }
+                        <span tuiSubtitle>
+                          {{ active.completed_at ? 'Completed goal' : 'Your active goal' }}
+                          @if (active.shared_learning) {
+                            · Open to studying together
+                          }
+                        </span>
                       </h2>
                       <a
                         tuiLink
@@ -132,7 +145,7 @@
                     </div>
                   </div>
                   @if (active.context) {
-                    <p>{{ active.context }}</p>
+                    <p class="study-context">{{ active.context }}</p>
                   }
                   <peerly-complete-goal
                     [actorId]="actor.account_id"
@@ -140,14 +153,19 @@
                     [checking]="checking"
                     (expired)="checkSession()"
                   />
-                  <p>{{ active.completed_at ? 'Completed goal' : 'Your active goal' }}</p>
-                  @if (active.shared_learning) {
-                    <p>Open to studying together</p>
-                  }
                 </section>
               } @else if (goal.isSuccess) {
-                <p>No active study goal yet.</p>
-                <a tuiLink routerLink="/profile/goal">Set a study goal</a>
+                <section tuiCardLarge="compact" appearance="floating" aria-label="Your study goal">
+                  <h2 tuiTitle>No active study goal yet.</h2>
+                  <p class="study-context">Save a goal to find help or study partners.</p>
+                  <a
+                    tuiButton
+                    appearance="secondary"
+                    iconStart="@tui.target"
+                    routerLink="/profile/goal"
+                    >Set a study goal</a
+                  >
+                </section>
               }
               @let helpAreas = help.data?.selection?.subjects ?? [];
               @if (helpAreas.length > 0) {
@@ -159,7 +177,20 @@
                   <div tuiCell="m" class="study-heading">
                     <div class="study-row">
                       <tui-icon icon="@tui.hand-helping" aria-hidden="true" />
-                      <h2 tuiTitle class="study-copy">You can help with</h2>
+                      <h2 tuiTitle class="study-copy">
+                        <span class="help-labels">
+                          @for (area of helpAreas; track area.subject_id) {
+                            <span class="help-area"
+                              >{{ area.label }}
+                              @if (area.topic_note) {
+                                <span class="help-note"> · {{ area.topic_note }}</span>
+                              }
+                              {{ $last ? '' : ', ' }}
+                            </span>
+                          }
+                        </span>
+                        <span tuiSubtitle>You can help with</span>
+                      </h2>
                       <a
                         tuiLink
                         class="study-edit"
@@ -169,14 +200,6 @@
                       >
                     </div>
                   </div>
-                  @for (area of helpAreas; track area.subject_id) {
-                    <p>
-                      {{ area.label }}
-                      @if (area.topic_note) {
-                        · {{ area.topic_note }}
-                      }
-                    </p>
-                  }
                 </section>
               } @else if (help.isSuccess) {
                 <p>No help areas selected yet.</p>

@@ -94,6 +94,28 @@ describe('C01/C02 canonical reads and account boundaries', () => {
     });
     await shown(peer.display_name ?? 'Profile unavailable');
   }
+  it('keeps a long actual preview, context and unread metadata in one native chat link', async () => {
+    const longText = 'A long confirmed message with another paragraph.\n'.repeat(40);
+    backend.expectOne('/api/v1/me').flush(identity);
+    await vi.waitFor(() => {
+      backend.expectOne('/api/v1/conversations').flush({
+        ...page,
+        conversations: [{ ...summary, last_message: { ...message, text: longText } }],
+      });
+    });
+    await shown(longText);
+    const link = host().querySelector('a[aria-label="Maya Lim"]');
+    expect(link?.getAttribute('href')).toBe(`/chats?conversation=${conversation.conversation_id}`);
+    expect(link?.textContent).toContain(longText);
+    expect(link?.getAttribute('aria-describedby')).toBe(
+      `conversation-context-${conversation.conversation_id} conversation-meta-${conversation.conversation_id}`,
+    );
+    expect(link?.querySelector('.preview-line')).toBeInstanceOf(HTMLElement);
+    expect(link?.querySelectorAll('button, a')).toHaveLength(0);
+    expect(host().textContent).toContain('1 unread');
+    backend.expectNone(`/api/v1/conversations/${conversation.conversation_id}/read-position`);
+    backend.expectNone(`/api/v1/conversations/${conversation.conversation_id}/messages`);
+  });
   async function admitNoOffer(): Promise<void> {
     await vi.waitFor(() => {
       fixture.detectChanges();
@@ -246,7 +268,7 @@ describe('C01/C02 canonical reads and account boundaries', () => {
           ],
         });
       });
-      await shown('Connected · no messages yet');
+      await shown('Connected about Databases');
       await shown('Profile unavailable');
     });
   it('blocks all private reads while session is absent/ineligible', async () => {
@@ -565,7 +587,7 @@ describe('C01/C02 canonical reads and account boundaries', () => {
     if (!(toggle instanceof HTMLButtonElement)) throw new Error('Missing context disclosure');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(host().querySelectorAll('h1')).toHaveLength(1);
-    expect(host().querySelector('h1')?.textContent).toBe(peer.display_name);
+    expect(host().querySelector('h1')?.textContent.trim()).toBe(peer.display_name);
     toggle.click();
     await vi.waitFor(() => {
       fixture.detectChanges();

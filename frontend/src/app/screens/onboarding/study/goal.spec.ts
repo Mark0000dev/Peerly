@@ -17,10 +17,11 @@ import { catalogue, goal, ownGoal } from './goal.fixtures';
   selector: 'peerly-goal-test-host',
   imports: [TuiRoot, StudyGoal],
   template:
-    '<tui-root><peerly-study-goal [actor]="actor()" (expired)="expired.emit()" /></tui-root>',
+    '<tui-root><peerly-study-goal [actor]="actor()" [checking]="checking()" (expired)="expired.emit()" /></tui-root>',
 })
 class GoalTestHost {
   public readonly actor = input.required<Api['schemas']['IdentityResponse']>();
+  public readonly checking = input(false);
   public readonly expired = output();
 }
 
@@ -67,6 +68,15 @@ describe('actual study goal editor and catalogue selection', () => {
     request.flush(value, { status, statusText: status === 200 ? 'OK' : 'Failure' });
     await shown(fixture, status === 200 ? 'Save goal' : 'We couldn’t load your goal');
   }
+  async function formReady(): Promise<void> {
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      const region = host(fixture).querySelector('section[aria-label="Your study goal"]');
+      expect(region?.querySelector('form #goal-subject')).toBeInstanceOf(HTMLInputElement);
+      expect(region?.querySelector('form #goal-topic')).toBeInstanceOf(HTMLInputElement);
+      expect(region?.querySelector('form #goal-context')).toBeInstanceOf(HTMLTextAreaElement);
+    });
+  }
   function edit(name: string, value: unknown): void {
     control(fixture, `#goal-${name}`).setValue(value);
     control(fixture, `#goal-${name}`).markAsDirty();
@@ -96,7 +106,7 @@ describe('actual study goal editor and catalogue selection', () => {
       backend.expectOne(`/api/v1/subjects?query=${encodeURIComponent(query)}&limit=20`),
     );
     request.flush(value, { status, statusText: status === 200 ? 'OK' : 'Failure' });
-    await shown(fixture, 'Your study goal');
+    await formReady();
   }
   it('loads server goal and defaulted optional subject tags into an editable form', async () => {
     await shown(fixture, 'Loading your goal');
@@ -123,7 +133,7 @@ describe('actual study goal editor and catalogue selection', () => {
     if (option === undefined) throw new Error('Missing catalogue option');
     option.click();
     await searched('SQL');
-    await shown(fixture, 'Your study goal');
+    await formReady();
     expect(control(fixture, '#goal-subject').value).toMatchObject({
       kind: 'canonical',
       id: catalogue.items[1].id,
@@ -381,7 +391,7 @@ describe('actual study goal editor and catalogue selection', () => {
     await load({ goal: { ...goal, topic: 'Replacement' } });
     edit('topic', 'New draft');
     save.flush({ ...goal, topic: 'Old draft' });
-    await shown(fixture, 'Your study goal');
+    await formReady();
     expect(control(fixture, '#goal-topic').value).toBe('New draft');
     backend.expectNone({ url: '/api/v1/me/goal', method: 'GET' });
   });
@@ -415,5 +425,114 @@ describe('actual study goal editor and catalogue selection', () => {
     expect(client.getQueryData(['account', 'replacement', 'private'])).toEqual({ retained: true });
     expect(expired).not.toHaveBeenCalled();
     backend.expectNone({ url: '/api/v1/me/goal', method: 'GET' });
+  });
+  it('pauses a queued goal write before dispatch and replays only its original intent after fresh authority', async () => {
+    await load();
+    edit('topic', 'Queued draft');
+    submit(fixture);
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    await shown(fixture, 'We couldn’t confirm your save.');
+    backend.expectNone({ url: '/api/v1/me/goal', method: 'PUT' });
+    expect(control(fixture, '#goal-topic').value).toBe('Queued draft');
+    const original = client
+      .getMutationCache()
+      .getAll()
+      .find((entry: Readonly<Mutation>) => entry.state.status === 'error')?.state.variables;
+    const rotated = { ...verifiedActor, csrf_token: 'fresh-after-goal-check' };
+    client.setQueryData(['session'], rotated);
+    fixture.componentRef.setInput('actor', rotated);
+    fixture.componentRef.setInput('checking', false);
+    fixture.detectChanges();
+    // Re-enabling the same owner preserves fresh catalogue and canonical caches.
+    await formReady();
+    expect(control(fixture, '#goal-topic').value).toBe('Queued draft');
+    backend.expectNone(catalogueUrl);
+    backend.expectNone({ url: '/api/v1/me/goal', method: 'GET' });
+    await shown(fixture, 'Retry same save');
+    click(fixture, 'Retry same save');
+    const retry = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/goal', method: 'PUT' }),
+    );
+    expect(retry.request.body).toMatchObject({
+      topic: 'Queued draft',
+      expected_goal_id: goal.id,
+      expected_version: goal.version,
+    });
+    expect(original).toMatchObject({ key: retry.request.headers.get('idempotency-key') });
+    expect(retry.request.headers.get('x-csrf-token')).toBe(rotated.csrf_token);
+    const saved = { ...goal, version: 3, topic: 'Queued draft' };
+    retry.flush(saved);
+    await load({ goal: saved });
+  });
+  it('accepts its owned goal receipt during a sign-in check without issuing a new private read', async () => {
+    await load();
+    edit('topic', 'Committed draft');
+    submit(fixture);
+    const save = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/goal', method: 'PUT' }),
+    );
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    save.flush({ ...goal, version: 3, topic: 'Committed draft' });
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(
+        client
+          .getMutationCache()
+          .getAll()
+          .some((entry: Readonly<Mutation>) => entry.state.status === 'success'),
+      ).toBe(true);
+    });
+    expect(control(fixture, '#goal-topic').value).toBe('Committed draft');
+    expect(client.getQueryState(['account', verifiedActor.account_id, 'goal'])?.isInvalidated).toBe(
+      true,
+    );
+    backend.expectNone({ url: '/api/v1/me/goal', method: 'GET' });
+  });
+  it('never rolls a committed goal back to a lagging canonical revision', async () => {
+    await load();
+    edit('topic', 'Committed draft');
+    submit(fixture);
+    const save = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/goal', method: 'PUT' }),
+    );
+    save.flush({ ...goal, version: 3, topic: 'Committed draft' });
+    await load({ goal: { ...goal, version: 1, topic: 'Lagging read' } });
+    expect(control(fixture, '#goal-topic').value).toBe('Committed draft');
+    submit(fixture);
+    backend.expectNone({ url: '/api/v1/me/goal', method: 'PUT' });
+  });
+  it('resolves the original unknown goal intent even after a newer canonical goal is observed', async () => {
+    await load();
+    edit('topic', 'Original intent');
+    submit(fixture);
+    const save = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/goal', method: 'PUT' }),
+    );
+    const key = save.request.headers.get('idempotency-key');
+    save.flush({ code: 'unavailable' }, { status: 503, statusText: 'Unavailable' });
+    await shown(fixture, 'We couldn’t confirm your save.');
+    const current = { ...goal, version: 4, topic: 'Newer canonical goal' };
+    const refresh = client.refetchQueries({
+      queryKey: ['account', verifiedActor.account_id, 'goal'],
+    });
+    (await vi.waitFor(() => backend.expectOne({ url: '/api/v1/me/goal', method: 'GET' }))).flush({
+      goal: current,
+    });
+    await refresh;
+    expect(control(fixture, '#goal-topic').value).toBe('Original intent');
+    click(fixture, 'Retry same save');
+    const retry = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/goal', method: 'PUT' }),
+    );
+    expect(retry.request.headers.get('idempotency-key')).toBe(key);
+    expect(retry.request.body).toMatchObject({
+      topic: 'Original intent',
+      expected_version: goal.version,
+    });
+    retry.flush({ ...goal, version: 3, topic: 'Original intent' });
+    await load({ goal: current });
+    expect(control(fixture, '#goal-topic').value).toBe(current.topic);
   });
 });

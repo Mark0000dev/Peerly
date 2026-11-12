@@ -1,3 +1,4 @@
+import { Mascot } from '../mascot';
 import { StudentLayout } from '../student-layout';
 import { DOCUMENT } from '@angular/common';
 import { StudyProgress } from './study/study-progress';
@@ -15,7 +16,7 @@ import {
 } from '@angular/core';
 import { TuiAutoFocus } from '@taiga-ui/cdk';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { TuiButton, TuiCell, TuiLink, TuiTitle, TuiIcon } from '@taiga-ui/core';
+import { TuiButton, TuiCell, TuiLink, TuiTitle } from '@taiga-ui/core';
 import { TuiAvatar } from '@taiga-ui/kit/components/avatar';
 import { TuiBadgeNotification } from '@taiga-ui/kit/components/badge-notification';
 import { TuiAccordion } from '@taiga-ui/kit/components/accordion';
@@ -41,12 +42,12 @@ import {
   selector: 'app-chats',
   imports: [
     StudentLayout,
+    Mascot,
     RouterLink,
     TuiButton,
     TuiLink,
     TuiCell,
     TuiTitle,
-    TuiIcon,
     TuiBadgeNotification,
     TuiAppBar,
     TuiBlockStatus,

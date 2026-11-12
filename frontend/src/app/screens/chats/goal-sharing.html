@@ -1,7 +1,14 @@
 <section tuiCardLarge="compact" tuiAppearance="neutral" aria-label="Shared goals">
   <h3>Shared goals</h3>
   @if (!opened()) {
-    <button tuiButton type="button" size="s" (click)="open()" aria-label="View shared goals">
+    <button
+      tuiButton
+      tuiButtonVertical
+      type="button"
+      size="s"
+      (click)="open()"
+      aria-label="View shared goals"
+    >
       View goals
     </button>
   } @else {

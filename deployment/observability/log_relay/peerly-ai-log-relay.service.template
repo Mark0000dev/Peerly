@@ -1,0 +1,48 @@
+[Unit]
+Description=Peerly canonical AI container safe metadata log relay
+After=docker.service network.target
+Requires=docker.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=root
+Group=root
+StateDirectory=peerly-ai-log-relay
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/usr/bin/python3 /usr/local/lib/peerly-ai-log-relay/ai_log_relay.py --container-id @CANONICAL_AI_CONTAINER_ID@ --docker-sha256 @ROOT_OWNED_DOCKER_SHA256@
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=8
+KillMode=control-group
+MemoryMax=64M
+CPUQuota=10%
+TasksMax=32
+LimitNOFILE=64
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=127.0.0.1/32
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=peerly-ai-log-relay
+
+[Install]
+WantedBy=multi-user.target

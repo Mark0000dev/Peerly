@@ -119,7 +119,7 @@ describe('real photo recovery query boundary', () => {
   async function open(
     value: Readonly<Api['schemas']['PhotoUploadResponse']> = upload,
   ): Promise<void> {
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     request.flush(value);
     await shown(
@@ -387,7 +387,7 @@ describe('real photo recovery query boundary', () => {
   ] as const) {
     it(`projects actual ${scenario.state} without a fabricated progress estimate`, async () => {
       await load();
-      click(fixture, 'Check upload');
+      click(fixture, 'Check upload 1');
       const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
       request.flush({ ...upload, state: scenario.state });
       await shown(fixture, scenario.text);
@@ -398,7 +398,7 @@ describe('real photo recovery query boundary', () => {
   for (const failure of ['storage_unavailable', 'processing_unavailable'] as const) {
     it(`distinguishes ${failure} from a bad photo without retrying automatically`, async () => {
       await load();
-      click(fixture, 'Check upload');
+      click(fixture, 'Check upload 1');
       const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
       request.flush({ ...upload, state: 'rejected', failure });
       await shown(fixture, 'This upload wasn’t saved.');
@@ -1132,7 +1132,7 @@ describe('real photo recovery query boundary', () => {
   }
   it('can explicitly retry a failed status read after intent recovery without restarting creation', async () => {
     await load();
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const failed = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     failed.flush({ code: 'unavailable' }, { status: 503, statusText: 'Failure' });
     await shown(fixture, 'We couldn’t check the photo upload.');
@@ -1423,7 +1423,7 @@ describe('real photo recovery query boundary', () => {
   });
   it('waits for an initially unknown selected upload before accepting a local file', async () => {
     await load();
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const pending = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     fixture.detectChanges();
     const chooser = Array.from(host(fixture).querySelectorAll('button')).find(
@@ -1452,7 +1452,7 @@ describe('real photo recovery query boundary', () => {
     expect(host(fixture).querySelector('img')?.getAttribute('src')).toBe(
       projection.photo.display_url,
     );
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const status = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     status.flush(ready);
     await load(projection);
@@ -1555,4 +1555,130 @@ describe('real photo recovery query boundary', () => {
       backend.expectNone('/api/v1/media/uploads');
     });
   }
+  for (const mismatch of ['declared size', 'declared content type'] as const)
+    it(`rejects matching photo hash with mismatched ${mismatch} before any storage access`, async () => {
+      const file = await photoFile();
+      const sha = await sourceHash(file);
+      const existing = {
+        ...upload,
+        size_bytes: mismatch === 'declared size' ? file.size + 1 : file.size,
+        content_type: mismatch === 'declared content type' ? 'image/jpeg' : 'image/png',
+      } as const;
+      await load({ photo: null, uploads: [{ upload: existing, source_sha256: sha }] });
+      await open(existing);
+      await choosePhoto(file);
+      click(fixture, 'Use the original without cropping');
+      await shown(fixture, 'This file does not match that upload.');
+      backend.expectNone(`/api/v1/media/uploads/${upload.id}/access`);
+      backend.expectNone({ url: '/api/v1/media/uploads', method: 'POST' });
+      expect(workflow().hasLocalDraft).toBe(true);
+    });
+  it('does not publish an invalid header read finishing after actor replacement over the new crop', async () => {
+    await load({ photo: null, uploads: [] });
+    const oldFile = new File(['unreadable signature'], 'old.png', { type: 'image/png' });
+    const header = new Blob(['unreadable signature']);
+    let finish: (value: ArrayBuffer) => void = () => {
+      throw new Error('Missing header completion');
+    };
+    const pending = new Promise<ArrayBuffer>((resolve) => {
+      finish = resolve;
+    });
+    vi.spyOn(oldFile, 'slice').mockReturnValue(header);
+    vi.spyOn(header, 'arrayBuffer').mockReturnValue(pending);
+    pickFile(oldFile);
+    const replacement = { ...verifiedActor, account_id: 'replacement-photo-actor' };
+    client.setQueryData(['session'], replacement);
+    fixture.componentRef.setInput('actor', replacement);
+    fixture.detectChanges();
+    await load({ photo: null, uploads: [] });
+    await choosePhoto();
+    const currentCanvas = host(fixture).querySelector('canvas');
+    expect(currentCanvas).toBeInstanceOf(HTMLCanvasElement);
+    finish(new ArrayBuffer(8));
+    await pending;
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(host(fixture).textContent).not.toContain('Choose a JPEG or PNG photo, up to 10 MB.');
+    expect(host(fixture).querySelector('canvas')).toBe(currentCanvas);
+    expect(workflow().hasLocalDraft).toBe(true);
+    backend.expectNone({ url: '/api/v1/media/uploads', method: 'POST' });
+  });
+  it('does not create or transfer a photo when hashing finishes during a same-actor sign-in check', async () => {
+    await load({ photo: null, uploads: [] });
+    const file = await choosePhoto();
+    const realDigest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+    let finish: (value: ArrayBuffer) => void = () => {
+      throw new Error('Missing hash completion');
+    };
+    const pending = new Promise<ArrayBuffer>((resolve) => {
+      finish = resolve;
+    });
+    const hash = vi.spyOn(crypto.subtle, 'digest').mockReturnValue(pending);
+    click(fixture, 'Use the original without cropping');
+    await vi.waitFor(() => {
+      expect(hash).toHaveBeenCalledOnce();
+    });
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    finish(realDigest);
+    await pending;
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(workflow().hasLocalDraft).toBe(true);
+    expect(workflow().hasUnconfirmedAction).toBe(false);
+    backend.expectNone({ url: '/api/v1/media/uploads', method: 'POST' });
+    backend.expectNone(`/api/v1/media/uploads/${upload.id}/access`);
+  });
+  it('keeps a confirmed owned cancellation while pausing private rereads during sign-in validation', async () => {
+    await load();
+    await open();
+    click(fixture, 'Cancel upload');
+    const cancel = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/media/uploads/${upload.id}/cancel`),
+    );
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    cancel.flush({ ...upload, version: 2, state: 'cancelled' });
+    await shown(fixture, 'This upload was cancelled.');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(workflow().hasUnconfirmedAction).toBe(false);
+    });
+    backend.expectNone({ url: '/api/v1/media/uploads', method: 'GET' });
+    backend.expectNone({ url: `/api/v1/media/${upload.id}`, method: 'GET' });
+  });
+  it('keeps an owned ready finalization receipt without private metadata rereads while sign-in is being checked', async () => {
+    const file = await photoFile();
+    const sha = await sourceHash(file);
+    const existing = { ...upload, size_bytes: file.size };
+    await load({ photo: null, uploads: [{ upload: existing, source_sha256: sha }] });
+    await open(existing);
+    await choosePhoto(file);
+    const transfer = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', transfer);
+    click(fixture, 'Use the original without cropping');
+    (await vi.waitFor(() => backend.expectOne(`/api/v1/media/uploads/${upload.id}/access`))).flush({
+      url: 'https://storage.invalid/fixture',
+      fields: { policy: 'opaque-fixture' },
+    });
+    const finalize = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/media/uploads/${upload.id}/finalize`),
+    );
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    finalize.flush({
+      ...existing,
+      version: 2,
+      state: 'ready',
+      display_url: `/api/v1/media/${upload.id}/display`,
+    });
+    await shown(fixture, 'Your photo is saved.');
+    expect(transfer).toHaveBeenCalledOnce();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(workflow().hasUnconfirmedAction).toBe(false);
+    });
+    backend.expectNone({ url: '/api/v1/media/uploads', method: 'GET' });
+    backend.expectNone({ url: `/api/v1/media/${upload.id}`, method: 'GET' });
+  });
 });

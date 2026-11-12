@@ -14,8 +14,19 @@ from studymate.infrastructure.operator.report_triage_models import (
 
 
 def triage_snapshot_value(
-    row: ReportTriageEvidenceRecord, grant: OperatorAccessRevisionRecord
+    row: ReportTriageEvidenceRecord, grant: OperatorAccessRevisionRecord | OperatorAccess
 ) -> ReportTriageEvidenceSnapshot:
+    access = (
+        grant
+        if isinstance(grant, OperatorAccess)
+        else OperatorAccess(grant.account_id, grant.version, grant.active, grant.changed_at)
+    )
+    if (row.operator_id, row.operator_access_version, row.operator_access_active) != (
+        access.account_id,
+        access.version,
+        access.active,
+    ):
+        raise RuntimeError("Triage source differs from its actual operator grant")
     context_id = row.profile_context_id if row.report_kind == "profile" else row.message_context_id
     if context_id is None:
         raise RuntimeError("Triage snapshot lost its original discriminated evidence reference")
@@ -31,7 +42,7 @@ def triage_snapshot_value(
         row.version,
         row.previous_version,
         row.review_version,
-        OperatorAccess(grant.account_id, grant.version, grant.active, grant.changed_at),
+        access,
         row.actor_session_id,
         row.evidence,
         row.evidence_digest,

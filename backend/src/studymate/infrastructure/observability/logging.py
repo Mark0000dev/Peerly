@@ -25,6 +25,12 @@ from studymate.infrastructure.ai.runtime.diagnostics import (
     AiRuntimeDiagnostic,
     AiRuntimePhase,
 )
+from studymate.infrastructure.ai.transaction_diagnostics import (
+    AiTransactionDiagnostic,
+    TransactionCause,
+    TransactionOperation,
+    TransactionPhase,
+)
 
 MAX_STACK_FRAMES = 20
 MAX_APPLICATION_FRAMES = 10
@@ -45,6 +51,7 @@ class LogEvent(StrEnum):
     WORKER_STOPPED = "worker_stopped"
     WORKER_STORAGE_UNAVAILABLE = "worker_storage_unavailable"
     AI_RUNTIME_FAILURE = "ai_runtime_failure"
+    AI_TRANSACTION_FAILURE = "ai_transaction_failure"
     RUNTIME_ERROR = "runtime_error"
     RUNTIME_LOG = "runtime_log"
 
@@ -144,6 +151,26 @@ def _ai_runtime_metadata(record: logging.LogRecord) -> dict[str, str]:
     }
 
 
+def _ai_transaction_metadata(record: logging.LogRecord) -> dict[str, str]:
+    diagnostic: object = getattr(record, "ai_transaction_diagnostic", None)
+    if not isinstance(diagnostic, AiTransactionDiagnostic):
+        return {}
+    phase: object = getattr(diagnostic, "phase", None)
+    operation: object = getattr(diagnostic, "operation", None)
+    cause: object = getattr(diagnostic, "cause", None)
+    if (
+        not isinstance(phase, TransactionPhase)
+        or not isinstance(operation, TransactionOperation)
+        or not isinstance(cause, TransactionCause)
+    ):
+        return {}
+    return {
+        "ai_transaction_phase": phase.value,
+        "ai_transaction_operation": operation.value,
+        "ai_transaction_cause": cause.value,
+    }
+
+
 def validated_service_release(value: object) -> str | None:
     if (
         isinstance(value, str)
@@ -181,6 +208,7 @@ class SafeJsonFormatter(logging.Formatter):
         if self._service_release is not None:
             content["service_release"] = self._service_release
         content.update(_ai_runtime_metadata(record))
+        content.update(_ai_transaction_metadata(record))
         if record.name.startswith("opentelemetry."):
             content["component"] = "telemetry"
         observation: object = getattr(record, "observation", None)
