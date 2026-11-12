@@ -17,15 +17,15 @@ The runtime image uses digest-pinned Python3.12.16-slim-bookworm and a builder-o
 
 Actual entrypoints (override Docker CMD):
 
-| Role | Command | Runtime configuration |
-| --- | --- | --- |
-| API | `python -m studymate.server --host 0.0.0.0 --port 8000` | DATABASE_URL, optional explicit authentication/media/observability fields from existing Settings |
-| Email | `python -m studymate.email_worker` | DATABASE_URL, CODE_KEY, ENVELOPE_KEY, existing SMTP__ fields; optional observability |
-| Media | `python -m studymate.media_worker` | DATABASE_URL, existing MEDIA__ fields; optional observability |
-| Requests | `python -m studymate.requests_worker` | DATABASE_URL; optional observability |
-| Changes | `python -m studymate.changes_worker` | DATABASE_URL; optional observability |
-| Migration | `alembic upgrade head` | DATABASE_URL using the release migration role |
-| Explicit firstboot | `python -m studymate.bootstrap_data_cli schema`, `validate FILE`, `apply FILE` | schema/validate offline; apply DATABASE_URL only, explicit owner file mounted read-only |
+| Role               | Command                                                                        | Runtime configuration                                                                            |
+| ------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| API                | `python -m studymate.server --host 0.0.0.0 --port 8000`                        | DATABASE_URL, optional explicit authentication/media/observability fields from existing Settings |
+| Email              | `python -m studymate.email_worker`                                             | DATABASE_URL, CODE_KEY, ENVELOPE_KEY, existing SMTP__ fields; optional observability             |
+| Media              | `python -m studymate.media_worker`                                             | DATABASE_URL, existing MEDIA__ fields; optional observability                                    |
+| Requests           | `python -m studymate.requests_worker`                                          | DATABASE_URL; optional observability                                                             |
+| Changes            | `python -m studymate.changes_worker`                                           | DATABASE_URL; optional observability                                                             |
+| Migration          | `alembic upgrade head`                                                         | DATABASE_URL using the release migration role                                                    |
+| Explicit firstboot | `python -m studymate.bootstrap_data_cli schema`, `validate FILE`, `apply FILE` | schema/validate offline; apply DATABASE_URL only, explicit owner file mounted read-only          |
 
 Only the API has a --help parser. Worker imports and genuine missing-config failures are tested; there is no invented worker --help switch. Do not start a configured worker merely to validate configuration against a real provider. The image default HTTP HEALTHCHECK is API liveness only. Worker and migration containers must override it with `--no-healthcheck`; real worker heartbeat/queue probes remain composition work. Migration is never an API startup side effect.
 

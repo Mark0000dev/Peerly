@@ -1,0 +1,131 @@
+@if (publicView) {
+  <peerly-public-header />
+}
+<main [class.public-page]="publicView" [class.account-page]="identity !== null">
+  @if (identity !== null) {
+    <peerly-settings-header heading="Delete account" [backToProfile]="true" />
+  } @else {
+    <h1>Delete account</h1>
+  }
+  @if (deleting.variables !== undefined) {
+    <section
+      tuiCardLarge="compact"
+      appearance="floating"
+      aria-label="What this deletion request changes"
+    >
+      <p>These changes apply to the account in this deletion request.</p>
+      <app-deletion-consequences />
+      <p>Details: <a tuiLink routerLink="/privacy">Privacy Policy</a>.</p>
+    </section>
+    @if (deleting.isPending) {
+      <p role="status">Deleting account…</p>
+    } @else {
+      <p role="status">Check the status of your deletion request.</p>
+    }
+    <a tuiButton tuiButtonVertical routerLink="/account/deletion-status">Check deletion status</a>
+  } @else if (session.isPending || session.isFetching) {
+    <p role="status">Checking your sign-in…</p>
+  } @else if (session.isError) {
+    <p role="alert">We couldn’t check your sign-in.</p>
+    <button tuiButton type="button" (click)="checkSession()">Try again</button>
+    <a tuiLink routerLink="/account/deletion-status">Check an earlier deletion request</a>
+  } @else if (identity === null) {
+    <div class="public-guidance">
+      <section class="instruction-routes" aria-label="Delete your Peerly account">
+        <section tuiCardLarge="compact" appearance="floating" aria-labelledby="delete-in-app">
+          <h2 id="delete-in-app">In the app</h2>
+          <p>Open Profile → Delete account and confirm. Deleting signs you out on every device.</p>
+        </section>
+        <section tuiCardLarge="compact" appearance="floating" aria-labelledby="delete-on-web">
+          <h2 id="delete-on-web">Without the app</h2>
+          <p>
+            Sign in on the web with the same Google account and use the same Delete account option.
+          </p>
+          <a tuiButton tuiButtonVertical appearance="secondary" routerLink="/onboarding">Sign in</a>
+        </section>
+        <section tuiCardLarge="compact" appearance="floating" aria-labelledby="delete-help">
+          <h2 id="delete-help">Can’t sign in?</h2>
+          <p>Use Help and contact for sign-in support.</p>
+          <a tuiButton tuiButtonVertical appearance="flat" routerLink="/help">Help and contact</a>
+        </section>
+      </section>
+      <section tuiCardLarge="compact" appearance="floating" aria-label="What deletion changes">
+        <h2>What deletion changes</h2>
+        <app-deletion-consequences />
+        <p>
+          Joining again creates a new account and requires student email verification again. Your
+          old profile, chats and history will not transfer.
+        </p>
+        <p>What is kept is explained in the <a tuiLink routerLink="/privacy">Privacy Policy</a>.</p>
+      </section>
+    </div>
+    <p>Sign in to start a deletion request, or check an earlier request from this browser.</p>
+    <a tuiLink routerLink="/account/deletion-status">Check deletion status</a>
+  } @else {
+    <p>Deleting this account signs you out everywhere. This account cannot be restored.</p>
+    <section tuiCardLarge="compact" appearance="floating" aria-label="What deletion changes">
+      <app-deletion-consequences />
+    </section>
+    <p>
+      Joining again creates a new account and requires student email verification again. Your old
+      profile, chats and history will not transfer. What we keep is explained in the
+      <a tuiLink routerLink="/privacy">Privacy Policy</a>.
+    </p>
+    @if (preparing.isPending) {
+      <p role="status">Preparing your request…</p>
+    }
+    @if (preparing.isError) {
+      <p role="alert">We couldn’t prepare this request. You can try again.</p>
+    }
+    <div class="actions account-actions">
+      <button
+        tuiButton
+        tuiButtonVertical
+        appearance="primary-destructive"
+        type="button"
+        [attr.aria-disabled]="preparing.isPending"
+        [attr.aria-busy]="preparing.isPending"
+        (click)="prepare()"
+      >
+        Delete account
+      </button>
+      <a tuiButton tuiButtonVertical appearance="secondary" routerLink="/onboarding"
+        >Keep my account</a
+      >
+    </div>
+    <ng-template
+      [tuiDialog]="confirmation !== null"
+      (tuiDialogChange)="keep()"
+      [tuiDialogOptions]="{
+        label: 'Delete your account?',
+        size: 's',
+        appearance: breakpoint() === 'mobile' ? 'fullscreen' : 'floating',
+      }"
+    >
+      <p>
+        This account cannot be restored. You’ll be signed out on every device. Joining again creates
+        a new account and requires student email verification; your old profile and chats will not
+        transfer.
+      </p>
+      <div class="actions">
+        <button
+          tuiButton
+          tuiButtonVertical
+          appearance="primary-destructive"
+          type="button"
+          (click)="confirm()"
+        >
+          Delete account permanently
+        </button>
+        <button tuiButton appearance="secondary" type="button" (click)="keep()">Cancel</button>
+      </div>
+    </ng-template>
+  }
+  @if (reference; as id) {
+    <p>Reference: {{ id }}</p>
+  }
+  <a tuiLink routerLink="/help">Help</a>
+</main>
+@if (publicView) {
+  <peerly-public-footer />
+}

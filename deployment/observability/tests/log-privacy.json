@@ -1,0 +1,793 @@
+{
+  "canary": "PRIVATE_CANARY_OTP_CHAT_COOKIE",
+  "maximum_frames": 20,
+  "cases": [
+    {
+      "name": "unknown-frame-fields",
+      "input": {
+        "event": "runtime_error",
+        "status": 500,
+        "stack": [
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42,
+            "exception": "PRIVATE_CANARY_OTP_CHAT_COOKIE",
+            "locals": {
+              "body": "PRIVATE_CANARY_OTP_CHAT_COOKIE"
+            },
+            "source": "PRIVATE_CANARY_OTP_CHAT_COOKIE",
+            "path": "/PRIVATE_CANARY_OTP_CHAT_COOKIE"
+          }
+        ]
+      },
+      "expected": {
+        "status": 500,
+        "stack": [
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          }
+        ]
+      }
+    },
+    {
+      "name": "mixed-invalid-frames",
+      "input": {
+        "event": "runtime_error",
+        "status": 500,
+        "stack": [
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          "PRIVATE_CANARY_OTP_CHAT_COOKIE",
+          {
+            "file": "/PRIVATE_CANARY_OTP_CHAT_COOKIE.py",
+            "function": "handler",
+            "line": 1
+          },
+          {
+            "file": 42,
+            "function": "handler",
+            "line": 1
+          },
+          {
+            "file": "handlers.py",
+            "function": "message PRIVATE_CANARY_OTP_CHAT_COOKIE",
+            "line": 1
+          },
+          {
+            "file": "handlers.py",
+            "function": "handler",
+            "line": true
+          },
+          {
+            "file": "handlers.py",
+            "function": "handler",
+            "line": 1.5
+          },
+          {
+            "file": "handlers.py",
+            "function": "handler",
+            "line": 0
+          },
+          {
+            "file": "handlers.py",
+            "function": "handler",
+            "line": 2147483648
+          },
+          {
+            "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.py",
+            "function": "handler",
+            "line": 1
+          },
+          {
+            "file": "handlers.py",
+            "function": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "line": 1
+          },
+          {
+            "file": "handlers.py",
+            "function": "handler"
+          }
+        ]
+      },
+      "expected": {
+        "status": 500,
+        "stack": [
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          }
+        ]
+      }
+    },
+    {
+      "name": "too-many-frames",
+      "input": {
+        "event": "runtime_error",
+        "stack": [
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          },
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          }
+        ]
+      },
+      "expected": {}
+    },
+    {
+      "name": "stack-object",
+      "input": {
+        "event": "runtime_error",
+        "stack": {
+          "locals": "PRIVATE_CANARY_OTP_CHAT_COOKIE"
+        }
+      },
+      "expected": {}
+    },
+    {
+      "name": "stack-wrong-event",
+      "input": {
+        "event": "request_completed",
+        "stack": [
+          {
+            "file": "http_handlers.py",
+            "function": "handle_request",
+            "line": 42
+          }
+        ]
+      },
+      "expected": {}
+    },
+    {
+      "name": "pseudo-frame",
+      "input": {
+        "event": "runtime_error",
+        "stack": [
+          {
+            "file": "<frozen importlib._bootstrap>",
+            "function": "<module>",
+            "line": 1.0
+          }
+        ]
+      },
+      "expected": {
+        "stack": [
+          {
+            "file": "<frozen importlib._bootstrap>",
+            "function": "<module>",
+            "line": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid-status-0",
+      "input": {
+        "event": "request_completed",
+        "status": true
+      },
+      "expected": {}
+    },
+    {
+      "name": "invalid-status-1",
+      "input": {
+        "event": "request_completed",
+        "status": false
+      },
+      "expected": {}
+    },
+    {
+      "name": "invalid-status-2",
+      "input": {
+        "event": "request_completed",
+        "status": "200"
+      },
+      "expected": {}
+    },
+    {
+      "name": "invalid-status-3",
+      "input": {
+        "event": "request_completed",
+        "status": 200.5
+      },
+      "expected": {}
+    },
+    {
+      "name": "invalid-status-4",
+      "input": {
+        "event": "request_completed",
+        "status": 99
+      },
+      "expected": {}
+    },
+    {
+      "name": "invalid-status-5",
+      "input": {
+        "event": "request_completed",
+        "status": 600
+      },
+      "expected": {}
+    },
+    {
+      "name": "invalid-status-6",
+      "input": {
+        "event": "request_completed",
+        "status": -1
+      },
+      "expected": {}
+    },
+    {
+      "name": "invalid-status-7",
+      "input": {
+        "event": "request_completed",
+        "status": null
+      },
+      "expected": {}
+    },
+    {
+      "name": "invalid-status-8",
+      "input": {
+        "event": "request_completed",
+        "status": {}
+      },
+      "expected": {}
+    },
+    {
+      "name": "invalid-status-9",
+      "input": {
+        "event": "request_completed",
+        "status": []
+      },
+      "expected": {}
+    },
+    {
+      "name": "valid-status-0",
+      "input": {
+        "event": "request_completed",
+        "status": 100
+      },
+      "expected": {
+        "status": 100
+      }
+    },
+    {
+      "name": "valid-status-1",
+      "input": {
+        "event": "request_completed",
+        "status": 200
+      },
+      "expected": {
+        "status": 200
+      }
+    },
+    {
+      "name": "valid-status-2",
+      "input": {
+        "event": "request_completed",
+        "status": 500
+      },
+      "expected": {
+        "status": 500
+      }
+    },
+    {
+      "name": "valid-status-3",
+      "input": {
+        "event": "request_completed",
+        "status": 599
+      },
+      "expected": {
+        "status": 599
+      }
+    },
+    {
+      "name": "valid-status-4",
+      "input": {
+        "event": "request_completed",
+        "status": 200.0
+      },
+      "expected": {
+        "status": 200
+      }
+    },
+    {
+      "name": "valid-database-metadata",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "ProgrammingError",
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "error_type": "ProgrammingError",
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "bounded-error-class64",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "Errrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+        "database_error_code": "08006"
+      },
+      "expected": {
+        "error_type": "Errrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+        "database_error_code": "08006"
+      }
+    },
+    {
+      "name": "invalid-error-type-0",
+      "input": {
+        "event": "runtime_error",
+        "error_type": null,
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-1",
+      "input": {
+        "event": "runtime_error",
+        "error_type": 123,
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-2",
+      "input": {
+        "event": "runtime_error",
+        "error_type": true,
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-3",
+      "input": {
+        "event": "runtime_error",
+        "error_type": {},
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-4",
+      "input": {
+        "event": "runtime_error",
+        "error_type": [],
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-5",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "",
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-6",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-7",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "package.Error",
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-8",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "\u00c9rror",
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-9",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "Error: PRIVATE_CANARY_OTP_CHAT_COOKIE",
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-error-type-10",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "/src/PRIVATE_CANARY_OTP_CHAT_COOKIE",
+        "database_error_code": "42P05"
+      },
+      "expected": {
+        "database_error_code": "42P05"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-0",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": null
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-1",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": 12345
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-2",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": true
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-3",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": {}
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-4",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": []
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-5",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": ""
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-6",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": "42p05"
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-7",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": "0000"
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-8",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": "000000"
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-9",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": "42P05 PRIVATE_CANARY_OTP_CHAT_COOKIE"
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "invalid-sqlstate-10",
+      "input": {
+        "event": "runtime_error",
+        "error_type": "DatabaseError",
+        "database_error_code": "../PRIVATE_CANARY_OTP_CHAT_COOKIE"
+      },
+      "expected": {
+        "error_type": "DatabaseError"
+      }
+    },
+    {
+      "name": "database-metadata-wrong-event",
+      "input": {
+        "event": "request_completed",
+        "error_type": "ProgrammingError",
+        "database_error_code": "42P05"
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-core",
+      "input": {
+        "service_release": "1111111111111111111111111111111111111111"
+      },
+      "expected": {
+        "service_release": "1111111111111111111111111111111111111111"
+      }
+    },
+    {
+      "name": "producer-release-ai",
+      "service": "studymate-ai-worker",
+      "input": {
+        "event": "worker_step",
+        "worker": "ai",
+        "service_release": "2222222222222222222222222222222222222222"
+      },
+      "expected": {
+        "service_release": "2222222222222222222222222222222222222222"
+      }
+    },
+    {
+      "name": "producer-release-zero",
+      "input": {
+        "service_release": "0000000000000000000000000000000000000000"
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-upper",
+      "input": {
+        "service_release": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-short",
+      "input": {
+        "service_release": "111111111111111111111111111111111111111"
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-long",
+      "input": {
+        "service_release": "11111111111111111111111111111111111111111"
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-whitespace",
+      "input": {
+        "service_release": " 1111111111111111111111111111111111111111"
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-canary",
+      "input": {
+        "service_release": "PRIVATE_CANARY_OTP_CHAT_COOKIE"
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-url",
+      "input": {
+        "service_release": "https://example.invalid/1111111111111111111111111111111111111111"
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-null",
+      "input": {
+        "service_release": null
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-number",
+      "input": {
+        "service_release": 1
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-boolean",
+      "input": {
+        "service_release": true
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-array",
+      "input": {
+        "service_release": [
+          "1111111111111111111111111111111111111111"
+        ]
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-object",
+      "input": {
+        "service_release": {
+          "release": "1111111111111111111111111111111111111111"
+        }
+      },
+      "expected": {}
+    },
+    {
+      "name": "producer-release-rolling-core",
+      "input": {
+        "service_release": "3333333333333333333333333333333333333333"
+      },
+      "expected": {
+        "service_release": "3333333333333333333333333333333333333333"
+      }
+    }
+  ]
+}

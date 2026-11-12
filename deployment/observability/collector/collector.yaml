@@ -1,4 +1,4 @@
-# Source-derived allowlists; only private server/worker signals are accepted.
+# Source-derived allowlists; syslog service resource set BEFORE log grouping.
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
@@ -31,6 +31,51 @@ receivers:
       parse_from: attributes.message
       parse_to: body
       on_error: drop_quiet
+    # Reconstruct technical metadata only; never forward exception text/locals.
+    - type: add
+      field: body.stack
+      if: 'type(body) == "map" && "stack" in body'
+      on_error: drop_quiet
+      value: >-
+        EXPR(body.event == "runtime_error" && type(body.stack) == "array" && len(body.stack) <= 20
+        ? map(filter(body.stack, {type(#) == "map" && type(.file) == "string"
+        && .file matches "^([A-Za-z0-9_][A-Za-z0-9_.-]{0,123}[.]py|<(stdin|string|unknown)>|<frozen [A-Za-z0-9_.]{1,96}>)$"
+        && type(.function) == "string"
+        && .function matches "^([A-Za-z_][A-Za-z0-9_]{0,127}|<(module|lambda|genexpr|listcomp|dictcomp|setcomp)>)$"
+        && type(.line) in ["int", "float"] && .line >= 1 && .line <= 2147483647
+        && .line == int(.line)}), {{"file": .file, "function": .function, "line": int(.line)}}) : [])
+    # Assign producer release before resource grouping, including rolling versions
+    # of the same service. Later log-context mutations would relabel sibling logs.
+    - type: copy
+      from: body.service_release
+      to: resource["service.version"]
+      if: >-
+        type(body) == "map" && "service_release" in body
+        && type(body.service_release) == "string"
+        && body.service_release matches "^[0-9a-f]{40}$"
+        && body.service_release != "0000000000000000000000000000000000000000"
+      on_error: drop_quiet
+    - type: copy
+      from: attributes.appname
+      to: resource["service.name"]
+  host_metrics/capacity:
+    root_path: /
+    collection_interval: 30s
+    scrapers:
+      filesystem:
+        include_virtual_filesystems: true
+        include_mount_points:
+          match_type: strict
+          mount_points:
+          - /
+          - /var/tempo-capacity
+        metrics:
+          system.filesystem.inodes.usage:
+            enabled: false
+          system.filesystem.usage:
+            enabled: true
+          system.filesystem.utilization:
+            enabled: false
 processors:
   memory_limiter:
     check_interval: 1s
@@ -40,12 +85,12 @@ processors:
     error_mode: propagate
     metrics:
       metric:
-      - not IsMatch(name, "^(http[.]server[.]requests|http[.]server[.]request[.]duration|worker[.]email[.]steps|worker[.]email[.]step[.]duration|worker[.]media[.]steps|worker[.]media[.]step[.]duration|worker[.]requests[.]expiry[.]steps|worker[.]requests[.]finalized|worker[.]requests[.]expiry[.]duration|worker[.]changes[.]steps|worker[.]changes[.]hints|worker[.]changes[.]duration|worker[.]ai[.]attempts|worker[.]ai[.]execution[.]duration|worker[.]ai[.]wait[.]duration|worker[.]ai[.]queue[.]depth|worker[.]ai[.]queue[.]oldest|worker[.]ai[.]slot[.]occupied|worker[.]ai[.]circuit[.]open)$")
+      - not IsMatch(name, "^(http[.]server[.]requests|http[.]server[.]request[.]duration|worker[.]email[.]steps|worker[.]email[.]step[.]duration|worker[.]media[.]steps|worker[.]media[.]step[.]duration|worker[.]requests[.]expiry[.]steps|worker[.]requests[.]finalized|worker[.]requests[.]expiry[.]duration|worker[.]changes[.]steps|worker[.]changes[.]hints|worker[.]changes[.]duration|worker[.]ai[.]attempts|worker[.]ai[.]execution[.]duration|worker[.]ai[.]wait[.]duration|worker[.]ai[.]queue[.]depth|worker[.]ai[.]queue[.]oldest|worker[.]ai[.]slot[.]occupied|worker[.]ai[.]circuit[.]open|db[.]query[.]duration|db[.]pool[.]checked_out|db[.]pool[.]configured_size|sse[.]connections[.]active|sse[.]connections[.]closed|sse[.]frames|sse[.]delivery[.]lag|sse[.]send[.]duration|sse[.]resets|worker[.]ai[.]queue[.]sample[.]fresh|worker[.]ai[.]queue[.]sample[.]age|worker[.]external[.]cycles|worker[.]external[.]storage[.]available|worker[.]external[.]cycle[.]age|worker[.]external[.]queue[.]depth|worker[.]external[.]queue[.]oldest_due|worker[.]external[.]queue[.]blocked|worker[.]external[.]queue[.]sample[.]fresh|worker[.]external[.]queue[.]sample[.]age|worker[.]external[.]sources[.]pending|worker[.]external[.]sources[.]oldest)$")
   transform/metrics:
     error_mode: propagate
     metric_statements:
     - context: resource
-      statements: &id001
+      statements:
       - keep_keys(resource.attributes, ["service.name", "service.version", "deployment.environment.name"])
       - set(resource.attributes["deployment.environment.name"], "${env:PEERLY_ENVIRONMENT}")
       - delete_key(resource.attributes, "service.version") where resource.attributes["service.version"] != nil and
@@ -58,9 +103,9 @@ processors:
     - context: datapoint
       statements:
       - keep_keys(attributes, ["http.request.method", "http.route", "http.response.status_code", "outcome", "worker",
-        "maintenance", "state", "kind", "reason"])
+        "maintenance", "state", "kind", "reason", "pool", "operation", "sink", "storage"])
       - delete_key(attributes, "http.route") where attributes["http.route"] != nil and not IsMatch(attributes["http.route"],
-        "^(unmatched|/api/v1/[A-Za-z_/{}/-]+|/healthz|/readyz)$")
+        "^(unmatched|/api/v1/[A-Za-z_/{}/-]+|/api/health|/api/ready)$")
       - delete_key(attributes, "outcome") where attributes["outcome"] != nil and not IsMatch(attributes["outcome"],
         "^[a-z_]+$")
       - delete_key(attributes, "worker") where attributes["worker"] != nil and not IsMatch(attributes["worker"],
@@ -71,11 +116,23 @@ processors:
       - delete_key(attributes, "kind") where attributes["kind"] != nil and not IsMatch(attributes["kind"], "^[a-z_]+$")
       - delete_key(attributes, "reason") where attributes["reason"] != nil and not IsMatch(attributes["reason"],
         "^[a-z_]+$")
+      - delete_key(attributes, "pool") where attributes["pool"] != nil and not IsMatch(attributes["pool"], "^(core|ai_admission|change_read|worker_email|worker_media|worker_expiry|worker_changes|worker_ai|worker_external)$")
+      - delete_key(attributes, "operation") where attributes["operation"] != nil and not IsMatch(attributes["operation"],
+        "^(select|insert|update|delete|ddl|other)$")
+    - context: exemplar
+      statements:
+      - keep_keys(exemplar.filtered_attributes, [])
   transform/traces:
     error_mode: propagate
     trace_statements:
     - context: resource
-      statements: *id001
+      statements:
+      - keep_keys(resource.attributes, ["service.name", "service.version", "deployment.environment.name"])
+      - set(resource.attributes["deployment.environment.name"], "${env:PEERLY_ENVIRONMENT}")
+      - delete_key(resource.attributes, "service.version") where resource.attributes["service.version"] != nil and
+        not IsMatch(resource.attributes["service.version"], "^[A-Za-z0-9._-]{1,64}$")
+      - delete_key(resource.attributes, "service.version") where resource.attributes["service.version"] != nil and
+        not IsMatch(resource.attributes["service.version"], "^[A-Za-z0-9._-]{1,64}$")
     - context: scope
       statements:
       - keep_keys(attributes, [])
@@ -87,9 +144,17 @@ processors:
         "change.maintenance", "change.outcome", "ai.job.id", "ai.kind", "ai.source.id", "ai.source.version", "ai.generation",
         "ai.attempt", "ai.model", "ai.prompt.version", "ai.schema.version", "ai.outcome", "media.upload.id", "media.attempt.id",
         "media.attempt.number", "studymate.peer.id", "studymate.photo.version", "studymate.profile_access.id", "studymate.discovery.mode",
-        "studymate.discovery.view", "studymate.discovery.query_source_ids"])
+        "studymate.discovery.view", "studymate.discovery.query_source_ids", "db.system", "db.pool.name", "query.operation"])
+      - delete_key(attributes, "http.route") where attributes["http.route"] != nil and not IsMatch(attributes["http.route"],
+        "^(unmatched|/api/v1/[A-Za-z_/{}/-]+|/api/health|/api/ready)$")
       - set(status.message, "")
-      - set(name, "technical.operation") where not IsMatch(name, "^((GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS) (request|unmatched|/api/v1/[A-Za-z_/{}/-]+|/healthz|/readyz)|email[.]delivery|media[.][a-z_]+|requests[.]expiry|changes[.][a-z_]+|ai[.]execute)$")
+      - set(name, "technical.operation") where not IsMatch(name, "^((GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS) (request|unmatched|/api/v1/[A-Za-z_/{}/-]+|/api/health|/api/ready)|email[.]delivery|media[.][a-z_]+|requests[.]expiry|changes[.][a-z_]+|ai[.]execute|db[.]query)$")
+      - delete_key(attributes, "db.system") where attributes["db.system"] != nil and attributes["db.system"] !=
+        "postgresql"
+      - delete_key(attributes, "db.pool.name") where attributes["db.pool.name"] != nil and not IsMatch(attributes["db.pool.name"],
+        "^(core|ai_admission|change_read|worker_email|worker_media|worker_expiry|worker_changes|worker_ai|worker_external)$")
+      - delete_key(attributes, "query.operation") where attributes["query.operation"] != nil and not IsMatch(attributes["query.operation"],
+        "^(select|insert|update|delete|ddl|other)$")
   filter/events:
     error_mode: propagate
     traces:
@@ -104,9 +169,12 @@ processors:
       - keep_keys(attributes, [])
       - keep_keys(body, ["time", "level", "event", "method", "route", "outcome", "worker", "duration_seconds", "status",
         "component", "request_id", "action_id", "account_id", "delivery_id", "origin_request_id", "upload_id", "attempt_id",
-        "trace_id", "span_id", "origin_trace_id", "origin_span_id"])
+        "trace_id", "span_id", "origin_trace_id", "origin_span_id", "ai_runtime_phase", "ai_runtime_code", "ai_runtime_failure_role", "stack", "error_type", "database_error_code", "service_release"])
+      - delete_key(body, "service_release") where not IsString(body["service_release"])
+        or not IsMatch(body["service_release"], "^[0-9a-f]{40}$")
+        or body["service_release"] == "0000000000000000000000000000000000000000"
       - delete_key(body, "method") where body["method"] != nil and not IsMatch(body["method"], "^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$")
-      - delete_key(body, "route") where body["route"] != nil and not IsMatch(body["route"], "^(unmatched|/api/v1/[A-Za-z_/{}/-]+|/healthz|/readyz)$")
+      - delete_key(body, "route") where body["route"] != nil and not IsMatch(body["route"], "^(unmatched|/api/v1/[A-Za-z_/{}/-]+|/api/health|/api/ready)$")
       - delete_key(body, "request_id") where body["request_id"] != nil and not IsMatch(body["request_id"], "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$")
       - delete_key(body, "action_id") where body["action_id"] != nil and not IsMatch(body["action_id"], "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$")
       - delete_key(body, "account_id") where body["account_id"] != nil and not IsMatch(body["account_id"], "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$")
@@ -126,8 +194,26 @@ processors:
       - delete_key(body, "component") where body["component"] != nil and body["component"] != "telemetry"
       - delete_key(body, "duration_seconds") where body["duration_seconds"] != nil and not (IsInt(body["duration_seconds"])
         or IsDouble(body["duration_seconds"]))
-      - delete_key(body, "status") where body["status"] != nil and not IsInt(body["status"])
+      - set(body["status"], Int(body["status"])) where IsDouble(body["status"]) and body["status"] >= 100
+        and body["status"] <= 599 and body["status"] == Int(body["status"])
+      - delete_key(body, "status") where not IsInt(body["status"])
+        or body["status"] < 100 or body["status"] > 599
+      - delete_key(body, "stack") where body["stack"] != nil and (not IsList(body["stack"])
+        or Len(body["stack"]) == 0)
+      - delete_key(body, "error_type") where body["event"] != "runtime_error" or not IsString(body["error_type"])
+        or not IsMatch(body["error_type"], "^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+      - delete_key(body, "database_error_code") where body["event"] != "runtime_error" or not IsString(body["database_error_code"])
+        or not IsMatch(body["database_error_code"], "^[0-9A-Z]{5}$")
       - set(severity_text, body["level"])
+      - delete_key(body, "ai_runtime_phase") where body["event"] != "ai_runtime_failure"
+      - delete_key(body, "ai_runtime_phase") where body["ai_runtime_phase"] != nil and not IsMatch(body["ai_runtime_phase"],
+        "^(receipt_recheck|heartbeat|revoke|physical_cleanup|retire)$")
+      - delete_key(body, "ai_runtime_code") where body["event"] != "ai_runtime_failure"
+      - delete_key(body, "ai_runtime_code") where body["ai_runtime_code"] != nil and not IsMatch(body["ai_runtime_code"],
+        "^(storage_unavailable|ownership_lost|receipt_rejected|physical_stop_uncertain|credential_uncertain|cancelled|unexpected)$")
+      - delete_key(body, "ai_runtime_failure_role") where body["event"] != "ai_runtime_failure"
+      - delete_key(body, "ai_runtime_failure_role") where body["ai_runtime_failure_role"] != nil and not IsMatch(body["ai_runtime_failure_role"],
+        "^(primary|cleanup)$")
     - context: scope
       statements:
       - keep_keys(attributes, [])
@@ -135,7 +221,6 @@ processors:
       statements:
       - keep_keys(resource.attributes, ["service.name", "service.version", "deployment.environment.name"])
       - set(resource.attributes["deployment.environment.name"], "${env:PEERLY_ENVIRONMENT}")
-      - set(resource.attributes["service.version"], "${env:PEERLY_RELEASE}")
       - delete_key(resource.attributes, "service.version") where resource.attributes["service.version"] != nil and
         not IsMatch(resource.attributes["service.version"], "^[A-Za-z0-9._-]{1,64}$")
   filter/logs:
@@ -143,10 +228,17 @@ processors:
     logs:
       log_record:
       - not IsMap(body)
-      - not IsMatch(resource.attributes["service.name"], "^(studymate-api|studymate-email-worker|studymate-media-worker|peerly-requests-worker|peerly-changes-worker|studymate-ai-worker)$")
-      - not IsMatch(body["event"], "^(request_completed|worker_step|worker_stopped|worker_storage_unavailable|runtime_error|runtime_log)$")
+      - not IsMatch(resource.attributes["service.name"], "^(studymate-api|studymate-email-worker|studymate-media-worker|peerly-requests-worker|peerly-changes-worker|studymate-ai-worker|peerly-external-delivery-worker)$")
+      - not IsMatch(body["event"], "^(request_completed|worker_step|worker_stopped|worker_storage_unavailable|runtime_error|runtime_log|ai_runtime_failure)$")
       - not IsMatch(body["level"], "^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
       - not IsMatch(body["time"], "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+$")
+      - body["event"] == "ai_runtime_failure" and resource.attributes["service.name"] != "studymate-ai-worker"
+      - body["event"] == "ai_runtime_failure" and (not IsString(body["ai_runtime_phase"]) or not IsMatch(body["ai_runtime_phase"],
+        "^(receipt_recheck|heartbeat|revoke|physical_cleanup|retire)$"))
+      - body["event"] == "ai_runtime_failure" and (not IsString(body["ai_runtime_code"]) or not IsMatch(body["ai_runtime_code"],
+        "^(storage_unavailable|ownership_lost|receipt_rejected|physical_stop_uncertain|credential_uncertain|cancelled|unexpected)$"))
+      - body["event"] == "ai_runtime_failure" and (not IsString(body["ai_runtime_failure_role"]) or not IsMatch(body["ai_runtime_failure_role"],
+        "^(primary|cleanup)$"))
   batch:
     timeout: 1s
     send_batch_size: 128
@@ -155,20 +247,58 @@ processors:
     error_mode: propagate
     traces:
       span:
-      - not IsMatch(resource.attributes["service.name"], "^(studymate-api|studymate-email-worker|studymate-media-worker|peerly-requests-worker|peerly-changes-worker|studymate-ai-worker)$")
+      - not IsMatch(resource.attributes["service.name"], "^(studymate-api|studymate-email-worker|studymate-media-worker|peerly-requests-worker|peerly-changes-worker|studymate-ai-worker|peerly-external-delivery-worker)$")
     metrics:
       datapoint:
-      - not IsMatch(resource.attributes["service.name"], "^(studymate-api|studymate-email-worker|studymate-media-worker|peerly-requests-worker|peerly-changes-worker|studymate-ai-worker)$")
+      - not IsMatch(resource.attributes["service.name"], "^(studymate-api|studymate-email-worker|studymate-media-worker|peerly-requests-worker|peerly-changes-worker|studymate-ai-worker|peerly-external-delivery-worker)$")
+  filter/capacity:
+    error_mode: propagate
+    metrics:
+      metric:
+      - name != "system.filesystem.usage"
+      datapoint:
+      - attributes["mountpoint"] != "/" and attributes["mountpoint"] != "/var/tempo-capacity"
+      - not IsMatch(attributes["state"], "^(free|reserved|used)$")
+  transform/capacity:
+    error_mode: propagate
+    metric_statements:
+    - context: resource
+      statements:
+      - keep_keys(resource.attributes, [])
+      - set(resource.attributes["service.name"], "peerly-collector-capacity")
+      - set(resource.attributes["deployment.environment.name"], "${env:PEERLY_ENVIRONMENT}")
+      - set(resource.attributes["service.version"], "${env:PEERLY_RELEASE}")
+      - delete_key(resource.attributes, "service.version") where not IsMatch(resource.attributes["service.version"],
+        "^[A-Za-z0-9._-]{1,64}$")
+    - context: scope
+      statements:
+      - keep_keys(attributes, [])
+    - context: datapoint
+      statements:
+      - keep_keys(attributes, ["mountpoint", "state"])
+  filter/external:
+    error_mode: propagate
+    metrics:
+      datapoint:
+      - IsMatch(metric.name, "^worker[.]external[.]") and resource.attributes["service.name"] != "peerly-external-delivery-worker"
+      - IsMatch(metric.name, "^worker[.]external[.]queue[.](depth|oldest_due|blocked)$") and (not IsString(attributes["sink"])
+        or not IsMatch(attributes["sink"], "^(umami|telegram_support)$"))
+      - metric.name == "worker.external.queue.depth" and (not IsString(attributes["state"]) or not IsMatch(attributes["state"],
+        "^(pending|retry|dead)$"))
+      - metric.name == "worker.external.queue.blocked" and (not IsString(attributes["reason"]) or not IsMatch(attributes["reason"],
+        "^(transient|rate_limited|credentials_unavailable|destination_unavailable|invalid_response|timeout|lease_expired|cancelled|permanent)$"))
+      - metric.name == "worker.external.cycles" and (not IsString(attributes["storage"]) or not IsMatch(attributes["storage"],
+        "^(available|unavailable)$"))
 exporters:
   otlp_http/tempo:
     endpoint: http://tempo:4318
     timeout: 3s
-    sending_queue: &id002
+    sending_queue: &id001
       enabled: true
       num_consumers: 1
       queue_size: 64
       storage: file_storage
-    retry_on_failure: &id003
+    retry_on_failure: &id002
       enabled: true
       initial_interval: 1s
       max_interval: 10s
@@ -181,11 +311,11 @@ exporters:
     tls:
       min_version: '1.2'
     timeout: 3s
-    sending_queue: *id002
-    retry_on_failure: *id003
+    sending_queue: *id001
+    retry_on_failure: *id002
   prometheus:
     endpoint: 0.0.0.0:8889
-    translation_strategy: UnderscoreEscapingWithoutSuffixes
+    translation_strategy: UnderscoreEscapingWithSuffixes
     enable_open_metrics: true
     metric_expiration: 2m
     without_scope_info: true
@@ -228,6 +358,7 @@ service:
       processors:
       - memory_limiter
       - filter/metrics
+      - filter/external
       - transform/metrics
       - filter/source
       - batch
@@ -243,3 +374,13 @@ service:
       - batch
       exporters:
       - otlp_http/loki
+    metrics/capacity:
+      receivers:
+      - host_metrics/capacity
+      processors:
+      - memory_limiter
+      - filter/capacity
+      - transform/capacity
+      - batch
+      exporters:
+      - prometheus

@@ -1,0 +1,71 @@
+:host {
+  display: contents;
+}
+
+section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+form {
+  min-inline-size: 0;
+}
+
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.composer-layout {
+  contain: size;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  flex: 1;
+  min-block-size: 0;
+  min-inline-size: 0;
+  gap: 1rem;
+}
+
+.composer-layout > section {
+  min-block-size: 0;
+  overflow: auto;
+  align-content: start;
+}
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding-block-end: env(safe-area-inset-bottom);
+}
+
+.composer-heading {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.composer-heading > p,
+.context-explanation {
+  font: var(--tui-typography-body-s);
+  color: var(--tui-text-secondary);
+}
+
+.attached-context {
+  gap: 0.5rem;
+  padding: 1rem;
+  background: var(--tui-background-base-alt);
+  border-radius: var(--tui-radius-m);
+}
+
+.attached-context h3 {
+  font: var(--tui-typography-heading-h6);
+}
+
+footer > [tuiButton] {
+  flex: 1 1 auto;
+}

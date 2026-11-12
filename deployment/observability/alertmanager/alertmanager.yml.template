@@ -1,0 +1,28 @@
+# Render only the integer chat ID. The bot token stays in its protected file.
+global:
+  resolve_timeout: 5m
+route:
+  receiver: unrelated
+  group_by: [alertname, deployment_environment_name, severity]
+  group_wait: 30s
+  group_interval: 2m
+  repeat_interval: 4h
+  routes:
+    - receiver: peerly-dev
+      matchers:
+        - owner="peerly-team"
+receivers:
+  # The shared Prometheus may forward unrelated projects; never notify for them.
+  - name: unrelated
+  - name: peerly-dev
+    telegram_configs:
+      - bot_token_file: /etc/alertmanager/telegram-token
+        chat_id: @@PEERLY_TELEGRAM_CHAT_ID@@
+        send_resolved: true
+        parse_mode: ''
+        message: |-
+          Peerly {{ .Status | toUpper }}
+          {{ range .Alerts }}
+          {{ .Labels.alertname }} [{{ .Labels.severity }}] {{ .Labels.deployment_environment_name }}
+          {{ .Annotations.summary }}
+          {{ end }}

@@ -1,98 +1,108 @@
-# StudyMate AI
+# Peerly
 
-> Find the right people, build productive study teams, and stay motivated through collaborative learning.
+<img src="frontend/src/assets/brand/logo-mark.svg" alt="Peerly" width="72" />
 
-StudyMate AI is an AI-powered collaborative learning platform for university students, built for the **Google Cloud / AI Hackathon**. It matches students with compatible study partners, helps them form small **Study Parties**, organize study sessions, rate teammates, and keep shared **study streaks**.
+**Find a study partner. Share what you know. Get unstuck together.**
 
-## Core features (MVP)
+Peerly helps students at Asia Pacific University of Technology & Innovation (APU), Malaysia find relevant study partners and start useful conversations. Students describe what they want to learn or can help with; the server handles discovery, connection requests and access rules.
 
-- **Student profile:** subjects, knowledge levels (1–5), goals, availability, learning preferences
-- **AI matching:** weighted compatibility score (0–100) plus a Gemini-generated explanation
-- **Study Parties:** teams of 2–5 students
-- **Study sessions:** create, join, complete
-- **Teammate ratings:** private 1–5 feedback after each session
-- **Progress and streaks:** individual and team
+[Staging demo](https://peerly-staging.aleksei-orlov.dev)
 
-## Tech stack
+## What you can do
 
-| Layer          | Technology                                         |
-| -------------- | -------------------------------------------------- |
-| Frontend       | React, Vite, Tailwind CSS, Axios, React Router     |
-| Backend        | Python, FastAPI, Pydantic, SQLAlchemy              |
-| Database       | PostgreSQL (Cloud SQL optional)                    |
-| AI             | Google Gemini API                                  |
-| Infrastructure | Google Cloud Run, Secret Manager, GitHub           |
+- Sign in with Google and verify an APU student mailbox (`mail.apu.edu.my`).
+- Build a profile, upload a photo and describe a reusable study goal or areas you can help with.
+- Discover people through shared knowledge areas, with optional course and task context.
+- Send, accept, decline or undo connection requests, then chat and share images.
+- Use optional AI assistance to clarify goals and suggest knowledge areas; AI also supports photo assessment and operator report triage.
+- Manage profile visibility, notifications, support requests and account deletion.
+- Use an audited operator interface to inspect retained records, handle reports and review accounts.
+
+Core study and messaging flows remain independent of AI availability. AI work runs through a durable, bounded PostgreSQL queue and a dedicated executor.
 
 ## Architecture
 
-```
-Student -> React Frontend -> FastAPI -> { Matching Algorithm | PostgreSQL | Gemini API }
-                                     -> Study Parties -> Sessions -> Ratings -> Progress & Streaks
+```mermaid
+flowchart LR
+    Student[Angular / Taiga UI client] -->|REST + SSE| API[FastAPI application]
+    API --> DB[(PostgreSQL)]
+    API --> S3[S3-compatible media storage]
+    DB --> Workers[Background workers]
+    Workers --> AI[Isolated AI executor]
+    Workers --> Delivery[Email / notifications / analytics]
+    API --> OTEL[OpenTelemetry Collector]
+    Workers --> OTEL
+    OTEL --> Monitoring[Prometheus / Loki / Tempo / Grafana]
 ```
 
-The matching algorithm calculates the scores; Gemini only **explains** them. Details: [docs/architecture.md](docs/architecture.md).
+| Layer            | Technologies                                                                     |
+| ---------------- | -------------------------------------------------------------------------------- |
+| Frontend         | Angular 22, TypeScript, Taiga UI, TanStack Query, RxJS                           |
+| Native packaging | Capacitor for Android and iOS                                                    |
+| Backend          | Python, async FastAPI, clean architecture and application use cases              |
+| Data             | PostgreSQL, asyncpg, SQLAlchemy typed mappings, Alembic                          |
+| Media            | S3-compatible object storage                                                     |
+| AI               | Dedicated Codex executor behind application ports and a PostgreSQL job queue     |
+| Operations       | Docker, Portainer, GitHub Actions, GHCR                                          |
+| Observability    | OpenTelemetry, Prometheus, Alertmanager, Grafana, Loki, Tempo, Umami             |
+| Quality          | Ruff, strict mypy, pytest, ESLint, Stylelint, Prettier, Knip, Vitest, Playwright |
 
-## Repository structure
+Server state belongs to TanStack Query. The backend owns permissions, matching, lifecycle transitions and persistence. Backend code separates domain, application, infrastructure and HTTP adapters. The frontend is organized by screen, with colocated behavior and tests.
 
+## Run locally
+
+Requirements: Docker Compose, Python/uv, and the Node version in [`frontend/.nvmrc`](frontend/.nvmrc).
+
+```sh
+docker compose up -d --wait postgres postgres-test
+cd backend
+uv sync --locked
+cp .env.example .env
+uv run alembic upgrade head
+make run
 ```
-StudyMate-AI/
-├── frontend/   # React + Vite app
-├── backend/    # FastAPI app (api/, services/, models/, schemas/)
-├── docs/       # Specification, architecture, API, database, demo
-└── .github/    # Issue and PR templates
+
+In another terminal:
+
+```sh
+cd frontend
+npm ci
+npm start
 ```
+
+The environment example documents the required settings. Google sign-in, email delivery, S3 and live AI require your own provider configuration; secrets are never included. See the [backend setup](backend/README.md) and [frontend setup](frontend/README.md) for configuration and worker commands.
+
+## Tests and quality
+
+```sh
+export TEST_DATABASE_URL=postgresql+asyncpg://studymate:studymate@localhost:5433/studymate_test
+sh scripts/check.sh
+```
+
+The backend includes unit and real PostgreSQL integration tests. Frontend scenarios combine behavior assertions with screenshot comparisons across desktop and mobile browsers. Both packages enforce a 95% coverage floor. See [testing](docs/testing.md) for commands and current validation limits; configured gates are not a claim that every release check has passed.
 
 ## Documentation
 
-- [Technical Specification](docs/technical-specification.md): full product and technical spec
-- [Architecture](docs/architecture.md)
-- [API Specification](docs/api.md)
-- [Database Design](docs/database.md)
-- [Demo & Presentation](docs/presentation.md)
-- [Contributing / Git workflow](CONTRIBUTING.md)
+- [Product behavior](docs/product.md)
+- [System architecture](docs/architecture.md)
+- [API contracts](docs/api.md)
+- [Database and concurrency](docs/database.md)
+- [AI execution and reliability](docs/ai.md)
+- [Monitoring, logs and traces](docs/observability.md)
+- [Deployment and configuration](docs/deployment.md)
+- [Contributing](CONTRIBUTING.md)
 
-## Getting started
-
-> The backend and frontend skeletons are still to be created. See the *Initialize FastAPI backend* and *Initialize React frontend* issues.
-
-### Backend
-
-```bash
-cd backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate   macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # fill in GEMINI_API_KEY and DATABASE_URL
-uvicorn app.main:app --reload
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
+The web application is deployed to an internal staging environment. Native packaging is configured; Android and iOS distribution is not yet validated. Visual refinement and complete frontend release acceptance are still in progress.
 
 ## Team
 
-| Role                               | Responsibilities                                       |
-| ---------------------------------- | ------------------------------------------------------ |
-| Person 1: Backend / Team Lead      | FastAPI, endpoints, DB integration, parties & sessions |
-| Person 2: AI / Matching            | Matching algorithm, scores, Gemini integration         |
-| Person 3: Frontend                 | React app, UI/UX, profile, matches, dashboards         |
-| Person 4: Cloud / Database / QA    | Google Cloud, deployment, testing, docs, presentation  |
-
-## Roadmap
-
-1. **Setup:** repo, environments, skeletons, Gemini key, API contracts
-2. **Core:** profiles, DB models, matching, frontend pages, parties
-3. **Integration:** frontend ↔ backend, Gemini, matching tests
-4. **Additional:** sessions, ratings, progress, streaks
-5. **Deployment:** Cloud Run, env vars, production test
-6. **Finalization:** bug fixes, demo, README, presentation
-
-**First priority:** a working `Profile → Matching → Results` flow. Everything else builds on it.
+| Contributor           | Role                                 |
+| --------------------- | ------------------------------------ |
+| Mark Bakulin          | Backend engineer                     |
+| Vepa Garayev          | Backend engineer                     |
+| Aleksei Orlov         | UX/UI designer and frontend engineer |
+| Nursultan Abdimalikov | Matching & staging QA                |
+| Maxim Kalinin         | Product, pitching and presentation   |
 
 ## License
 

@@ -1,0 +1,61 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+  container: visibility-panel / inline-size;
+}
+
+section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+h3 {
+  font: var(--tui-typography-heading-h6);
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+.hide-effects {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+button {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: var(--tui-height-m);
+}
+
+.effect-content {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+@container visibility-panel (width < 16em) {
+  .effect-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.hide-confirmation h2 {
+  font: var(--tui-typography-heading-h5);
+  margin: 0;
+}
+
+.confirmation-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}

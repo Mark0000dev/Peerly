@@ -1,0 +1,134 @@
+name: peerly-staging
+
+x-runtime: &runtime
+  image: ${PEERLY_BACKEND_IMAGE:?Set the verified backend image digest}
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
+  networks: [application]
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+x-database: &database
+  DATABASE_URL: ${PEERLY_DATABASE_URL:?Set the staging database URL}
+
+x-media: &media
+  MEDIA__ENDPOINT_ORIGIN: ${PEERLY_S3_ENDPOINT:?Set the S3 API origin}
+  MEDIA__BUCKET: ${PEERLY_S3_BUCKET:?Set the staging bucket name}
+  MEDIA__REGION: ${PEERLY_S3_REGION:?Set the S3 signing region}
+  MEDIA__ACCESS_KEY_ID: ${PEERLY_S3_ACCESS_KEY_ID:?Set the staging access identifier}
+  MEDIA__SECRET_ACCESS_KEY: ${PEERLY_S3_SECRET_ACCESS_KEY:?Set the staging storage secret}
+
+services:
+  api:
+    <<: *runtime
+    mem_limit: 512m
+    cpus: 0.75
+    environment:
+      <<: [*database, *media]
+      FORWARDED_ALLOW_IPS: ${PEERLY_TRUSTED_PROXY_IPS:?Set the actual trusted Traefik IPs}
+      AUTHENTICATION__CLIENT_ID: ${PEERLY_GOOGLE_CLIENT_ID:?Set the staging OAuth client}
+      AUTHENTICATION__CLIENT_SECRET: ${PEERLY_GOOGLE_CLIENT_SECRET:?Set the staging OAuth secret}
+      AUTHENTICATION__PUBLIC_ORIGIN: https://${PEERLY_HOST:?Set the staging hostname}
+      AUTHENTICATION__ENVELOPE_KEY: ${PEERLY_ENVELOPE_KEY:?Set the distinct envelope key}
+      AUTHENTICATION__BROWSER_SIGNING_KEY: ${PEERLY_BROWSER_SIGNING_KEY:?Set the distinct browser key}
+      AUTHENTICATION__CODE_KEY: ${PEERLY_CODE_KEY:?Set the distinct verification-code key}
+    networks: [application, proxy]
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: ${PEERLY_PROXY_NETWORK:?Set the existing ingress network}
+      traefik.http.routers.peerly-staging-api.rule: Host(`${PEERLY_HOST}`) && PathPrefix(`/api/`)
+      traefik.http.routers.peerly-staging-api.entrypoints: ${PEERLY_HTTPS_ENTRYPOINT:?Set the HTTPS entrypoint}
+      traefik.http.routers.peerly-staging-api.tls: 'true'
+      traefik.http.routers.peerly-staging-api.tls.certresolver: ${PEERLY_TLS_RESOLVER:?Set the existing TLS resolver}
+      traefik.http.routers.peerly-staging-api.priority: '100'
+      traefik.http.routers.peerly-staging-api.service: peerly-staging-api
+      traefik.http.services.peerly-staging-api.loadbalancer.server.port: '8000'
+      traefik.http.services.peerly-staging-api.loadbalancer.responseforwarding.flushinterval: -1ms
+
+  frontend:
+    <<: *runtime
+    image: ${PEERLY_FRONTEND_IMAGE:?Set the verified frontend image digest}
+    mem_limit: 96m
+    cpus: 0.25
+    networks: [proxy]
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: ${PEERLY_PROXY_NETWORK}
+      traefik.http.routers.peerly-staging-web.rule: Host(`${PEERLY_HOST}`)
+      traefik.http.routers.peerly-staging-web.entrypoints: ${PEERLY_HTTPS_ENTRYPOINT}
+      traefik.http.routers.peerly-staging-web.tls: 'true'
+      traefik.http.routers.peerly-staging-web.tls.certresolver: ${PEERLY_TLS_RESOLVER}
+      traefik.http.routers.peerly-staging-web.priority: '10'
+      traefik.http.routers.peerly-staging-web.service: peerly-staging-web
+      traefik.http.services.peerly-staging-web.loadbalancer.server.port: '8080'
+
+  email:
+    <<: *runtime
+    command: [python, -m, studymate.email_worker]
+    healthcheck: {disable: true}
+    mem_limit: 160m
+    cpus: 0.25
+    environment:
+      <<: *database
+      CODE_KEY: ${PEERLY_CODE_KEY}
+      ENVELOPE_KEY: ${PEERLY_ENVELOPE_KEY}
+      SMTP__HOSTNAME: ${PEERLY_SMTP_HOST:?Set the SMTP hostname}
+      SMTP__PORT: ${PEERLY_SMTP_PORT:?Set the SMTP port}
+      SMTP__MODE: ${PEERLY_SMTP_MODE:?Set starttls or tls}
+      SMTP__USERNAME: ${PEERLY_SMTP_USERNAME:?Set the SMTP login}
+      SMTP__PASSWORD: ${PEERLY_SMTP_PASSWORD:?Set the SMTP key}
+      SMTP__SENDER: ${PEERLY_SMTP_SENDER:?Set the verified sender address}
+      SMTP__REPLY_TO: ${PEERLY_SMTP_REPLY_TO:?Set the supplied support address}
+
+  media:
+    <<: *runtime
+    command: [python, -m, studymate.media_worker]
+    healthcheck: {disable: true}
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      <<: [*database, *media]
+
+  requests:
+    <<: *runtime
+    command: [python, -m, studymate.requests_worker]
+    healthcheck: {disable: true}
+    mem_limit: 160m
+    cpus: 0.25
+    environment:
+      <<: *database
+
+  changes:
+    <<: *runtime
+    command: [python, -m, studymate.changes_worker]
+    healthcheck: {disable: true}
+    mem_limit: 160m
+    cpus: 0.25
+    environment:
+      <<: *database
+
+  migrate:
+    <<: *runtime
+    profiles: [ops]
+    restart: 'no'
+    command: [alembic, upgrade, head]
+    healthcheck: {disable: true}
+    mem_limit: 256m
+    cpus: 0.5
+    environment:
+      DATABASE_URL: ${PEERLY_MIGRATION_DATABASE_URL:?Set the staging migration URL}
+
+networks:
+  application:
+    driver: bridge
+  proxy:
+    external: true
+    name: ${PEERLY_PROXY_NETWORK}

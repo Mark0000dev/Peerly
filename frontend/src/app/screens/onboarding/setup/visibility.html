@@ -1,0 +1,136 @@
+@if (status().visibility; as visibility) {
+  <section tuiCardLarge="compact" appearance="floating" aria-labelledby="visibility-heading">
+    <h3 id="visibility-heading">Your profile in Discover</h3>
+    @if (visibility.hidden) {
+      <p>Your profile is hidden from Discover.</p>
+      @if (status().capabilities.can_access_existing_chats) {
+        <p>Existing chats continue to work.</p>
+      }
+      @if (status().restore_requirements.length > 0) {
+        <p>Before showing your profile again:</p>
+        <ul>
+          @for (required of status().restore_requirements; track required) {
+            <li>{{ restoreLabels[required] }}</li>
+          }
+        </ul>
+        <a tuiLink routerLink="/profile">Review profile and study setup</a>
+      }
+      @if (status().capabilities.can_restore_profile) {
+        <button
+          tuiButton
+          appearance="secondary"
+          size="m"
+          type="button"
+          [disabled]="locked || changing.isError"
+          (click)="changeVisibility(false)"
+        >
+          Show my profile
+        </button>
+      }
+    } @else {
+      @if (status().discovery_exposure?.paused) {
+        <p>Your profile is paused in Discover after some time away.</p>
+        @if (status().discovery_exposure?.can_confirm) {
+          <button
+            tuiButton
+            appearance="secondary"
+            size="m"
+            type="button"
+            [disabled]="locked || changing.isError"
+            (click)="changeVisibility(false)"
+          >
+            Show my profile again
+          </button>
+        } @else {
+          <p>Review your photo and study setup before showing your profile again.</p>
+        }
+      } @else if (status().capabilities.can_discover) {
+        <p>Your profile can appear in Discover.</p>
+      } @else {
+        <p>Your profile can’t appear in Discover right now.</p>
+        <a tuiLink routerLink="/profile">Review profile and study setup</a>
+      }
+      @if (status().capabilities.can_hide_profile) {
+        <ul class="hide-effects" aria-label="While your profile is hidden">
+          <li tuiCell="m">
+            <span class="effect-content">
+              <tui-icon icon="@tui.compass" aria-hidden="true" />
+              <span tuiTitle>You leave Discover and can’t browse it</span>
+            </span>
+          </li>
+          <li tuiCell="m">
+            <span class="effect-content">
+              <tui-icon icon="@tui.inbox" aria-hidden="true" />
+              <span tuiTitle>Pending requests close and won’t reopen</span>
+            </span>
+          </li>
+          <li tuiCell="m">
+            <span class="effect-content">
+              <tui-icon icon="@tui.inbox" aria-hidden="true" />
+              <span tuiTitle>No new requests either way</span>
+            </span>
+          </li>
+          <li tuiCell="m">
+            <span class="effect-content">
+              <tui-icon icon="@tui.messages-square" aria-hidden="true" />
+              <span tuiTitle>Your existing chats keep working</span>
+            </span>
+          </li>
+        </ul>
+        <button
+          tuiButton
+          appearance="secondary"
+          size="m"
+          type="button"
+          [disabled]="locked || changing.isError"
+          (click)="requestHide()"
+        >
+          Hide my profile
+        </button>
+      }
+    }
+    @if (changing.isPending) {
+      <p role="status">Updating your profile visibility…</p>
+    }
+    @if (uncertain) {
+      <p role="alert">
+        We couldn’t confirm the visibility change. Retry the same change or reload the saved setup.
+      </p>
+      <button
+        tuiButton
+        appearance="secondary"
+        size="m"
+        type="button"
+        [disabled]="locked"
+        (click)="changeVisibility(false)"
+      >
+        Retry same change
+      </button>
+    } @else if (changing.isError) {
+      <p role="alert">
+        We couldn’t change your profile visibility. Reload your saved setup before trying again.
+      </p>
+    }
+    @if (changing.isError) {
+      <button tuiButton appearance="secondary" size="m" type="button" (click)="reload()">
+        Reload saved setup
+      </button>
+    }
+  </section>
+}
+
+<ng-template #hideConfirmation let-complete="completeWith" let-dialogId="id">
+  <section class="hide-confirmation" aria-label="Profile hiding confirmation">
+    <h2 [id]="dialogId" tabindex="-1" [tuiAutoFocus]="true">Hide your profile?</h2>
+    <p>
+      You won’t appear in Discover or get new requests. Pending requests will close and won’t
+      reopen. Your chats keep working.
+    </p>
+    <footer class="confirmation-actions">
+      <button tuiButton appearance="secondary" type="button" (click)="complete(false)">
+        Cancel
+      </button>
+      <button tuiButton type="button" (click)="complete(true)">Hide profile</button>
+    </footer>
+  </section>
+</ng-template>

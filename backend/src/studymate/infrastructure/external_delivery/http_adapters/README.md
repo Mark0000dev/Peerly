@@ -50,6 +50,7 @@ browser sessions/geography/device journeys.200 bot-ignore is not acceptance; the
 native cache/sessionId/visitId response is checked then discarded.
 
 Primary protocol references:
+
 - https://github.com/umami-software/umami/blob/v3.3.0/src/app/api/send/route.ts
 - https://docs.umami.is/docs/guides/send-server-side-events
 - https://core.telegram.org/bots/api#sendmessage

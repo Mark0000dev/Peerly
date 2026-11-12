@@ -1,0 +1,68 @@
+# OPTIONAL base + archive.compose.yml + THIS LAST. Parent provisions config/secrets.
+services:
+  collector:
+    command:
+      - --config=/etc/otelcol/collector.yaml
+      - --config=/etc/otelcol/archive.yaml
+      - --config=/etc/otelcol/archive-crypt.yaml
+    environment:
+      # Only gateway authentication reaches Collector; Cloud.ru credentials stay in rclone.conf.
+      AWS_ACCESS_KEY_ID: ${PEERLY_ARCHIVE_GATEWAY_ACCESS_KEY:?Set separate gateway SigV4 identifier}
+      AWS_SECRET_ACCESS_KEY: ${PEERLY_ARCHIVE_GATEWAY_SECRET_KEY:?Set separate gateway SigV4 secret}
+      AWS_EC2_METADATA_DISABLED: 'true'
+    volumes:
+      - ./archive/crypt/collector.yaml:/etc/otelcol/archive-crypt.yaml:ro
+    networks:
+      archive_crypto: null
+  archive-crypt:
+    image: rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466
+    user: '10001:10001'
+    command:
+      - serve
+      - s3
+      - 'encrypted:'
+      - --config=/run/secrets/rclone.conf
+      - --addr=:8080
+      - --vfs-cache-mode=off
+      - --buffer-size=0
+      - --streaming-upload-cutoff=1Mi
+      - --s3-chunk-size=5Mi
+      - --s3-upload-concurrency=1
+      - --max-buffer-memory=32Mi
+      - --multipart-max-uploads=2
+      - --multipart-streaming-buffer-limit=5Mi
+      - --multipart-streaming-buffer-total=10Mi
+      - --metadata-max-objects=128
+      - --dir-cache-time=1m
+      - --server-read-timeout=15s
+      - --server-write-timeout=15s
+      - --contimeout=5s
+      - --timeout=5s
+      - --retries=1
+      - --low-level-retries=1
+      - --stats=0
+      - --log-level=ERROR
+    environment:
+      GOMEMLIMIT: 160MiB
+      # CSV-quoted '"identifier,secret"', not plain identifier,secret. Never omit auth.
+      RCLONE_AUTH_KEY: ${PEERLY_ARCHIVE_GATEWAY_AUTH_CSV:?Set quoted gateway SigV4 pair matching Collector}
+      AWS_EC2_METADATA_DISABLED: 'true'
+    volumes:
+      - ${PEERLY_ARCHIVE_CRYPT_CONFIG:?Parent supplies private read-only rclone config owned UID10001}:/run/secrets/rclone.conf:ro
+    networks:
+      archive_crypto: null
+      monitoring_egress: null
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=8m']
+    mem_limit: 192m
+    cpus: 0.2
+    pids_limit: 64
+    restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: 5m, max-file: '2'}
+networks:
+  archive_crypto:
+    internal: true

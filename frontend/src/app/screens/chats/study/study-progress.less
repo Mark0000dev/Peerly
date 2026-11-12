@@ -1,0 +1,121 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+.review,
+form,
+fieldset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+header,
+.actions,
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 0.75rem;
+}
+
+header {
+  justify-content: space-between;
+}
+
+h2,
+h3,
+p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+legend {
+  padding: 0;
+  margin-block-end: 0.75rem;
+}
+
+label {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  min-block-size: 2.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+dl {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+dd {
+  margin: 0;
+}
+
+.saved-note {
+  white-space: pre-wrap;
+}
+
+h2,
+h3,
+legend {
+  font: var(--tui-typography-body-m);
+  font-weight: 600;
+}
+
+header p,
+.note-help {
+  font: var(--tui-typography-body-s);
+  color: var(--tui-text-secondary);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+.study {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+.feedback-layout {
+  contain: size;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-block-size: 0;
+}
+
+.study-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+.feedback-layout .study-body {
+  min-block-size: 0;
+  overflow: auto;
+  flex: 1;
+}
+
+footer > button {
+  flex: 1 1 auto;
+}

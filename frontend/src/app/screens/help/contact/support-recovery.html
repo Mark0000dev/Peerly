@@ -1,0 +1,68 @@
+<main>
+  <tui-app-bar size="m">
+    <a tuiAppBarBack tuiSlot="start" routerLink="/help" aria-label="Back to help">Back</a>
+    <h1>Recent support requests</h1>
+  </tui-app-bar>
+  <p>
+    Up to 20 recent requests owned by your current account or this browser’s support proof. This is
+    not your complete history.
+  </p>
+  @if (checkingIdentity) {
+    <p role="status">Your sign-in state could not yet be confirmed.</p>
+    <button tuiButton type="button" (click)="checkIdentity()">Check sign-in state</button>
+    <button tuiButton appearance="secondary" type="button" (click)="recoverAnonymous()">
+      Check this browser’s support proof
+    </button>
+  } @else {
+    @if (anonymous()) {
+      <p>Checking this browser’s support proof independently of sign-in.</p>
+      <button tuiButton appearance="secondary" type="button" (click)="recoverActor()">
+        Check account requests
+      </button>
+    }
+    @if (result.isFetching) {
+      <p role="status">Checking recent requests…</p>
+    }
+    @if (result.isSuccess && !result.isFetching) {
+      @for (receipt of result.data.cases; track receipt.case_id) {
+        <section tuiCardLarge="compact" appearance="floating" aria-label="Support request">
+          <h2>{{ statusLabel(receipt.status) }}</h2>
+          <p>Reference: {{ receipt.case_id }}</p>
+          <p>Received: {{ receipt.received_at | date: 'medium' }}</p>
+          <p>Updated: {{ receipt.changed_at | date: 'medium' }}</p>
+          @if (receipt.status === 'resolved') {
+            <p>The team marked this request resolved. This doesn’t confirm an account change.</p>
+          }
+        </section>
+      } @empty {
+        <p role="status">
+          No recent requests were found for this account or proof. This does not confirm whether an
+          earlier submission was received.
+        </p>
+      }
+    }
+    @if (result.isError) {
+      <p role="alert">
+        @if (unavailable) {
+          This support proof is missing, expired or unavailable. Anonymous requests cannot be
+          recovered without the original proof.
+        } @else {
+          Recent requests could not be checked. Try again.
+        }
+      </p>
+      @if (reference; as id) {
+        <p>Technical reference: {{ id }}</p>
+      }
+    }
+    <button tuiButton type="button" [disabled]="result.isFetching" (click)="refresh()">
+      Check again
+    </button>
+    @if (!anonymous()) {
+      <button tuiButton appearance="secondary" type="button" (click)="recoverAnonymous()">
+        Check this browser’s support proof
+      </button>
+    }
+  }
+  <a tuiLink routerLink="/help/contact">Write to the team</a>
+  <p>A received status confirms receipt only. No response time or account outcome is promised.</p>
+</main>

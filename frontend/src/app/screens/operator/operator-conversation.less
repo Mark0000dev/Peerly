@@ -1,0 +1,63 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+main {
+  display: grid;
+  gap: 1.5rem;
+  padding: 1rem;
+  padding-block-end: max(1rem, env(safe-area-inset-bottom));
+}
+
+header,
+form,
+section,
+article,
+li,
+dl,
+dl > div {
+  min-inline-size: 0;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+ol {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1.5rem;
+}
+
+h1,
+h2,
+h3,
+p,
+dt,
+dd,
+a,
+button {
+  overflow-wrap: anywhere;
+}
+
+dl {
+  display: grid;
+  gap: 0.75rem;
+}
+
+dd {
+  margin-inline: 0;
+}
+
+.literal {
+  white-space: pre-wrap;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}

@@ -1,0 +1,70 @@
+:host {
+  display: block;
+  container: notification-settings / inline-size;
+  background: var(--tui-background-base-alt);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-sizing: border-box;
+  min-block-size: 100dvh;
+  max-inline-size: 32rem;
+  margin-inline: auto;
+  padding: max(1.5rem, env(safe-area-inset-top)) max(0.5rem, env(safe-area-inset-right))
+    max(1.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
+  overflow-wrap: anywhere;
+}
+
+p {
+  margin: 0;
+}
+
+fieldset {
+  display: grid;
+  gap: 0.75rem;
+  min-inline-size: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+label {
+  inline-size: 100%;
+}
+
+button,
+a {
+  max-inline-size: 100%;
+}
+
+.save {
+  white-space: normal;
+  block-size: auto;
+  min-block-size: var(--tui-height-l);
+}
+
+legend {
+  font: var(--tui-typography-body-m);
+  font-weight: 600;
+}
+
+.choice-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+@container notification-settings (min-width: 20em) {
+  main {
+    padding-inline: max(1.5rem, env(safe-area-inset-left)) max(1.5rem, env(safe-area-inset-right));
+  }
+
+  .choice-content {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}

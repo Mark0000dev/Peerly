@@ -1,0 +1,244 @@
+<section aria-label="Human report review" class="review-shell">
+  <header>
+    <h2>Human report review</h2>
+    <p>
+      Dismiss or escalate with a documented private reason. Each revision retains its original
+      operator provenance.
+    </p>
+  </header>
+  @if (routeProblem; as problem) {
+    <p role="alert">{{ problem }}</p>
+    @if (cursor !== null) {
+      <button tuiButton appearance="secondary" type="button" (click)="pageHistory(null)">
+        First review-history page
+      </button>
+    }
+  }
+  @if (!authorized) {
+    <p role="status">Operator access must be checked in the reports workspace before continuing.</p>
+  } @else {
+    @if (history.isPending || history.isFetching) {
+      <p role="status">Checking human review history…</p>
+    }
+    @if (history.isError || operation.isError) {
+      <section aria-label="Report review recovery">
+        <p role="alert">{{ errorText }}</p>
+        @if (uncertain) {
+          <button tuiButton type="button" [disabled]="operation.isPending" (click)="replay()">
+            Retry identical decision
+          </button>
+          <p>Reading current history does not confirm the original operation.</p>
+        }
+        <button
+          tuiButton
+          type="button"
+          appearance="secondary"
+          [disabled]="operation.isPending"
+          (click)="reload()"
+        >
+          Read current review state
+        </button>
+        @if (cursor !== null) {
+          <button
+            tuiButton
+            type="button"
+            appearance="flat"
+            [disabled]="operation.isPending"
+            (click)="pageHistory(null)"
+          >
+            First review-history page
+          </button>
+        }
+      </section>
+    }
+    @if (operation.isPending) {
+      <p role="status">Recording the human decision…</p>
+    }
+    @if (operation.isSuccess) {
+      <section tuiCardLarge="compact" tuiAppearance="neutral" aria-label="Stored review operation">
+        <h3>Decision stored</h3>
+        <p>This is the original operation receipt. Current report history is read separately.</p>
+        <tui-accordion size="s">
+          <button tuiAccordion type="button">
+            Original operation receipt · version {{ operation.data.version }}
+          </button>
+          <tui-expand><app-operator-report-review-proof [review]="operation.data" /></tui-expand>
+        </tui-accordion>
+        <button
+          tuiButton
+          appearance="secondary"
+          type="button"
+          [disabled]="history.isFetching"
+          (click)="reload()"
+        >
+          Read current state for another decision
+        </button>
+      </section>
+    }
+    @if (page; as data) {
+      <dl class="report-identity" aria-label="Reviewed report identity">
+        <div>
+          <dt>Report ID</dt>
+          <dd>{{ data.report_id }}</dd>
+        </div>
+        <div>
+          <dt>Report kind</dt>
+          <dd>{{ data.kind }}</dd>
+        </div>
+        <div>
+          <dt>Reporter account ID</dt>
+          <dd>{{ data.reporter_id }}</dd>
+        </div>
+        <div>
+          <dt>Target account ID</dt>
+          <dd>{{ data.target_id }}</dd>
+        </div>
+        <div>
+          <dt>Disclosure context ID</dt>
+          <dd>{{ data.context_id }}</dd>
+        </div>
+      </dl>
+      <div class="review-columns">
+        <div class="records">
+          <section
+            tuiCardLarge="compact"
+            tuiAppearance="neutral"
+            aria-label="Current recorded review"
+          >
+            <h3>Current recorded decision</h3>
+            @if (data.current; as current) {
+              <app-operator-report-review-proof [review]="current" />
+            } @else {
+              <p>No dismiss or escalate decision is recorded.</p>
+            }
+          </section>
+          <section aria-label="Retained review history">
+            <h3>Retained revisions</h3>
+            <p>
+              History anchor version {{ data.anchor_version }}. The current decision may be newer
+              than this page’s anchor.
+            </p>
+            <tui-accordion size="s" [closeOthers]="false">
+              @for (revision of data.revisions; track revision.id) {
+                <button
+                  tuiAccordion
+                  tuiButtonVertical
+                  type="button"
+                  [attr.aria-label]="'Open stored review version ' + revision.version"
+                >
+                  {{ revision.action === 'dismiss' ? 'Dismiss' : 'Escalate' }} · version
+                  {{ revision.version }} ·
+                  <time [attr.datetime]="revision.reviewed_at">{{ revision.reviewed_at }}</time>
+                </button>
+                <tui-expand><app-operator-report-review-proof [review]="revision" /></tui-expand>
+              } @empty {
+                <p>No revisions on this page.</p>
+              }
+            </tui-accordion>
+            <nav aria-label="Review history pages">
+              @if (data.next_cursor !== null) {
+                <button
+                  tuiButton
+                  appearance="secondary"
+                  type="button"
+                  [disabled]="operation.isPending"
+                  (click)="pageHistory(data.next_cursor)"
+                >
+                  Earlier review revisions
+                </button>
+              }
+              @if (cursor !== null) {
+                <button
+                  tuiButton
+                  appearance="secondary"
+                  type="button"
+                  [disabled]="operation.isPending"
+                  (click)="pageHistory(null)"
+                >
+                  First review-history page
+                </button>
+              }
+            </nav>
+          </section>
+        </div>
+        <section
+          tuiCardLarge="compact"
+          tuiAppearance="neutral"
+          aria-label="Document a human decision"
+        >
+          <h3>Record a decision</h3>
+          <p>The reason is an internal business record, not a message to the reporter or target.</p>
+          <form [formGroup]="form" (ngSubmit)="prepare()">
+            <fieldset [disabled]="locked">
+              <legend>Human review action</legend>
+              <label
+                ><input tuiRadio type="radio" formControlName="action" value="dismiss" />Dismiss
+                with a reason</label
+              >
+              <label
+                ><input
+                  tuiRadio
+                  type="radio"
+                  formControlName="action"
+                  value="escalate"
+                />Escalate</label
+              >
+              @if (form.controls.action.touched && form.controls.action.invalid) {
+                <p role="alert">Choose Dismiss or Escalate.</p>
+              }
+              <tui-textfield>
+                <label tuiLabel [for]="reasonId">Documented private reason</label>
+                <textarea
+                  tuiTextarea
+                  [id]="reasonId"
+                  formControlName="reason"
+                  [readOnly]="locked"
+                  [attr.aria-describedby]="reasonId + '-hint'"
+                  rows="4"
+                ></textarea>
+              </tui-textfield>
+              <p [id]="reasonId + '-hint'">
+                {{ reasonCount }} / 1000 characters. A reason is required.
+              </p>
+              @if (form.controls.reason.touched) {
+                @if (reasonProblem(form.controls.reason.value); as problem) {
+                  <p role="alert">{{ problem }}</p>
+                }
+              }
+            </fieldset>
+            <button tuiButton type="submit" [disabled]="locked || currentVersion >= 2147483647">
+              Review decision
+            </button>
+          </form>
+          @if (currentVersion >= 2147483647) {
+            <p role="status">This review version cannot be advanced further.</p>
+          }
+          @if (staged(); as draft) {
+            <section aria-label="Review decision before recording">
+              <h4>{{ draft.action === 'dismiss' ? 'Dismiss with a reason' : 'Escalate' }}</h4>
+              <p class="reason">{{ draft.reason }}</p>
+              <p>Expected current version {{ draft.expected_version }}.</p>
+              @if (draft.expected_version !== currentVersion) {
+                <p role="status">
+                  The current version changed. Edit and review the current state before recording.
+                </p>
+              }
+              <button tuiButton type="button" [disabled]="!canApply" (click)="apply()">
+                Record reviewed decision
+              </button>
+              <button
+                tuiButton
+                type="button"
+                appearance="flat"
+                [disabled]="!operation.isIdle"
+                (click)="edit()"
+              >
+                Edit decision
+              </button>
+            </section>
+          }
+        </section>
+      </div>
+    }
+  }
+</section>

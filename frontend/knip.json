@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "project": ["src/**/*.{ts,less}", "tooling/**/*.mjs", "*.mjs", "testing/**/*.{ts,mts}"],
+  "ignoreDependencies": [
+    "@capacitor/android",
+    "@capacitor/ios",
+    "@taiga-ui/icons",
+    "@fontsource/inter",
+    "@fontsource/m-plus-rounded-1c"
+  ]
+}

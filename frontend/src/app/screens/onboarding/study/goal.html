@@ -1,0 +1,155 @@
+<section aria-label="Your study goal">
+  @if ((goal.isPending || goal.isFetching) && !draftPresent) {
+    <tui-loader [loading]="true" textContent="Loading your goal…" role="status" />
+  } @else if (goal.isError && !draftPresent) {
+    <p role="alert">We couldn’t load your goal.</p>
+    <button tuiButton type="button" (click)="reload()">Try again</button>
+  } @else {
+    @if (goal.isFetching) {
+      <p role="status">Refreshing the saved goal. Your draft is still here.</p>
+    }
+    @if (goal.isError) {
+      <p role="alert">We couldn’t refresh the saved goal. Your draft is still here.</p>
+      <button tuiLink type="button" [disabled]="checking()" (click)="reload()">
+        Reload saved goal
+      </button>
+    }
+    <form #goalForm="ngForm" [formGroup]="form" (ngSubmit)="save()">
+      <tui-textfield tuiChevron [stringify]="label" [identityMatcher]="sameSubject">
+        <label tuiLabel for="goal-subject">Area</label>
+        <input
+          tuiComboBox
+          id="goal-subject"
+          aria-label="Knowledge area"
+          [formControl]="subject"
+          [matcher]="null"
+          [readOnly]="locked"
+          maxlength="320"
+          (input)="search($event)"
+          aria-describedby="subject-hint"
+          [attr.aria-invalid]="subject.touched && subject.invalid"
+        />
+        <ng-template #emptyCatalogue />
+        <tui-data-list *tuiDropdown [emptyContent]="emptyCatalogue">
+          @if (catalogue.isPending || catalogue.isFetching) {
+            <tui-loader [loading]="true" textContent="Searching areas…" role="status" />
+          } @else if (catalogue.isError) {
+            <p role="alert">We couldn’t load areas.</p>
+            <button tuiButton type="button" size="s" (click)="retryCatalogue()">Retry areas</button>
+          } @else {
+            @for (item of catalogue.data.items; track item.id) {
+              <button tuiOption type="button" [value]="item">
+                <span class="subject-option">
+                  <span>{{ item.label }}</span>
+                  @if (item.aliases?.join(', '); as aliases) {
+                    <small>{{ aliases }}</small>
+                  }
+                </span>
+              </button>
+            } @empty {
+              <p>No areas found.</p>
+            }
+            @if (catalogue.data.next_cursor) {
+              <button tuiButton type="button" size="s" (click)="more()">Next areas</button>
+            }
+          }
+          @if (searching) {
+            <button
+              tuiOption
+              type="button"
+              [value]="customChoice"
+              [disabled]="locked || !canUseCustom"
+            >
+              Use this as another area
+            </button>
+          }
+        </tui-data-list>
+      </tui-textfield>
+      <p id="subject-hint">Choose a listed knowledge area, or use another area explicitly.</p>
+      @if (goalForm.submitted && subject.invalid) {
+        <p role="alert">Choose an area from the list or use it as another area.</p>
+      }
+      @if (custom) {
+        <p>
+          Another area isn’t linked to a listed area. Similar names alone won’t make people a match.
+        </p>
+      }
+      <tui-textfield
+        ><label tuiLabel for="goal-topic">Task</label
+        ><input
+          tuiInput
+          id="goal-topic"
+          aria-label="Task or topic · optional"
+          [formControl]="topic"
+          [readOnly]="locked"
+          aria-describedby="topic-hint"
+      /></tui-textfield>
+      <p id="topic-hint">Optional. For example, SQL JOINs. Up to 80 characters.</p>
+      @if (goalForm.submitted && topic.invalid) {
+        <p role="alert">Keep the topic within 80 characters.</p>
+      }
+      <tui-textfield
+        ><label tuiLabel for="goal-context">Context</label
+        ><textarea
+          tuiTextarea
+          id="goal-context"
+          aria-label="Context or module · optional"
+          [formControl]="context"
+          [readOnly]="locked"
+          aria-describedby="context-hint"
+        ></textarea>
+      </tui-textfield>
+      <p id="context-hint">A module code, such as IDB, is optional. Up to 240 characters.</p>
+      @if (goalForm.submitted && context.invalid) {
+        <p role="alert">Keep the context within 240 characters.</p>
+      }
+      <peerly-goal-assistance
+        [actor]="actor()"
+        [draft]="assistanceDraft"
+        [applyDisabled]="locked"
+        (applyText)="applyAssistanceText($event)"
+        (applyArea)="applyAssistanceArea($event)"
+        (expired)="assistanceExpired($event)"
+      />
+      @if (appliedText()) {
+        <p role="status">Suggestion applied · not saved</p>
+        <button
+          tuiLink
+          type="button"
+          [disabled]="!mayRestoreOriginal"
+          (click)="restoreOriginalText()"
+        >
+          Back to my text
+        </button>
+      }
+      <label
+        ><input
+          tuiCheckbox
+          type="checkbox"
+          id="goal-shared"
+          [formControl]="shared"
+          [attr.disabled]="locked ? '' : null"
+        />
+        Open to studying together</label
+      >
+      <button
+        tuiButton
+        type="submit"
+        [disabled]="
+          checking() || saving.isPending || conflict || !goal.isSuccess || goal.isFetching
+        "
+      >
+        {{ saving.isPending ? 'Saving…' : uncertain ? 'Retry same save' : 'Save goal' }}
+      </button>
+    </form>
+    @if (message; as error) {
+      <p role="alert">{{ error }}</p>
+    }
+    @if (saving.isSuccess && !conflict) {
+      <p role="status">Goal saved. New requests will use this goal.</p>
+    }
+    @if (saving.isError || remoteChanged) {
+      <button tuiLink type="button" (click)="reload()">Reload saved goal</button>
+    }
+  }
+</section>

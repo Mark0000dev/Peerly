@@ -39,7 +39,7 @@
 - Integration tests use real PostgreSQL through asyncpg. Never SQLite, mocked repositories, or mocked SQL execution as a substitute. Unit adapter error tests may mock failures explicitly.
 - `TEST_DATABASE_URL` must point to a disposable database whose name ends in `_test`. Every persistence test uses a unique schema and cleans it afterward; no truncation of shared application databases. Missing PostgreSQL fails the integration run rather than skipping it.
 - Migrations, constraints, commit/rollback, permission enforcement and races require integration coverage as their features are implemented. Test external services through controlled boundary doubles; do not call live AI/email from tests.
-- CI runs the complete gate with a PostgreSQL service. Require its status for merging when remote branch protection can be configured. No commits/pushes until the user asks.
+- CI runs the complete gate with a PostgreSQL service. Require its status for merging when remote branch protection can be configured. Use focused working branches and the contribution workflow.
 
 ## Primary references
 
@@ -53,4 +53,4 @@
 
 ## Current system design
 
-Follow the proposed REST + SSE, transactional outbox, concurrency and deployment contracts in `../docs/architecture.md`, `../docs/api.md`, `../docs/database.md`, `../docs/observability.md` and `../docs/deployment.md`. Implement only the primitives required by actual use cases. The privileged operator interface can inspect every application record and relationship, including full chats/files, without a support-case restriction. Audit operator/target/time/correlation metadata; never the returned private content. Product endpoints still enforce their ordinary user permissions.
+Follow the REST + SSE, transactional outbox, concurrency and deployment contracts in `../docs/architecture.md`, `../docs/api.md`, `../docs/database.md`, `../docs/observability.md` and `../docs/deployment.md`. Implement only the primitives required by actual use cases. The privileged operator interface can inspect every application record and relationship, including full chats/files, without a support-case restriction. Audit operator/target/time/correlation metadata; never the returned private content. Product endpoints still enforce their ordinary user permissions.

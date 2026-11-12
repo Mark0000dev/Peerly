@@ -1,0 +1,253 @@
+name: Frontend
+
+on:
+  pull_request:
+  push:
+    # Main runs the same gate through frontend-image.yml before publishing.
+    branches-ignore:
+      - main
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    services:
+      postgres:
+        image: postgres:16.15
+        env:
+          POSTGRES_USER: studymate
+          POSTGRES_PASSWORD: studymate
+          POSTGRES_DB: studymate_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U studymate -d studymate_test"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      CI: 'true'
+      HUSKY: '0'
+      NG_CLI_ANALYTICS: 'false'
+    defaults:
+      run:
+        working-directory: frontend
+        shell: bash
+    steps:
+      - name: Check out the exact candidate
+        id: checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          directory="$RUNNER_TEMP/frontend-quality-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -p "$directory"
+          printf 'QUALITY_RECEIPTS=%s\n' "$directory" >> "$GITHUB_ENV"
+
+      - name: Install the repository Node version
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install the production-build npm version
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.8.2 --ignore-scripts --no-audit --no-fund
+          test "$(node --version)" = "v$(cat .nvmrc)"
+          test "$(npm --version)" = '10.8.2'
+
+      - name: Install the repository uv version
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: '0.13.7'
+          enable-cache: true
+
+      - name: Prepare the locked backend for contract export and real fixtures
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          uv sync --locked 2>&1 | tee "$QUALITY_RECEIPTS/backend-install.log"
+
+      - name: Install the locked frontend including verified dependency patches
+        run: |
+          set -euo pipefail
+          npm ci 2>&1 | tee "$QUALITY_RECEIPTS/frontend-install.log"
+
+      - name: Install the locked Playwright browser builds and system dependencies
+        run: |
+          set -euo pipefail
+          npx --no-install playwright install --with-deps chromium webkit \
+            2>&1 | tee "$QUALITY_RECEIPTS/browser-install.log"
+
+      - name: Run every mandatory static, unit-coverage and production-build check
+        id: static
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          {
+            node --input-type=module <<'JS'
+            import { readFileSync } from 'node:fs';
+            const { scripts } = JSON.parse(readFileSync('package.json', 'utf8'));
+            const expected = 'node tooling/font-watcher-patch.mjs after && npm run contracts:check && npm run format:check && npm run lint && npm run lint:styles && npm run knip && npm run typecheck && npm run test:tooling && npm run test:unit && npm run build && npm run test:public && npm run test:integration && npm run test:fullstack';
+            if (scripts.check !== expected ||
+                scripts['test:public'] !== 'STUDYMATE_STATIC_BUILD=1 node tooling/browser-gate.mjs test' ||
+                scripts['test:integration'] !== 'node tooling/browser-gate.mjs test' ||
+                scripts['test:fullstack'] !== 'node tooling/fullstack-matrix.mjs') {
+              throw new Error('Mandatory aggregate changed: update CI orchestration without omitting checks');
+            }
+          JS
+            node tooling/font-watcher-patch.mjs after
+            npm run contracts:check
+            npm run format:check
+            npm run lint
+            npm run lint:styles
+            npm run knip
+            npm run typecheck
+            npm run test:tooling
+            npm run test:unit
+            npm run build
+          } 2>&1 | tee "$QUALITY_RECEIPTS/static-unit-build.log"
+
+      - name: Run all public, integration and real PostgreSQL screenshot cohorts serially
+        id: quality
+        timeout-minutes: 105
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'JS' 2>&1 | tee "$QUALITY_RECEIPTS/browser-check.log"
+          import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+          import { createRequire } from 'node:module';
+          import { join } from 'node:path';
+          import { runBrowserGate } from './tooling/browser-gate.mjs';
+          import { runFullstackMatrix } from './tooling/fullstack-matrix.mjs';
+
+          const cli = createRequire(import.meta.url).resolve('@playwright/test/cli');
+          const controller = new AbortController();
+          const interrupt = () => controller.abort({ signal: 'SIGINT', exitCode: 130 });
+          const terminate = () => controller.abort({ signal: 'SIGTERM', exitCode: 143 });
+          process.on('SIGINT', interrupt);
+          process.on('SIGTERM', terminate);
+          const signal = controller.signal;
+          const receipts = process.env.QUALITY_RECEIPTS;
+          const outcomes = [];
+          try {
+            for (const phase of ['public', 'integration', 'fullstack']) {
+              console.log('Mandatory browser phase:', phase);
+              const code = phase === 'fullstack'
+                ? await runFullstackMatrix(['--workers=1'], { signal })
+                : await runBrowserGate(process.execPath, [cli, 'test', '--workers=1'], {
+                    signal,
+                    // Owner-approved budget for the WHOLE integration matrix only.
+                    // Public and each full-stack cohort retain the existing 600s.
+                    ...(phase === 'integration' ? { timeoutMs: 1_800_000 } : {}),
+                    env: phase === 'public'
+                      ? { ...process.env, STUDYMATE_STATIC_BUILD: '1' }
+                      : process.env,
+                  });
+              outcomes.push({ phase, exit_code: code });
+              const directory = join(receipts, phase);
+              mkdirSync(directory, { recursive: true });
+              // Copy completed evidence before the next invocation replaces it.
+              // Remove only generated reports after successful archival.
+              for (const name of ['playwright-report', 'test-results']) {
+                if (existsSync(name)) {
+                  cpSync(name, join(directory, name), { recursive: true });
+                  rmSync(name, { recursive: true });
+                }
+              }
+              writeFileSync(join(receipts, 'browser-phases.json'), JSON.stringify(outcomes, null, 2) + '\n');
+              if (code !== 0) {
+                process.exitCode = code;
+                break;
+              }
+            }
+          } finally {
+            process.off('SIGINT', interrupt);
+            process.off('SIGTERM', terminate);
+          }
+          JS
+
+      - name: Record source, gate outcome and actual toolchain
+        if: always() && steps.checkout.outcome == 'success' && env.QUALITY_RECEIPTS != ''
+        env:
+          QUALITY_OUTCOME: ${{ steps.quality.outcome }}
+          STATIC_OUTCOME: ${{ steps.static.outcome }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import platform
+          import subprocess
+          from pathlib import Path
+
+          root = Path(os.environ["GITHUB_WORKSPACE"])
+          names = (
+              ".github/workflows/frontend.yml", ".github/workflows/frontend-image.yml",
+              "frontend/.nvmrc", "frontend/.npmrc", "frontend/package.json",
+              "frontend/package-lock.json", "frontend/angular.json", "frontend/Dockerfile",
+              "frontend/playwright.config.ts", "frontend/tooling/browser-gate.mjs",
+              "frontend/tooling/fullstack-matrix.mjs", "frontend/testing/visual.ts",
+              "frontend/testing/backend_fixture.py", "frontend/contracts/openapi.json",
+              "frontend/src/app/api.generated.ts", "backend/.python-version", "backend/uv.lock",
+          )
+          def version(command):
+              try:
+                  result = subprocess.run(command, capture_output=True, text=True, check=False)
+              except OSError:
+                  return None
+              return result.stdout.strip() if result.returncode == 0 else None
+
+          receipt = {
+              "source_sha": os.environ["GITHUB_SHA"],
+              "source_ref": os.environ["GITHUB_REF"],
+              "event": os.environ["GITHUB_EVENT_NAME"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "quality_outcome": os.environ["QUALITY_OUTCOME"],
+              "job_status_before_evidence": os.environ["JOB_STATUS"],
+              "command": "npm run check equivalent; serial browser exports with owner-approved integration budget",
+              "static_unit_build_outcome": os.environ["STATIC_OUTCOME"],
+              "check_script": json.loads((root / "frontend/package.json").read_text())["scripts"]["check"],
+              "runner_os": platform.platform(),
+              "node": version(["node", "--version"]),
+              "npm": version(["npm", "--version"]),
+              "uv": version(["uv", "--version"]),
+              "backend_python": version([str(root / "backend/.venv/bin/python"), "--version"]),
+              "playwright": version(["node", "node_modules/@playwright/test/cli.js", "--version"]),
+              "sha256": {
+                  name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+                  for name in names
+              },
+          }
+          destination = Path(os.environ["QUALITY_RECEIPTS"]) / "quality.json"
+          destination.write_text(json.dumps(receipt, indent=2) + "\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("Frontend mandatory gate: `" + receipt["quality_outcome"] + "`.\n\n"
+                            "Source: `" + receipt["source_sha"] + "`.\n\n"
+                            "Complete `npm run check` sequence with serial browser orchestration. "
+                            "See retained raw logs, coverage and browser artifacts.\n")
+          PY
+
+      - name: Retain failure evidence and coverage
+        if: always() && env.QUALITY_RECEIPTS != ''
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: frontend-quality-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.QUALITY_RECEIPTS }}/
+            frontend/playwright-report/
+            frontend/test-results/
+            frontend/coverage/
+          if-no-files-found: error
+          retention-days: 14

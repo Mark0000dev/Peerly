@@ -1,0 +1,20 @@
+# OPTIONAL: compose.yml + optional remote-write.compose.yml + THIS FILE LAST.
+# Collector image/security/resources/privacy processors remain inherited from base.
+services:
+  collector:
+    command:
+      - --config=/etc/otelcol/collector.yaml
+      - --config=/etc/otelcol/archive.yaml
+    environment:
+      PEERLY_ARCHIVE_S3_ENDPOINT: ${PEERLY_ARCHIVE_S3_ENDPOINT:?Set approved HTTPS S3 origin}
+      PEERLY_ARCHIVE_S3_REGION: ${PEERLY_ARCHIVE_S3_REGION:?Set actual S3 region}
+      PEERLY_ARCHIVE_S3_BUCKET: ${PEERLY_ARCHIVE_S3_BUCKET:?Set dedicated telemetry archive bucket}
+      PEERLY_ARCHIVE_S3_PREFIX: ${PEERLY_ARCHIVE_S3_PREFIX:?Set isolated environment archive prefix}
+      PEERLY_ARCHIVE_S3_FORCE_PATH_STYLE: ${PEERLY_ARCHIVE_S3_FORCE_PATH_STYLE:-false}
+      # Parent supplies these out of Git; do not run compose config with real values in logs.
+      AWS_ACCESS_KEY_ID: ${PEERLY_ARCHIVE_S3_ACCESS_KEY:?Parent supplies archive-scoped key}
+      AWS_SECRET_ACCESS_KEY: ${PEERLY_ARCHIVE_S3_SECRET_KEY:?Parent supplies archive-scoped secret}
+      AWS_EC2_METADATA_DISABLED: 'true'
+    volumes:
+      - ./archive/collector.yaml:/etc/otelcol/archive.yaml:ro
+      - ${PEERLY_ARCHIVE_QUEUE_DIR:?Precreate bounded private storage owned by UID10001}:/var/lib/otelcol-archive

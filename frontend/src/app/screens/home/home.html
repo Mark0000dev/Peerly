@@ -1,0 +1,125 @@
+<peerly-public-header />
+<main>
+  <section class="hero" aria-labelledby="hero-title">
+    <div>
+      <p class="eyebrow">For APU students</p>
+      <h1 id="hero-title">Find someone <br />to study with.</h1>
+      <p class="lead">
+        Get help with a topic, share what you know, or work through it together. Swipe through
+        classmates who match your goal, send a short request, and chat once they accept.
+      </p>
+      <a tuiButton routerLink="/onboarding" size="l">Open the app</a>
+      <p class="note">
+        Sign in with your Google account, then confirm your &#64;mail.apu.edu.my address.
+      </p>
+    </div>
+    <peerly-mascot class="hero-art" name="chat" [width]="288" [height]="240" />
+  </section>
+  <section id="how" class="how" aria-labelledby="how-title">
+    <p class="eyebrow">How it works</p>
+    <h2 id="how-title">Three steps, no awkward cold messages</h2>
+    <div class="cards">
+      <article tuiCardLarge appearance="neutral">
+        <span class="step" tuiBadge appearance="secondary">1</span>
+        <h3>Set a goal</h3>
+        <p>
+          Pick a knowledge area and, if you like, the task you’re working on. One active goal keeps
+          things focused.
+        </p>
+      </article>
+      <article tuiCardLarge appearance="neutral">
+        <span class="step" tuiBadge appearance="secondary">2</span>
+        <h3>Swipe through people</h3>
+        <p>
+          See classmates who can help with your area, need help with yours, or are working on the
+          same thing.
+        </p>
+      </article>
+      <article tuiCardLarge appearance="neutral">
+        <span class="step" tuiBadge appearance="secondary">3</span>
+        <h3>Send a short request</h3>
+        <p>
+          Review it first; nothing is sent until you tap Send. A chat opens only when they accept.
+        </p>
+      </article>
+    </div>
+  </section>
+  <section aria-labelledby="modes-title">
+    <p class="eyebrow">Three ways to use it</p>
+    <h2 id="modes-title">Learn, help, or both</h2>
+    <div class="cards">
+      <article tuiCardLarge appearance="floating">
+        <tui-icon
+          tuiBadge
+          appearance="sp-relevance"
+          iconStart="@tui.hand-helping"
+          aria-hidden="true"
+        />
+        <h3>Find help</h3>
+        <p>Meet someone who listed your knowledge area as something they can help with.</p>
+      </article>
+      <article tuiCardLarge appearance="floating">
+        <tui-icon
+          tuiBadge
+          appearance="sp-offer"
+          iconStart="@tui.graduation-cap"
+          aria-hidden="true"
+        />
+        <h3>Offer help</h3>
+        <p>See who’s working in an area you know well, and offer a hand.</p>
+      </article>
+      <article tuiCardLarge appearance="floating">
+        <tui-icon tuiBadge appearance="sp-shared" iconStart="@tui.users" aria-hidden="true" />
+        <h3>Study together</h3>
+        <p>Pair up with someone on the same goal. Nobody has to be the teacher.</p>
+      </article>
+    </div>
+  </section>
+  <section id="safety" class="safety" aria-labelledby="safety-title">
+    <div>
+      <p class="eyebrow">Safety</p>
+      <h2 id="safety-title">Built for students, with people watching out</h2>
+      <ul>
+        <li>
+          <strong>APU students only.</strong> Everyone confirms a student address. We only send it a
+          code; we never read your mailbox.
+        </li>
+        <li><strong>Requests before chats.</strong> Nobody can message you until you accept.</li>
+        <li><strong>Report and block.</strong> Ask the team to review a concern.</li>
+        <li><strong>Take a break.</strong> Hide your profile and keep your chats.</li>
+      </ul>
+    </div>
+    <peerly-mascot class="safety-art" name="read" [width]="240" [height]="200" />
+  </section>
+  <section aria-labelledby="questions-title">
+    <p class="eyebrow">Questions</p>
+    <h2 id="questions-title">Good to know</h2>
+    <div class="questions">
+      <details tuiCardLarge="compact" appearance="floating" open>
+        <summary>Who can join?</summary>
+        <p>APU students with a Google account and an address ending in &#64;mail.apu.edu.my.</p>
+      </details>
+      <details tuiCardLarge="compact" appearance="floating">
+        <summary>Do you read my APU email?</summary>
+        <p>No. We send a code to confirm the address. We never sign in to or read your mailbox.</p>
+      </details>
+      <details tuiCardLarge="compact" appearance="floating">
+        <summary>Is there AI in it?</summary>
+        <p>
+          Optional assistance with subjects, wording and photos. You decide what suggestions to use.
+        </p>
+      </details>
+      <details tuiCardLarge="compact" appearance="floating">
+        <summary>Can I delete my account?</summary>
+        <p>Yes, in Profile. <a tuiLink routerLink="/account/delete">Delete your account</a>.</p>
+      </details>
+    </div>
+  </section>
+  <section class="closing" tuiAppearance="primary" aria-labelledby="closing-title">
+    <h2 id="closing-title">Your next study session starts here.</h2>
+    <a tuiButton appearance="primary-grayscale" tuiTheme="dark" routerLink="/onboarding" size="m"
+      >Open the app</a
+    >
+  </section>
+</main>
+<peerly-public-footer />

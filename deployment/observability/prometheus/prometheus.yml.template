@@ -1,41 +1,60 @@
-# Merge these jobs/rule_files into the EXISTING Prometheus. Do not replace its config.
-# Render @@...@@ with real private/TLS reverse-proxy host:ports and CA/auth paths.
-# There is no assumed remote-write receiver and no public collector listener.
+# MERGE into existing Prometheus; do not replace unrelated jobs or Alertmanager routing.
+# Target is the actual TLS staging gateway host:port, NOT an origin URL or path.
+# Plain protected reader password_file is NOT a server htpasswd/log-writer/alert-writer file.
+# Parent owns independent reader/log-writer roles; no password value belongs here.
+# Dedicated Alertmanager remains private on the monitoring network, not this stage gateway.
+# Keep target job identity; native resource job survives as exported_job.
 global:
   scrape_interval: 30s
   evaluation_interval: 30s
 rule_files:
-  - /etc/prometheus/peerly/alerts.yml
+- /etc/prometheus/peerly/alerts.yml
 scrape_configs:
-  - job_name: peerly-app-metrics
-    honor_labels: true
-    scheme: https
-    static_configs:
-      - targets: ['@@APP_METRICS_PRIVATE_TARGET@@']
-        labels: {deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'}
-    tls_config:
-      ca_file: '@@MONITORING_CA_FILE@@'
-    authorization:
-      credentials_file: '@@SCRAPE_TOKEN_FILE@@'
-  - job_name: peerly-collector
-    scheme: https
-    static_configs:
-      - targets: ['@@COLLECTOR_METRICS_PRIVATE_TARGET@@']
-        labels: {deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'}
-    tls_config:
-      ca_file: '@@MONITORING_CA_FILE@@'
-    authorization:
-      credentials_file: '@@SCRAPE_TOKEN_FILE@@'
-  - job_name: peerly-tempo
-    scheme: https
-    static_configs:
-      - targets: ['@@TEMPO_PRIVATE_TARGET@@']
-        labels: {deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'}
-    tls_config:
-      ca_file: '@@MONITORING_CA_FILE@@'
-    authorization:
-      credentials_file: '@@SCRAPE_TOKEN_FILE@@'
-# Reuse an existing approved host exporter for capacity: label ONLY the filesystem
-# actually backing PEERLY_TEMPO_DATA_DIR with peerly_storage="tempo". No host mounts,
-# Docker-socket access or node-exporter installation is performed by this bundle.
-# Existing Alertmanager routing/credentials remain owner-managed.
+- job_name: peerly-app-metrics
+  scrape_interval: 30s
+  scrape_timeout: 15s
+  honor_labels: false
+  scheme: https
+  static_configs:
+  - targets:
+    - '@@STAGING_OBSERVABILITY_TLS_TARGET@@'
+    labels:
+      deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'
+  tls_config:
+    ca_file: '@@MONITORING_CA_FILE@@'
+  metrics_path: /peerly-observe/metrics/application
+  basic_auth:
+    username: peerly-read
+    password_file: '@@SCRAPE_READ_PASSWORD_FILE@@'
+- job_name: peerly-collector
+  scrape_interval: 30s
+  scrape_timeout: 15s
+  scheme: https
+  static_configs:
+  - targets:
+    - '@@STAGING_OBSERVABILITY_TLS_TARGET@@'
+    labels:
+      deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'
+  tls_config:
+    ca_file: '@@MONITORING_CA_FILE@@'
+  honor_labels: false
+  metrics_path: /peerly-observe/metrics/collector
+  basic_auth:
+    username: peerly-read
+    password_file: '@@SCRAPE_READ_PASSWORD_FILE@@'
+- job_name: peerly-tempo
+  scrape_interval: 30s
+  scrape_timeout: 15s
+  scheme: https
+  static_configs:
+  - targets:
+    - '@@STAGING_OBSERVABILITY_TLS_TARGET@@'
+    labels:
+      deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'
+  tls_config:
+    ca_file: '@@MONITORING_CA_FILE@@'
+  honor_labels: false
+  metrics_path: /peerly-observe/metrics/tempo
+  basic_auth:
+    username: peerly-read
+    password_file: '@@SCRAPE_READ_PASSWORD_FILE@@'

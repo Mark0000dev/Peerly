@@ -2,11 +2,6 @@ name: Backend image (build only)
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - backend/**
-      - deployment/backend/**
-      - .github/workflows/backend-image.yml
 
 # No package write, registry credentials, publish or deployment jobs.
 permissions:

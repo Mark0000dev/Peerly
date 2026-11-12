@@ -8,7 +8,6 @@ services:
     environment:
       GOMEMLIMIT: 224MiB
       PEERLY_ENVIRONMENT: ${PEERLY_ENVIRONMENT:?Set the actual environment}
-      PEERLY_RELEASE: ${PEERLY_RELEASE:?Set the deployed release}
       LOKI_OTLP_ENDPOINT: ${LOKI_OTLP_ENDPOINT:?Inventory existing Loki OTLP endpoint
         first}
       LOKI_AUTHORIZATION: ${LOKI_AUTHORIZATION:-}
@@ -16,6 +15,8 @@ services:
     volumes:
     - ./collector/collector.yaml:/etc/otelcol/collector.yaml:ro
     - ${PEERLY_COLLECTOR_DATA_DIR:?Precreate private directory owned by UID10001}:/var/lib/otelcol
+    # Statfs only in collector namespace; same Tempo backing filesystem, no host root/proc/socket.
+    - ${PEERLY_TEMPO_DATA_DIR:?Precreate private directory owned by UID10001}:/var/tempo-capacity:ro
     ports:
     - 127.0.0.1:${PEERLY_SYSLOG_PORT:-5514}:5514
     - 127.0.0.1:${PEERLY_METRICS_PORT:-8889}:8889

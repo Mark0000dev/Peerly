@@ -2,15 +2,7 @@ name: Backend
 
 on:
   pull_request:
-    paths:
-      - backend/**
-      - deployment/backend/**
-      - .github/workflows/backend.yml
   push:
-    paths:
-      - backend/**
-      - deployment/backend/**
-      - .github/workflows/backend.yml
 
 permissions:
   contents: read
@@ -54,9 +46,9 @@ jobs:
           path: backend/coverage.xml
 
   publish:
-    name: Publish staging backend
+    name: Publish backend image
     needs: backend
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/peerly-staging-backend'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -73,7 +65,7 @@ jobs:
       - name: Build exact checked revision
         run: |
           docker build \
-            --label org.opencontainers.image.source=https://github.com/Mark0000dev/StudyMate-AI \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --label org.opencontainers.image.revision="$GITHUB_SHA" \
             --label org.opencontainers.image.title=Peerly \
             --tag "$REGISTRY_IMAGE:staging-$GITHUB_SHA" \

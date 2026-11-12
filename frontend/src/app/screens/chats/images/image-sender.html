@@ -1,0 +1,145 @@
+<section aria-label="Message image">
+  <label tuiInputFiles [for]="pickerId">
+    <input
+      tuiInputFiles
+      [id]="pickerId"
+      [formControl]="file"
+      [attr.aria-label]="recovering ? 'Reselect original image' : 'Attach an image'"
+      accept="image/jpeg,image/png"
+      [maxFileSize]="10000000"
+      (reject)="rejected($event)"
+    />
+    <ng-template>{{ recovering ? 'Reselect original image' : 'Attach an image' }}</ng-template>
+  </label>
+  <p class="image-help">One JPEG or PNG, up to 10 MB. Upload starts when you press Send.</p>
+  @if (preview(); as source) {
+    <img [src]="source" alt="Selected image attachment" />
+  }
+  @if (problem(); as text) {
+    <p role="alert">{{ text }}</p>
+  }
+  @if (selected; as preparation) {
+    <p role="status">
+      Last checked preparation: {{ preparation.state }}. Only a confirmed message operation proves
+      storage.
+    </p>
+    @if (preparation.state === 'uploading') {
+      <p>Reselect the original file. Its bytes must match before upload can resume.</p>
+    }
+    @if (preparation.state === 'ready') {
+      <app-chat-preparation-image
+        [actorId]="actor().account_id"
+        [preparation]="preparation"
+        (sessionFailure)="previewDenied()"
+      />
+      @if (!locked) {
+        <p>The image is prepared. Press Send to publish it with your current caption.</p>
+      }
+    }
+  }
+  @if (recovering && !selected && !locked) {
+    <p role="status">
+      This preparation is selected. Its current state will be checked when you press Send.
+    </p>
+  }
+  @if (reselecting) {
+    <p role="status">
+      Reselect the original image, then retry the same send. Your original caption and operation are
+      preserved.
+    </p>
+  }
+  @if (hasSelection && !locked) {
+    <button tuiButton type="button" size="s" appearance="flat" (click)="remove()">
+      {{ recovering ? 'Cancel selected preparation' : 'Remove image' }}
+    </button>
+  }
+  @if (sending.isPending) {
+    <p role="status">Preparing and sending your image…</p>
+  }
+  @if (sending.isError && !cancelling.isSuccess) {
+    <p role="alert">
+      Sending stopped. The message outcome is not confirmed. Retry the same intent or resolve
+      cancellation.
+    </p>
+    <button tuiButton type="button" size="s" [disabled]="pending || !permitted" (click)="retry()">
+      Retry image send
+    </button>
+  }
+  @if ((sending.isPending || sending.isError || cancelling.isError) && !cancelling.isSuccess) {
+    <button
+      tuiButton
+      type="button"
+      size="s"
+      appearance="secondary"
+      [disabled]="cancelling.isPending || !trusted"
+      (click)="cancel()"
+    >
+      {{ cancelling.isError ? 'Retry cancellation' : 'Cancel image send' }}
+    </button>
+  }
+  @if (cancelling.isPending) {
+    <p role="status">Checking cancellation outcome…</p>
+  }
+  @if (cancelling.isError) {
+    <p role="alert">Cancellation is not confirmed. Retry to check the same operation.</p>
+  }
+  @if (cancelling.isSuccess) {
+    @if ('message' in cancelling.data) {
+      <p role="status">The message was already sent.</p>
+    } @else {
+      <p role="status">The message operation was cancelled.</p>
+    }
+  }
+  @if (preparations.isPending || preparations.isFetching) {
+    <p role="status">Checking your image preparations…</p>
+  }
+  @if (preparations.isError) {
+    <p role="status">Your image preparations couldn’t be checked.</p>
+    <button
+      tuiButton
+      type="button"
+      size="s"
+      [disabled]="preparations.isFetching || !permitted"
+      (click)="refresh()"
+    >
+      Retry image preparations
+    </button>
+  }
+  @if (preparations.data; as collection) {
+    @if (collection.preparations.length > 0) {
+      <details>
+        <summary>Your recent image preparations</summary>
+        <ul>
+          @for (entry of collection.preparations; track entry.image_id) {
+            <li>
+              <time
+                [id]="'preparation-time-' + entry.image_id"
+                [attr.datetime]="entry.created_at"
+                >{{ absoluteChatTime(entry.created_at) }}</time
+              >
+              {{ entry.state }}
+              @if (
+                entry.message_outcome === null &&
+                (entry.state === 'uploading' ||
+                  entry.state === 'queued' ||
+                  entry.state === 'processing' ||
+                  entry.state === 'ready')
+              ) {
+                <button
+                  tuiButton
+                  type="button"
+                  size="s"
+                  appearance="flat"
+                  [disabled]="locked || !permitted"
+                  (click)="recover(entry.image_id)"
+                >
+                  Select preparation
+                </button>
+              }
+            </li>
+          }
+        </ul>
+      </details>
+    }
+  }
+</section>

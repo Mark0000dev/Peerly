@@ -1,0 +1,93 @@
+<section tuiCardLarge="compact" appearance="neutral" aria-label="Your peer feedback">
+  <header>
+    <h3>Your peer feedback</h3>
+    <button
+      tuiButton
+      type="button"
+      appearance="flat"
+      size="s"
+      (click)="explain()"
+      [attr.aria-expanded]="about()"
+      aria-label="How peer feedback works"
+    >
+      About
+    </button>
+  </header>
+  @if (about()) {
+    <p>
+      Only connected partners who both sent a message and said they worked together can count. Each
+      partner counts once. Yes, Maybe and No all count.
+    </p>
+    <p>
+      A summary appears after three partners. Names and notes are never shown, though in a small
+      community people may guess. It reflects partnerships, not knowledge or teaching ability.
+    </p>
+  }
+  @if (summary.isPending || summary.isFetching) {
+    <p role="status">Loading peer feedback…</p>
+  } @else if (summary.isError) {
+    @if (unavailable) {
+      <p>Your feedback summary is unavailable.</p>
+    } @else {
+      <p role="alert">We couldn’t load peer feedback.</p>
+      <button tuiButton type="button" appearance="secondary" size="s" (click)="retry()">
+        Retry feedback
+      </button>
+    }
+  } @else if (summary.data; as data) {
+    @if (!data.publicly_visible) {
+      <p>Your feedback summary isn’t public right now.</p>
+    } @else if (building; as count) {
+      <h4>Feedback is still building</h4>
+      <p>
+        {{ count.responses }}
+        {{ count.responses === 1 ? 'partner has' : 'partners have' }} responded. A summary appears
+        after three.
+      </p>
+    } @else if (available; as count) {
+      <p>{{ count.yes }} of {{ count.responses }} partners would study together again.</p>
+      <dl>
+        <div>
+          <dt>Yes</dt>
+          <dd>
+            <progress
+              tuiProgressBar
+              size="s"
+              [value]="count.yes"
+              [max]="count.responses"
+              aria-label="Yes responses"
+            ></progress
+            ><span>{{ count.yes }}</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Maybe</dt>
+          <dd>
+            <progress
+              tuiProgressBar
+              size="s"
+              [value]="count.maybe"
+              [max]="count.responses"
+              aria-label="Maybe responses"
+            ></progress
+            ><span>{{ count.maybe }}</span>
+          </dd>
+        </div>
+        <div>
+          <dt>No</dt>
+          <dd>
+            <progress
+              tuiProgressBar
+              size="s"
+              [value]="count.no"
+              [max]="count.responses"
+              aria-label="No responses"
+            ></progress
+            ><span>{{ count.no }}</span>
+          </dd>
+        </div>
+      </dl>
+      <p>From connected partners who reported studying together.</p>
+    }
+  }
+</section>

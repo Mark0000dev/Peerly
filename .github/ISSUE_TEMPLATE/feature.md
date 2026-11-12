@@ -1,16 +1,19 @@
 ---
 name: Feature / Task
 about: A piece of work for the MVP
-labels: ''
+labels: ""
 ---
 
 ## Goal
 
 ## Tasks
+
 - [ ]
 
 ## Acceptance criteria
+
 - [ ]
 
 ## Owner
-Person ?
+
+Assign a team member.

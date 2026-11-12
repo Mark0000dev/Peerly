@@ -1,0 +1,124 @@
+<main>
+  <peerly-settings-header heading="Notifications" [backToProfile]="true" />
+  @if (!authorized) {
+    <p role="status">
+      An active, verified student sign-in is needed. Your choice has not been changed.
+    </p>
+    <button tuiButton tuiButtonVertical type="button" (click)="checkSession()">
+      Check sign-in state
+    </button>
+    <a tuiLink routerLink="/onboarding">Go to sign-in</a>
+  } @else {
+    @if (result.isFetching) {
+      <p role="status">Checking your saved preference…</p>
+    }
+    @if (result.isError) {
+      <p role="alert">Your preference could not be loaded. Try again.</p>
+      <button tuiButton tuiButtonVertical type="button" (click)="refresh()">Try again</button>
+    }
+    @if (result.isSuccess) {
+      <section aria-label="Notification preference">
+        <fieldset [disabled]="locked">
+          <legend>What to notify you about</legend>
+          <label tuiBlock>
+            <span class="choice-content">
+              <input tuiRadio type="radio" [formControl]="mode" value="messages_and_requests" />
+              <span tuiTitle
+                >Messages and requests
+                <span tuiSubtitle>New messages, requests for you and accepted connections</span>
+              </span>
+            </span>
+          </label>
+          <label tuiBlock>
+            <span class="choice-content">
+              <input tuiRadio type="radio" [formControl]="mode" value="all_updates" />
+              <span tuiTitle
+                >All updates
+                <span tuiSubtitle>Also new partner suggestions, product news and promotions</span>
+              </span>
+            </span>
+          </label>
+        </fieldset>
+      </section>
+      @if (result.data.version === 0) {
+        <p>This is the default. You haven’t saved an explicit choice yet.</p>
+      }
+      @if (!saveResult.isSuccess) {
+        <button tuiButton class="save" type="button" [disabled]="locked" (click)="save()">
+          Save preference
+        </button>
+      }
+      @if (saveResult.isPending) {
+        <p role="status">Saving your preference…</p>
+      }
+      @if (saveResult.isSuccess) {
+        <p role="status">
+          Your choice was saved. Check the current preference before making another change.
+        </p>
+        <button
+          tuiButton
+          tuiButtonVertical
+          type="button"
+          [disabled]="result.isFetching"
+          (click)="useCurrent()"
+        >
+          Use current saved preference
+        </button>
+      }
+      @if (saveResult.isError) {
+        <p role="alert">
+          @if (uncertain) {
+            The save outcome is unknown. Retry the identical save to confirm it before making
+            another change.
+          } @else if (conflict) {
+            Your preference changed elsewhere. Read the current preference before choosing again.
+          } @else {
+            Your preference could not be saved. Your selection is still here.
+          }
+        </p>
+        @if (reference; as id) {
+          <p>Reference: {{ id }}</p>
+        }
+        @if (!conflict) {
+          <button tuiButton tuiButtonVertical type="button" (click)="replay()">
+            Retry identical save
+          </button>
+        }
+        <button
+          tuiButton
+          tuiButtonVertical
+          appearance="secondary"
+          type="button"
+          [disabled]="result.isFetching"
+          (click)="refresh()"
+        >
+          Read current preference
+        </button>
+        @if (!uncertain) {
+          <button
+            tuiButton
+            tuiButtonVertical
+            appearance="secondary"
+            type="button"
+            [disabled]="result.isFetching"
+            (click)="useCurrent()"
+          >
+            Use current saved preference
+          </button>
+        }
+      }
+    }
+  }
+  <section tuiCardLarge="compact" appearance="floating" aria-labelledby="device-delivery">
+    <div tuiCell="m">
+      <tui-icon icon="@tui.bell-off" aria-hidden="true" />
+      <h2 tuiTitle id="device-delivery">On this device</h2>
+    </div>
+    <p>Your saved choice is separate from device permission and notification delivery.</p>
+    <p>
+      Device delivery is unavailable in this preview. In-app counts on Requests and Chats continue.
+      Saving a preference does not enable notifications, request device permission or change
+      security messages.
+    </p>
+  </section>
+</main>

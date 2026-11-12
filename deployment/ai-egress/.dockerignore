@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!.dockerignore
+!haproxy.cfg
+!otlp.cfg
+!otlp-entrypoint.sh

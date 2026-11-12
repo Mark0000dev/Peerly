@@ -1,0 +1,75 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-shell,
+.review-columns,
+.records,
+section,
+form,
+fieldset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+h2,
+h3,
+h4,
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+h2 {
+  font: var(--tui-typography-heading-h5);
+}
+
+h3,
+h4,
+legend {
+  font: var(--tui-typography-body-m);
+  font-weight: 600;
+}
+
+dl {
+  display: grid;
+  gap: 0.5rem;
+}
+
+dt {
+  color: var(--tui-text-secondary);
+}
+
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+label,
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+fieldset > label {
+  min-block-size: 2.75rem;
+}
+
+.reason {
+  white-space: pre-wrap;
+}
+
+@media (width >= 60rem) {
+  .review-columns {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+}

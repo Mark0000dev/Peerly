@@ -1,0 +1,96 @@
+:host {
+  display: block;
+  background: var(--tui-background-base-alt);
+  overflow-wrap: anywhere;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-block-size: 60dvh;
+  box-sizing: border-box;
+  max-inline-size: 32rem;
+  margin-inline: auto;
+  padding: max(1.5rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(1.5rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+h2 {
+  font: var(--tui-typography-heading-h6);
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+section {
+  min-inline-size: 0;
+  gap: 0.75rem;
+}
+
+.status-surface {
+  padding-block: 2rem;
+}
+
+.public-guidance {
+  display: grid;
+  align-items: start;
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+@media (width >= 48rem) {
+  .public-page {
+    max-inline-size: 64rem;
+  }
+
+  .public-guidance {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.account-page {
+  min-block-size: 100dvh;
+}
+
+.account-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin-block-start: auto;
+}
+
+.instruction-routes {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+
+:host(.account-settings) {
+  container: account-settings / inline-size;
+}
+
+:host(.account-settings) main {
+  padding-inline: max(0.5rem, env(safe-area-inset-left)) max(0.5rem, env(safe-area-inset-right));
+}
+
+@container account-settings (min-width: 20em) {
+  :host(.account-settings) main {
+    padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
+  }
+}
+
+@container account-settings (width < 20em) {
+  .public-page > h1 {
+    font: var(--tui-typography-heading-h6);
+    margin: 0;
+  }
+}

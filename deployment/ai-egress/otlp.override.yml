@@ -1,0 +1,15 @@
+# EXPLICIT OPT-IN. Never merged by default. No worker service/network changes.
+services:
+  ai-egress:
+    command: [/usr/local/bin/peerly-ai-otlp]
+    environment:
+      AI_OTLP_BIND_IP: ${AI_OTLP_BIND_IP:?actual private AI gateway IPv4 required}
+      AI_OTLP_COLLECTOR_IP: ${AI_OTLP_COLLECTOR_IP:?actual fixed collector IPv4 required}
+    networks:
+      ai_private:
+        aliases: [peerly-ai-otel]
+      ai_telemetry: {}
+networks:
+  ai_telemetry:
+    external: true
+    name: ${PEERLY_AI_TELEMETRY_NETWORK:?reviewed collector-only telemetry network required}

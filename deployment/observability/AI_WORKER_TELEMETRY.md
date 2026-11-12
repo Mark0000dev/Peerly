@@ -1,114 +1,78 @@
-# AI worker OTLP activation handoff
+# AI worker telemetry
 
-Status: AI execution signal composition is implemented and locally accepted.
-The physical staging worker still uses its previously accepted image and has not
-been restarted or enabled for OTLP. No live telemetry acceptance is claimed.
-The focused composition/sampling batch passed32 unit and4 PostgreSQL cases; the
-SDK measurement added2 kernel threads. Credentials/provider/isolation settings
-remain unchanged; physical PID headroom still requires parent acceptance.
+## Configuration
 
-## Public configuration
-
-Parent may merge these four public entries into the **complete private**
-`worker-env.json` described in
+Supply these entries in the complete private worker configuration described in
 [PROVISION_BOOTSTRAP.md](../backend/PROVISION_BOOTSTRAP.md):
 
 ```json
 {
-  "OBSERVABILITY__COLLECTOR_ORIGIN": "http://peerly-otel:4318",
+  "OBSERVABILITY__COLLECTOR_ORIGIN": "http://peerly-ai-otel:4318",
   "OBSERVABILITY__ENVIRONMENT": "staging",
   "OBSERVABILITY__RELEASE": "REPLACE_WITH_ACTUAL_RELEASE",
-  "OBSERVABILITY__TRACE_QUEUE_CAPACITY": "512"
+  "OBSERVABILITY__TRACE_QUEUE_CAPACITY": "512",
+  "RUNTIME__MAX_PROCESSES": "40"
 }
 ```
 
-The release placeholder must be replaced before use. Environment accepts
+Replace RELEASE with the actual immutable source release. Environment accepts
 `[a-z0-9-]+` (1–32 characters); release accepts `[A-Za-z0-9._-]+` (1–64).
-Queue capacity is 16–4096. Origin accepts HTTP/HTTPS with no path, query,
-fragment, userinfo or whitespace. The SDK appends `/v1/traces` and `/v1/metrics`;
-use OTLP HTTP port4318, not gRPC4317. This public fragment is not a runnable
-worker configuration. Parent preserves all existing private entries and file
-ownership/mode, and atomically replaces the file through its directory mount.
-Do not print or share the filled configuration.
+Trace queue capacity is16–4096. The collector origin has no path, query,
+fragment or userinfo. OTLP HTTP uses port4318 and `/v1/traces` and `/v1/metrics`.
+The isolated `peerly-ai-otel` gateway is the AI route; do not substitute the
+collector's application-network alias or attach a broad application network.
+Gateway routing and fixed upstream restrictions are documented in
+[OTLP.md](../ai-egress/OTLP.md).
 
-Resource attributes are fixed service.name=`studymate-ai-worker`, a fresh UUID
+## Resources and execution
+
+Resource attributes identify service.name=`studymate-ai-worker`, a fresh UUID
 service.instance.id, deployment.environment.name from ENVIRONMENT and
-service.version from RELEASE. Generic OTEL variables are not the bootstrap
-configuration interface. No CLI/provider arguments or child environment changes
-are needed or authorized.
+service.version from RELEASE. Generic OTEL variables are not the worker's
+configuration interface.
 
-## Implemented composition and sampled-state contract
+The deployment budget is40 processes/threads,1GiB memory and0.5 CPU for the
+singleton service, using dedicated UID/GID10002. The code default remains32;
+40 must be explicit. Actual cgroup and child RLIMIT limits must match the
+configured policy and verified resource evidence. Do not reuse a32-process
+proof for40 or infer capacity from image publication. SDK export threads and
+native CLI threads share this finite budget.
 
-`bootstrap.run_ai_worker` passes the actual owned tracer and meter to the runtime
-factory. The factory wraps the same SQL queue with `ObservedAiQueue`, passes it to
-the same `ExecuteNextJob`, and wraps that exact step with `ObservedAiStep` inside
-the same single-executor supervisor. No parallel executor is created.
+The runtime observes the same SQL queue and ExecuteNextJob inside the same
+supervisor; telemetry creates no second executor. Admission uses its separate
+pool2. The worker uses pool1 for short transactions, never holding a connection
+through inference or media I/O.
 
-A bounded asynchronous sampler uses the existing one-connection pool:5-second
-period,250ms total acquisition/query deadline and15-second freshness TTL. SDK
-callbacks read immutable cached data and perform no SQL/network I/O. Unknown or
-stale queue values are omitted rather than reported as zero. Existing attempt,
-execution/wait duration, depth, oldest, occupied-slot and circuit signal names
-remain unchanged. New `worker.ai.queue.sample.fresh` and
-`worker.ai.queue.sample.age` signals distinguish freshness from business values;
-collector allowlists and dashboards must accept/use them before activation.
+## Sampling and export bounds
 
-Expected execution spans are `ai.execute` with actual stored origin links and
-safe IDs/kind/state metadata. This local implementation and its tests do not
-prove that the old physical staging worker emits these signals. Changing its
-configuration alone cannot activate code absent from its immutable image.
+Queue sampling runs every5s with a1s whole acquisition/query deadline and15s
+freshness TTL. SDK callbacks read immutable cached values and perform no SQL,
+network or filesystem I/O. Unknown/stale business gauges are omitted, not zero.
+`worker.ai.queue.sample.fresh` and `worker.ai.queue.sample.age` expose freshness.
+Execution spans use `ai.execute` with stored origin links and safe identifiers.
 
-## Network and resource prerequisites
+The trace queue defaults512, export batches contain at most64 spans, schedule
+delay is1s and export timeout2s. Metrics export every30s with timeout2s.
+Exporter failure and backpressure may lose telemetry; they must not grant
+business authority or block core traffic. Queue metrics do not imply provider
+availability or successful inference.
 
-The example hostname requires an approved route from the AI worker's isolated
-network to the collector. Docker embedded DNS can resolve same-network aliases,
-but the collector's ordinary application-network alias is not automatically
-available on the AI network. Unknown upstream DNS is intentionally disabled.
-Parent must establish the actual approved transport separately; do not attach a
-broad application network, change provider allowlists, expose collector ports
-publicly, or weaken the restricted gateway to make this example work.
+There is no OTLP log exporter in this worker. Safe structured stdout requires
+separately configured, bounded log transport. Do not route raw CLI output,
+prompts, images, results, credentials or private configuration into telemetry.
+Logs and traces must carry their actual release/resource identity; do not
+fabricate missing source fields in a relay.
 
-The SDK adds background export threads. These count toward both cgroup PID32
-and UID-wide RLIMIT_NPROC32 alongside the CLI. Retain UID10002, current CPU/RAM
-limits and all accepted isolation controls; parent must confirm actual remaining
-thread/process headroom before claiming live compatibility. No limit increase
-is implied. Trace queue defaults512, batches at most64, export delay1s and
-export timeout2s. Metrics export every30s with timeout2s. Backpressure can lose
-telemetry; it must not become business admission or provider authority. There is
-no OTLP log exporter here; Docker log routing is a separate parent-owned change.
+## Configuration lifecycle
 
-## Restart and receipt semantics
+Settings are read once; there is no hot reload. Apply changes through controlled
+worker replacement with admission stopped and physical child termination
+confirmed. Lease expiry does not establish physical termination. Preserve the
+same-owner managed credential cache and use the existing uncertainty/recovery
+protocol rather than starting a second worker or repeating login.
 
-There is no hot reload: ai_worker constructs frozen settings once. Bootstrap
-execs the worker and no longer watches worker-env.json. Editing that file or
-using `docker exec -e` does not change the running worker. No existing command
-replaces the active worker safely in the same namespaces. Do not start a second
-worker merely to apply telemetry configuration.
-
-Parent's controlled transition must stop admission, gracefully stop the old
-worker, confirm physical child termination and managed-cache checkpointing, and
-resolve durable health ownership. Lease expiry alone is insufficient. Uncertain
-termination retains the blocked slot and requires explicit physical-stop recovery.
-
-Container restart/recreation must not assume namespace identity survives. Use
-the existing bounded provisioning hold, compare actual live fingerprints, and
-refresh containment/transport receipts for the final running namespaces before
-activation. Preserve the persistent same-owner managed credential cache; adding
-observability keys alone does not require a new login. Receipts do not contain
-observability fields, but still validate deployment/boot/PID/network/cgroup,
-image/CLI/policy, resources, model/account binding and freshness. Never reuse a
-receipt from different live fingerprints. Parent decides whether unchanged
-provider evidence can be retained under the existing acceptance procedure;
-configuration edits alone do not grant acceptance. Adding an approved collector
-route or SDK threads requires its actual containment/resource facts to be checked.
-
-## Bounded later acceptance
-
-After main-owner wiring and approved transport, parent checks actual received
-resource attributes, one controlled execution span/origin link and corresponding
-bounded metrics, plus refreshed queue gauges. Worker SQL readiness alone is not
-telemetry readiness. Inspect only safe IDs/kind/state/reason/version metadata:
-no prompts, images, results, credentials, CLI output or private configuration.
-Confirm exporter failure remains bounded/nonblocking and actual PID headroom
-remains adequate. This handoff performs no inference or remote validation and
-makes no collector/Tempo delivery claim.
+Before enabling execution, verify containment, resource limits, restricted
+transport and provisioning against the final actual container namespaces,
+image, policy and bindings. Validate received resource attributes, origin-linked
+spans, fresh queue gauges and bounded exporter failure separately. Configuration
+or image build success is not runtime acceptance.

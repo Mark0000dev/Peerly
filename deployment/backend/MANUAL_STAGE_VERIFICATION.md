@@ -1,84 +1,76 @@
-# Explicit staging-only manual membership command
+# Staging-only manual membership verification
 
-Owner approved this temporary internal-team operation because institutional email
-was quarantined. It is not a public endpoint, future-user auto-verifier, production
-switch or a new attestation/role mechanism. It requires no DDL or core image change.
-Existing production OTP, registration, profile and activation flows remain intact.
+[manual_stage_verification.py](manual_stage_verification.py) is an explicit
+administrative operation for approved internal staging accounts when institutional
+email delivery is unavailable. It is not a public endpoint, automatic verification
+for future users, production setting or mailbox/OTP proof. It does not require DDL
+or change normal Google sign-in, OTP, registration or activation behavior.
 
-Parent alone executes it with staging credentials already inside the API container.
-Developers do not read the private manifest/credentials, execute live grants or
-send email. The only accepted database name is `peerly_staging`, checked in both
-DSN configuration and the actual connection. Do not rename a production database
-to evade this safeguard or turn this helper into application startup code.
+Only an explicitly authorized staging operator may execute it. `DATABASE_URL`
+must use asyncpg and name `peerly_staging`; both configuration and actual connection
+are checked. Never rename another database to bypass this guard or run the helper
+at application startup. Keep credentials and execution input outside Git/logs.
 
-## Explicit private input and execution
+## Private input and execution
 
-Input is a closed JSON object with `operation_id` (UUID), `performed_by`
-(1..38 ASCII letters/digits/underscore/hyphen) and `entries` (1..20 explicit
-account targets). Every entry contains `account_id`, `email`, `challenge_id`.
+Input is a closed JSON object containing `operation_id` (UUID), `performed_by`
+(1–38 ASCII letters/digits/underscore/hyphen) and 1–20 explicit `entries`. Each
+entry contains `account_id`, `email` and `challenge_id`.
 
-- Real address: use the exact canonical requested institutional email and UUID
-  of that account's latest pending challenge. Never infer or replace an address.
-- Owner-approved no-email staging case: `challenge_id` is null and email is
-  exactly `peerly-stage-<accountUUID.hex>@mail.apu.edu.my`. The target must have
-  **zero** historical email challenges. No address/challenge/outbox is invented
-  or sent beyond this explicitly requested synthetic binding.
-- Deleted, banned/known banned-lineage, revoked/retired/conflicting bindings,
-  unlinked Google accounts, stale/mismatched challenges and live email claims
-  fail closed. Targets are locked in UUID order; the entire apply is atomic.
-- Existing matching verification is a no-op; replay of the same manual operation
-  returns its durable event IDs. Changing an already recorded operation's targets
-  or provenance is rejected. Use a new explicit reviewed operation for a later
-  batch; no current-account enumeration or future auto-grant exists.
+- For an actual requested address, use its exact canonical institutional email
+  and that account's latest pending challenge UUID. Do not infer/replace either.
+- An explicitly approved staging account with no email challenge history may use
+  `challenge_id: null` and exactly
+  `peerly-stage-<accountUUID.hex>@mail.apu.edu.my`. This synthetic binding is not a
+  delivered email, OTP challenge or public registration bypass.
+- Deleted/banned accounts, banned identity/email lineages, missing active Google
+  linkage, conflicting/retired bindings, stale challenges and conflicting active
+  email claims fail closed. Accounts lock in UUID order; the batch is atomic.
+- Matching existing verification is a no-op. Replay returns durable prior event
+  IDs; changing an existing operation's targets/provenance is rejected. A later
+  batch needs its own explicitly reviewed operation, never account enumeration.
 
-Run the reviewed public script with private JSON through stdin: parent may use
-`docker exec -i <api-container> python -c <PUBLIC_SCRIPT> plan`, then the same
-reviewed script/input with `apply` only after reviewing safe counts. Private JSON
-must never appear in argv, chat, logs or Git. A local `--input <private-file>` is
-also supported: regular root/self-owned file, NOFOLLOW leaf, mode0600/private
-(no group/world permissions), bounded16KiB. Stdout contains operation/fingerprint,
-counts and durable event IDs, never email, OTP, manifest body or DB URL. No
-credential is embedded in this file or the script. Storage/input failures are
-sanitised and return nonzero.
+With the intended staging `DATABASE_URL` already configured privately, from the
+repository root:
 
-`plan` makes no business changes. `apply` creates only the selected institutional
-bindings and actual manual canonical outcomes. Existing unused real challenges
-are superseded and their queued/inflight delivery intents cancelled, not marked
-OTP-consumed; already transmitted email cannot be physically recalled. Synthetic
-cases create no challenge or delivery intent. No SMTP/model/provider call occurs.
-No legal receipt, profile/photo, onboarding activation or application operator
-privilege is granted; the user still completes those explicit flows.
+```sh
+backend/.venv/bin/python deployment/backend/manual_stage_verification.py plan --input /path/to/private-manifest.json
+backend/.venv/bin/python deployment/backend/manual_stage_verification.py apply --input /path/to/private-manifest.json
+```
 
-## Durable manual provenance
+Review the safe plan counts before applying the same reviewed input. The file
+must be regular, root/self-owned, without group/world permissions; the helper
+uses NOFOLLOW and accepts at most 16KiB. Stdin is supported with `--input -` for
+controlled container execution. Never put JSON, emails, OTPs or a DB URL in argv,
+terminal output or chat. Ensure the reviewed script/runtime are actually present
+where executed; this document does not install them or grant deployment access.
 
-The existing `auth.email_confirmed` canonical family records a manual staging
-membership decision, **not proof of mailbox delivery or a consumed OTP**. Its
-occurrence key is versioned `smv1:<operationUUID.hex>:<source>:<performed_by>`:
-`source=p` means the exact owner-approved placeholder; `source=c<base64url UUID>`
-references the actual requested challenge. The key remains within the existing
-100-character CHECK. Account ID, actual DB timestamp and retained binding link
-are preserved; no fake HTTP request/trace, student action, consent, verification
-intent or foreground discovery activity is manufactured. Changes are staged to
-the existing guarded invalidation outbox. The application schema and audit
-permissions are unchanged. Parent retains the private execution receipt outside
-Git with private permissions.
+Output contains only status, operation/fingerprint, counts and durable event IDs.
+Rejected input/storage failures are sanitized and nonzero. Retain execution
+receipts privately, not in the repository.
 
-## Enforced source quality and evidence
+## Effects and provenance
 
-From `backend/`, ordinary `make lint` explicitly checks the helper using
-`--config pyproject.toml`; `make typecheck` includes it in strict mypy. Unit cases
-live in `tests/unit/test_manual_stage_verification.py` and run with ordinary
-`make test-unit`; actual DB guards live in the matching integration module.
-The existing standard test assert rule applies, no new Ruff/typing/coverage
-exemption. Pytest `pythonpath=['..']` and explicit mypy source/package bases make
-the deployment namespace reproducible without ambient `PYTHONPATH`.
+`plan` makes no business changes. `apply` creates only selected institutional
+bindings and manual canonical outcomes. Pending real challenges are superseded
+and queued/inflight delivery intents cancelled, not marked OTP-consumed. Sent mail
+cannot be recalled. Synthetic cases create no challenge or email-delivery intent.
+There are no SMTP/model/provider calls or automatic future grants.
 
-Executed four-account staging grants used immutable helper SHA256
-`6ae9b5d3fdf8f8d5de48043d545fe6c9063927e62e4ad2a78eb9fd1aaf2681c2`.
-That exact executed source and original8unit/5PG evidence remain unchanged under
-`/tmp/peerly-manual-stage-verification-frozen`. Subsequent strict-quality cleanup
-renamed the error class, extracted the identical requested-source guard, typed
-imports/test doubles and converted unit cases to typed pytest. It is a separate
-publication candidate, not a rewritten execution receipt. Strict Ruff/format and
-mypy3 pass; one justified post-refactor8unit+5actualPG run passed13/13 in6.84s
-without ambient PYTHONPATH. No further live grant or broad suite was executed.
+The operation grants no legal receipt, profile/photo, onboarding activation or
+application-operator privilege. Users still complete those required flows.
+Canonical `auth.email_confirmed` records represent manual membership decisions,
+not mailbox delivery or OTP success. The occurrence key is
+`smv1:<operationUUID.hex>:<source>:<performed_by>`: `p` identifies the approved
+placeholder; `c<base64url UUID>` references the actual challenge. Actual account,
+database timestamp and binding history remain. No HTTP trace, student action,
+consent or foreground discovery activity is fabricated. Guarded invalidation
+outbox changes remain part of the transaction.
+
+## Checks
+
+Backend `make lint` and `make typecheck` include the helper under ordinary strict
+rules. Unit and real PostgreSQL regression definitions are in
+`backend/tests/unit/test_manual_stage_verification.py` and the matching integration
+module; standard backend tests include them. Test acceptance does not authorize
+or prove any live grant. Preserve input, lineage, transaction and replay guards.

@@ -1,0 +1,27 @@
+# Offline rehydration ONLY: parent downloads/decompresses approved objects into /restore.
+# Never attach this receiver to production ingestion or the archive exporter (replay loop).
+receivers:
+  otlp_json_file/archive:
+    include: [/restore/*.json]
+    start_at: beginning
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 64
+    spike_limit_mib: 16
+exporters:
+  file/restored:
+    path: /output/restored.json
+service:
+  telemetry:
+    logs:
+      level: warn
+  pipelines:
+    logs:
+      receivers: [otlp_json_file/archive]
+      processors: [memory_limiter]
+      exporters: [file/restored]
+    traces:
+      receivers: [otlp_json_file/archive]
+      processors: [memory_limiter]
+      exporters: [file/restored]

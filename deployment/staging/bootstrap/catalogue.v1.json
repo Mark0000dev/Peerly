@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "policies": [],
+  "catalogue": {
+    "version": "peerly-knowledge-areas-2026-11-09-v1",
+    "subjects": [
+      {
+        "id": "55c73e35-e1c7-57c6-97b5-1d281f530223",
+        "name": "Programming",
+        "aliases": []
+      },
+      {
+        "id": "861be5c6-ece0-5fb9-9a0f-42a1eabe7aa9",
+        "name": "Databases",
+        "aliases": [
+          "Database systems"
+        ]
+      },
+      {
+        "id": "90f22722-c8a6-561c-bb77-6b3c5c485b7e",
+        "name": "Computer systems",
+        "aliases": []
+      },
+      {
+        "id": "66a4bd73-6a37-54d8-9ad0-b0239716a5ce",
+        "name": "Computer networks",
+        "aliases": []
+      },
+      {
+        "id": "0085431b-d08d-503a-b981-3bb3ba74e5d4",
+        "name": "Mathematics",
+        "aliases": [
+          "Maths",
+          "Math"
+        ]
+      },
+      {
+        "id": "3d833d78-0bef-5bc7-9b73-a947261261aa",
+        "name": "Statistics",
+        "aliases": []
+      },
+      {
+        "id": "83b9a90e-9818-5c3a-941d-c6534efe3bf8",
+        "name": "Software engineering",
+        "aliases": []
+      },
+      {
+        "id": "4a5003ef-bb51-5990-a0f7-c3b835833ed6",
+        "name": "Malay language",
+        "aliases": [
+          "Bahasa Melayu"
+        ]
+      },
+      {
+        "id": "503d528b-9e09-5401-9067-205fb701aeb3",
+        "name": "English language",
+        "aliases": []
+      },
+      {
+        "id": "917aaa17-96ec-564b-8505-c46158654e52",
+        "name": "Academic writing",
+        "aliases": []
+      }
+    ]
+  }
+}

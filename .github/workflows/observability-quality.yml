@@ -41,11 +41,42 @@ jobs:
           uv run --no-sync pytest -c pyproject.toml ../deployment/observability/tests/test_storage_budget.py
       - name: One bounded credential-free Docker native protocol proof
         run: backend/.venv/bin/python deployment/observability/validate.py --output /tmp/peerly-observability-proof
+      - name: Encrypted archive outage, recovery and offline restore proof
+        run: |
+          docker pull rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466
+          node deployment/observability/archive/crypt/prove.mjs
+      - name: Validate dedicated alert routing without provider access
+        shell: bash
+        run: |
+          set -euo pipefail
+          proof_directory=$(mktemp -d "$RUNNER_TEMP/peerly-alert-routing.XXXXXX")
+          trap 'rm -rf -- "$proof_directory"' EXIT
+          chmod 755 "$proof_directory"
+          sed 's/@@PEERLY_TELEGRAM_CHAT_ID@@/-1001234567890/g' \
+            deployment/observability/alertmanager/alertmanager.yml.template > "$proof_directory/alertmanager.yml"
+          printf '%s\n' 'synthetic-config-check-only' > "$proof_directory/telegram-token"
+          image='prom/alertmanager:v0.35.0@sha256:e638797febd034838eca8b98cdbd46f951e9bf7f178777aa8669167406a9946c'
+          docker run --rm --network none --user 65534:65534 --read-only \
+            --cap-drop ALL --security-opt no-new-privileges --memory 64m --pids-limit 32 \
+            --mount "type=bind,src=$proof_directory,dst=/etc/alertmanager,readonly" \
+            --entrypoint /bin/amtool "$image" check-config /etc/alertmanager/alertmanager.yml
+          for specification in 'peerly-team:peerly-dev' 'another-project:unrelated'; do
+            owner=${specification%%:*}
+            receiver=${specification#*:}
+            docker run --rm --network none --read-only --cap-drop ALL \
+              --memory 64m --pids-limit 32 \
+              --mount "type=bind,src=$proof_directory,dst=/etc/alertmanager,readonly" \
+              --entrypoint /bin/amtool "$image" config routes test \
+              --config.file=/etc/alertmanager/alertmanager.yml \
+              "--verify.receivers=$receiver" "owner=$owner"
+          done
       - name: Preserve proof and failure evidence
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: observability-native-proof
-          path: /tmp/peerly-observability-proof
+          path: |
+            /tmp/peerly-observability-proof
+            /tmp/peerly-archive-crypt-*/receipt.json
           if-no-files-found: warn
           retention-days: 7

@@ -1,0 +1,192 @@
+:host {
+  display: block;
+  container: discovery / inline-size;
+  background: var(--tui-background-base-alt);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-sizing: border-box;
+  min-block-size: 0;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+
+header,
+.context-actions,
+.actions,
+.undo,
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+header h1 {
+  margin: 0;
+  font: var(--tui-typography-heading-h5);
+}
+
+article,
+section {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+article h2,
+article p {
+  margin: 0;
+}
+
+.actions > button {
+  flex: 1 1 auto;
+}
+
+ul {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding-inline-start: 1rem;
+}
+
+li {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.mode-switch {
+  gap: 0.25rem;
+}
+
+.mode-switch > button {
+  flex: 1 1 auto;
+}
+
+.candidate-details {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.candidate-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.candidate-heading h2 {
+  font: var(--tui-typography-heading-h5);
+}
+
+.verification {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--tui-text-secondary);
+  font: var(--tui-typography-body-s);
+}
+
+.relevance {
+  max-inline-size: 100%;
+  white-space: normal;
+  block-size: auto;
+  text-align: start;
+}
+
+.reciprocal {
+  color: var(--tui-text-secondary);
+}
+
+.candidate-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-block-start: 0.0625rem solid var(--tui-border-normal);
+  padding-block-start: 0.5rem;
+}
+
+.passed-people {
+  list-style: none;
+  padding: 0;
+  gap: 0;
+}
+
+.passed-people > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding-block: 1rem;
+  border-block-end: 0.0625rem solid var(--tui-border-normal);
+}
+
+.passed-person {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1 1 100%;
+}
+
+.passed-person h2 {
+  margin: 0;
+  font: var(--tui-typography-heading-h6);
+}
+
+.passed-person p {
+  margin: 0;
+  color: var(--tui-text-secondary);
+}
+
+.empty-state {
+  flex: 1;
+  padding-block: 2rem;
+}
+
+.empty-state p {
+  max-inline-size: 32rem;
+}
+
+.empty-illustration img {
+  object-fit: contain;
+}
+
+.passed-context {
+  margin: 0;
+  color: var(--tui-text-secondary);
+  font: var(--tui-typography-body-s);
+}
+
+.context-summary > tui-icon,
+.verification tui-icon {
+  flex-shrink: 0;
+}
+
+.actions > button,
+.mode-switch > button {
+  max-inline-size: 100%;
+  white-space: normal;
+  block-size: auto;
+}
+
+@container discovery (width < 20em) {
+  main {
+    padding-inline: max(0.5rem, env(safe-area-inset-left)) max(0.5rem, env(safe-area-inset-right));
+  }
+
+  .actions,
+  .mode-switch {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    inline-size: 100%;
+  }
+}
+
+.context-actions > button[tuiButton],
+.context-actions > a {
+  max-inline-size: 100%;
+  white-space: normal;
+  block-size: auto;
+}

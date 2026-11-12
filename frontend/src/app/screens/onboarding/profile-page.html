@@ -1,0 +1,331 @@
+<peerly-student-layout>
+  <main>
+    <peerly-settings-header [heading]="heading" [backToProfile]="editing">
+      @if (
+        !editing &&
+        !checking &&
+        !signingOut.isPending &&
+        session.data?.account_status === 'active' &&
+        session.data.membership_status === 'verified'
+      ) {
+        <a tuiButton appearance="flat" size="s" class="profile-edit-link" routerLink="/profile/edit"
+          >Edit profile</a
+        >
+      }
+    </peerly-settings-header>
+    @if (signingOut.isPending) {
+      <p role="status">Signing out…</p>
+    } @else if (session.data; as actor) {
+      @if (actor.account_status !== 'active' || actor.membership_status !== 'verified') {
+        <p>Your student account needs attention before you can edit your profile.</p>
+        <a tuiButton routerLink="/onboarding">Review sign-in</a>
+      } @else {
+        @if (checking) {
+          <p role="status">Checking your sign-in. Unsaved edits are kept on this screen.</p>
+          <button tuiLink type="button" (click)="checkSession()">Check sign-in</button>
+        }
+        @switch (mode) {
+          @case ('profile') {
+            <peerly-profile-basics
+              [actor]="actor"
+              [checking]="checking"
+              [editOptional]="true"
+              (expired)="checkSession()"
+            />
+          }
+          @case ('goal') {
+            <peerly-study-goal [actor]="actor" [checking]="checking" (expired)="checkSession()" />
+          }
+          @case ('help') {
+            <peerly-help-subjects
+              [actor]="actor"
+              [checking]="checking"
+              (expired)="checkSession()"
+            />
+          }
+          @case ('blocks') {
+            <peerly-blocked-people
+              [actor]="actor"
+              [checking]="checking"
+              (expired)="checkSession()"
+            />
+          }
+          @case ('visibility') {
+            @if (status.isError) {
+              <p role="alert">Profile visibility could not be loaded.</p>
+              <button tuiButton type="button" [disabled]="checking" (click)="retryVisibility()">
+                Retry visibility
+              </button>
+            } @else if (status.data; as state) {
+              @if (!checking) {
+                <peerly-profile-visibility
+                  [actor]="actor"
+                  [status]="state"
+                  [checking]="checking"
+                  (expired)="checkSession()"
+                />
+              }
+            } @else {
+              <p role="status">Loading profile visibility…</p>
+            }
+          }
+          @default {
+            @if (!checking) {
+              @if (profile.data?.profile; as details) {
+                <header class="profile-identity">
+                  @if (profile.data.photo; as photo) {
+                    <span tuiAvatar size="xl" [round]="true">
+                      <img [src]="photo.display_url" alt="Your current profile photo" />
+                    </span>
+                  } @else {
+                    <span
+                      tuiAvatar="@tui.user"
+                      size="xl"
+                      [round]="true"
+                      appearance="sp-relevance"
+                      aria-hidden="true"
+                    ></span>
+                  }
+                  <div>
+                    @if (details.display_name; as name) {
+                      <h2>{{ name }}</h2>
+                    } @else {
+                      <p>Your name hasn’t been set.</p>
+                    }
+                    <p class="verified">
+                      <tui-icon icon="@tui.shield-check" aria-hidden="true" />
+                      APU email confirmed
+                    </p>
+                    @if (discoverSummary; as summary) {
+                      <p [tuiStatus]="summary.color" class="discover-status">{{ summary.label }}</p>
+                    }
+                  </div>
+                </header>
+                @if (details.about) {
+                  <p>{{ details.about }}</p>
+                }
+                @if (details.programme) {
+                  <p>{{ details.programme }}</p>
+                }
+                @if (details.year_label) {
+                  <p>{{ details.year_label }}</p>
+                }
+              }
+              @if (goal.data?.goal; as active) {
+                <section tuiCardLarge="compact" appearance="floating" aria-label="Your study goal">
+                  <div tuiCell="m" class="study-heading">
+                    <div class="study-row">
+                      <tui-icon icon="@tui.target" aria-hidden="true" />
+                      <h2 tuiTitle class="study-copy">
+                        {{ active.subject.label }}
+                        @if (active.topic) {
+                          <span tuiSubtitle>{{ active.topic }}</span>
+                        }
+                      </h2>
+                      <a
+                        tuiLink
+                        class="study-edit"
+                        routerLink="/profile/goal"
+                        aria-label="Edit study goal"
+                        >Edit</a
+                      >
+                    </div>
+                  </div>
+                  @if (active.context) {
+                    <p>{{ active.context }}</p>
+                  }
+                  <peerly-complete-goal
+                    [actorId]="actor.account_id"
+                    [goal]="active"
+                    [checking]="checking"
+                    (expired)="checkSession()"
+                  />
+                  <p>{{ active.completed_at ? 'Completed goal' : 'Your active goal' }}</p>
+                  @if (active.shared_learning) {
+                    <p>Open to studying together</p>
+                  }
+                </section>
+              } @else if (goal.isSuccess) {
+                <p>No active study goal yet.</p>
+                <a tuiLink routerLink="/profile/goal">Set a study goal</a>
+              }
+              @let helpAreas = help.data?.selection?.subjects ?? [];
+              @if (helpAreas.length > 0) {
+                <section
+                  tuiCardLarge="compact"
+                  appearance="floating"
+                  aria-label="You can help with"
+                >
+                  <div tuiCell="m" class="study-heading">
+                    <div class="study-row">
+                      <tui-icon icon="@tui.hand-helping" aria-hidden="true" />
+                      <h2 tuiTitle class="study-copy">You can help with</h2>
+                      <a
+                        tuiLink
+                        class="study-edit"
+                        routerLink="/profile/help"
+                        aria-label="Edit help areas"
+                        >Edit</a
+                      >
+                    </div>
+                  </div>
+                  @for (area of helpAreas; track area.subject_id) {
+                    <p>
+                      {{ area.label }}
+                      @if (area.topic_note) {
+                        · {{ area.topic_note }}
+                      }
+                    </p>
+                  }
+                </section>
+              } @else if (help.isSuccess) {
+                <p>No help areas selected yet.</p>
+                <a tuiLink routerLink="/profile/help">Choose help areas</a>
+              }
+              @if (profile.isError || goal.isError || help.isError || status.isError) {
+                <p role="alert">Some profile information could not be loaded.</p>
+                <button tuiButton type="button" (click)="retryOverview()">
+                  Retry profile information
+                </button>
+              }
+              @if (actor.capabilities.can_use_student_features) {
+                <app-own-feedback-summary
+                  [actorId]="actor.account_id"
+                  (sessionFailure)="checkSession()"
+                />
+              }
+            }
+            <nav
+              tuiCardLarge="compact"
+              appearance="floating"
+              class="settings"
+              aria-label="Profile and settings"
+            >
+              <a
+                tuiCell="m"
+                tuiLink
+                appearance="action-grayscale"
+                routerLink="/profile/notifications"
+                aria-label="Notifications"
+              >
+                <span class="settings-row">
+                  <tui-icon icon="@tui.bell" aria-hidden="true" />
+                  <span tuiTitle class="settings-copy">Notifications</span>
+                  <tui-icon icon="@tui.chevron-right" class="settings-chevron" aria-hidden="true" />
+                </span>
+              </a>
+              @let exposure = status.data?.discovery_exposure;
+              @let visibilityAction =
+                exposure?.paused && exposure.can_confirm
+                  ? 'Show my profile again'
+                  : 'Profile visibility';
+              <a
+                tuiCell="m"
+                tuiLink
+                appearance="action-grayscale"
+                routerLink="/profile/visibility"
+                [attr.aria-label]="visibilityAction"
+              >
+                <span class="settings-row">
+                  <tui-icon icon="@tui.eye-off" aria-hidden="true" />
+                  <span tuiTitle class="settings-copy">{{ visibilityAction }}</span>
+                  <tui-icon icon="@tui.chevron-right" class="settings-chevron" aria-hidden="true" />
+                </span>
+              </a>
+              <a
+                tuiCell="m"
+                tuiLink
+                appearance="action-grayscale"
+                routerLink="/profile/blocks"
+                aria-label="Blocked people"
+              >
+                <span class="settings-row">
+                  <tui-icon icon="@tui.ban" aria-hidden="true" />
+                  <span tuiTitle class="settings-copy">Blocked people</span>
+                  <tui-icon icon="@tui.chevron-right" class="settings-chevron" aria-hidden="true" />
+                </span>
+              </a>
+              <a
+                tuiCell="m"
+                tuiLink
+                appearance="action-grayscale"
+                routerLink="/help/contact"
+                aria-label="Help and support"
+              >
+                <span class="settings-row">
+                  <tui-icon icon="@tui.life-buoy" aria-hidden="true" />
+                  <span tuiTitle class="settings-copy">Help and support</span>
+                  <tui-icon icon="@tui.chevron-right" class="settings-chevron" aria-hidden="true" />
+                </span>
+              </a>
+              <a
+                tuiCell="m"
+                tuiLink
+                appearance="action-grayscale"
+                routerLink="/terms"
+                aria-label="Terms of Use"
+              >
+                <span class="settings-row">
+                  <tui-icon icon="@tui.file-text" aria-hidden="true" />
+                  <span tuiTitle class="settings-copy">Terms of Use</span>
+                  <tui-icon icon="@tui.chevron-right" class="settings-chevron" aria-hidden="true" />
+                </span>
+              </a>
+              <a
+                tuiCell="m"
+                tuiLink
+                appearance="action-grayscale"
+                routerLink="/privacy"
+                aria-label="Privacy Policy"
+              >
+                <span class="settings-row">
+                  <tui-icon icon="@tui.file-text" aria-hidden="true" />
+                  <span tuiTitle class="settings-copy">Privacy Policy</span>
+                  <tui-icon icon="@tui.chevron-right" class="settings-chevron" aria-hidden="true" />
+                </span>
+              </a>
+              <button
+                tuiCell="m"
+                tuiLink
+                appearance="action-grayscale"
+                type="button"
+                [disabled]="checking"
+                (click)="signOut()"
+              >
+                <span class="settings-row">
+                  <tui-icon icon="@tui.log-out" aria-hidden="true" />
+                  <span tuiTitle class="settings-copy">Sign out</span>
+                </span>
+              </button>
+              <a
+                tuiCell="m"
+                tuiLink
+                appearance="action-destructive"
+                routerLink="/account/delete"
+                aria-label="Delete account"
+              >
+                <span class="settings-row">
+                  <tui-icon icon="@tui.trash-2" aria-hidden="true" />
+                  <span tuiTitle class="settings-copy">Delete account</span>
+                  <tui-icon icon="@tui.chevron-right" class="settings-chevron" aria-hidden="true" />
+                </span>
+              </a>
+            </nav>
+            @if (signingOut.isError) {
+              <p role="alert">
+                Sign-out could not be confirmed. Check your sign-in before trying again.
+              </p>
+              <button tuiLink type="button" (click)="checkSession()">Check sign-in</button>
+            }
+          }
+        }
+      }
+    } @else if (session.isPending) {
+      <p role="status">Checking sign-in…</p>
+    } @else {
+      <p>Your sign-in could not be confirmed.</p>
+      <button tuiButton type="button" (click)="checkSession()">Check sign-in</button
+      ><a tuiLink routerLink="/onboarding">Sign in</a>
+    }
+  </main>
+</peerly-student-layout>

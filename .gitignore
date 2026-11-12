@@ -59,3 +59,18 @@ test-results/
 /design/
 /design-v*/
 /Study_Partner_MVP_Design_Specification.docx
+
+# Local diagnostics, handoffs and editor/test attachments
+*.log
+*.log.*
+*.private.*
+.peerly-ops/
+.vitest-attachments/
+.vitest-reports/
+*.prof
+*.cpuprofile
+*.heapsnapshot
+.envrc
+
+# Owner references and local planning are kept outside the product repository
+/docs/planning/
