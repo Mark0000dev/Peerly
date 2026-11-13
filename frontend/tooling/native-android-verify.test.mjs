@@ -69,6 +69,30 @@ for (const suffix of ['', '.staging'])
       ),
     );
   });
+const androidNamespace = 'http://schemas.android.com/apk/res/android:';
+for (const suffix of ['', '.staging'])
+  test('checks exact full Android namespace emitted by real aapt2 ' + suffix, () => {
+    const id = 'dev.alekseiorlov.peerly' + suffix;
+    const dump = manifest(id).replaceAll('A: android:', `A: ${androidNamespace}`);
+    verifyManifest(dump, id);
+    assert.throws(() =>
+      verifyManifest(dump + `            A: ${androidNamespace}port(0x01010029)=443\n`, id),
+    );
+    assert.throws(() =>
+      verifyManifest(
+        dump.replace(`${androidNamespace}path(`, `${androidNamespace}pathPrefix(`),
+        id,
+      ),
+    );
+    assert.throws(() => verifyManifest(dump.replace('="auth"', '="other"'), id));
+    assert.throws(() => verifyManifest(dump, id + '.wrong'));
+    assert.throws(() =>
+      verifyManifest(dump.replace(androidNamespace, 'http://untrusted.invalid/android:'), id),
+    );
+    assert.throws(() =>
+      verifyManifest(dump + '            A: android:path(0x0101002a)="/complete"\n', id),
+    );
+  });
 test('rejects cross-variant or patched packaged configuration', () => {
   const config = {
     appId: 'dev.alekseiorlov.peerly',

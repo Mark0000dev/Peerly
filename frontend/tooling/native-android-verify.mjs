@@ -65,11 +65,21 @@ export function manifestTree(text) {
       stack.push(node);
       continue;
     }
-    const attribute = /^\s*A: ([\w:.-]+)(?:\(0x[\da-fA-F]+\))?=(.*)$/.exec(line);
+    const attribute =
+      /^\s*A: ((?:http:\/\/schemas\.android\.com\/apk\/res\/android:)?[\w:.-]+)(?:\(0x[\da-fA-F]+\))?=(.*)$/.exec(
+        line,
+      );
+    assert.ok(attribute || !/^\s*A:/.test(line), 'Unsupported manifest attribute syntax');
     if (attribute) {
+      // aapt2 emits the full URI; recognize ONLY the Android framework namespace.
+      const name = attribute[1].replace(
+        /^http:\/\/schemas\.android\.com\/apk\/res\/android:/,
+        'android:',
+      );
+      assert.ok(!Object.hasOwn(stack.at(-1).attributes, name), 'Duplicate manifest attribute');
       const quoted = /^("(?:[^"\\]|\\.)*")/.exec(attribute[2]);
       // Retain non-string/resource attributes too, so extra wake constraints fail.
-      stack.at(-1).attributes[attribute[1]] = quoted ? JSON.parse(quoted[1]) : attribute[2];
+      stack.at(-1).attributes[name] = quoted ? JSON.parse(quoted[1]) : attribute[2];
     }
   }
   return root;
@@ -189,11 +199,12 @@ function verifyApk(sdk, variant, apk, output) {
     'AndroidManifest.xml',
     apk,
   ]);
+  // Retain public packaged metadata even when a strict assertion rejects it.
+  mkdirSync(output, { recursive: true });
+  writeFileSync(join(output, `${variant}-manifest.txt`), manifest);
   verifyManifest(manifest, expected.id);
   const config = JSON.parse(run('unzip', ['-p', apk, 'assets/capacitor.config.json']));
   verifyPackagedConfig(config, variant);
-  mkdirSync(output, { recursive: true });
-  writeFileSync(join(output, `${variant}-manifest.txt`), manifest);
   writeFileSync(
     join(output, `${variant}-receipt.json`),
     JSON.stringify(
