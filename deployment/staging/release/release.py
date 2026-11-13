@@ -11,7 +11,7 @@ import copy
 import json
 import re
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from deployment.staging.release.data import (
     COMPOSE_TYPE,
@@ -26,6 +26,9 @@ from deployment.staging.release.data import (
     text,
 )
 
+if TYPE_CHECKING:
+    from deployment.staging.release.external_lifecycle import ExternalLifecycle
+
 SOURCE = "https://github.com/Mark0000dev/Peerly"
 ORIGIN = "https://peerly-staging.aleksei-orlov.dev"
 SCHEMA = "0060_report_triage"
@@ -33,6 +36,8 @@ ASSETS = "PUBLIC_ASSET_RELEASES"
 BACKEND = "PEERLY_BACKEND_IMAGE"
 FRONTEND = "PEERLY_FRONTEND_IMAGE"
 RELEASE = "PEERLY_RELEASE"
+EXTERNAL_IMAGE = "EXTERNAL_DELIVERY_IMAGE"
+EXTERNAL_RELEASE = "EXTERNAL_DELIVERY_RELEASE"
 ROLES = frozenset({"api", "email", "media", "requests", "changes", "frontend"})
 
 
@@ -153,7 +158,10 @@ class Snapshot:
         return result
 
     def changed(self, delta: dict[str, str]) -> Snapshot:
-        require(set(delta) <= {BACKEND, FRONTEND, ASSETS, RELEASE}, "environment_scope")
+        require(
+            set(delta) <= {BACKEND, FRONTEND, ASSETS, RELEASE, EXTERNAL_IMAGE, EXTERNAL_RELEASE},
+            "environment_scope",
+        )
         require(set(delta) <= self.env().keys(), "missing_environment_contract")
         result = copy.deepcopy(self)
         entries = [obj(row) for row in rows(result.stack["Env"])]
@@ -210,6 +218,7 @@ class Promotion:
         for image in (backend, frontend):
             proof = obj(proofs[image.role])
             image.validate(obj(proof["run"]), obj(proof["published"]), obj(proof["labels"]))
+        self.external: ExternalLifecycle | None = None
         self.started = False
         self.phase = "prepared"
 
@@ -277,12 +286,27 @@ class Promotion:
                     replacement["environment"] = env
                 else:
                     require(ASSETS not in obj(replacement.get("environment", {})), "map_scope")
+            elif self.external is not None and name == self.external.service:
+                self.external.check_render(original, replacement, before, after)
+                replacement = original
             elif name != "migrate":
                 # Unknown/AI services must never be part of a core redeploy.
                 require(
                     obj(original.get("deploy", {})).get("replicas") == 0
                     and name == "external_delivery",
                     "non_core_service",
+                )
+                # A rendered disabled service inherits the global image even
+                # though replicas remain zero. Normalize only that image field.
+                if original.get("image") == before.env()[BACKEND]:
+                    require(
+                        replacement.get("image") == after.env()[BACKEND], "disabled_external_image"
+                    )
+                    replacement["image"] = original["image"]
+                require(
+                    not before.env().get("COMPOSE_PROFILES")
+                    and not after.env().get("COMPOSE_PROFILES"),
+                    "unknown_compose_profiles",
                 )
             else:
                 require(original.get("profiles") == ["ops"], "migration_profile")
@@ -293,6 +317,8 @@ class Promotion:
 
     def put(self, before: Snapshot, after: Snapshot, phase: str) -> None:
         self.check_render(before, after)
+        if self.external is not None:
+            self.external.pre_write(phase)
         require(before.same(self.read()), "stale_stack_or_environment")
         self.io.checkpoint(phase + "_attempt")
         self.phase = phase + "_uncertain"
@@ -314,15 +340,31 @@ class Promotion:
         self.io.checkpoint(self.phase)
 
     def verify(self, snapshot: Snapshot, images: dict[str, Image], baseline: Object) -> Object:
+        if self.external is not None:
+            require(
+                images["backend"].sha in self.external.policy.core_compatible_sources,
+                "external_core_runtime_source_not_reviewed",
+            )
         evidence = self.io.evidence()
         require(evidence.get("schema") == SCHEMA, "schema_changed")
         require(
             evidence.get("ai") == baseline.get("ai") and bool(evidence.get("ai")),
             "ai_changed",
         )
-        require(evidence.get("external_delivery") == "stopped", "external_delivery_started")
+        if self.external is None:
+            require(evidence.get("external_delivery") == "stopped", "external_delivery_started")
+        else:
+            require(
+                evidence.get("external_delivery") == self.external.observe(),
+                "external_accepted_state_changed",
+            )
         roles = obj(evidence.get("roles"))
-        require(set(roles) == ROLES, "runtime_roles")
+        expected_roles = ROLES | ({self.external.service} if self.external else set())
+        require(set(roles) == expected_roles, "runtime_roles")
+        if self.external is not None:
+            require(
+                roles[self.external.service] == self.external.observe(), "external_runtime_role"
+            )
         for role in ROLES:
             expected = images["frontend" if role == "frontend" else "backend"]
             actual = obj(roles[role])
@@ -364,10 +406,19 @@ class Promotion:
     ) -> Snapshot:
         require(not self.started, "attempt_already_started")
         self.started = True
+        if self.external is not None:
+            require(
+                self.backend.sha in self.external.policy.core_compatible_sources,
+                "external_core_source_not_reviewed",
+            )
         before = self.read()
         require(
             baseline.get("schema") == SCHEMA
-            and baseline.get("external_delivery") == "stopped"
+            and (
+                baseline.get("external_delivery") == "stopped"
+                if self.external is None
+                else baseline.get("external_delivery") == self.external.observe()
+            )
             and bool(baseline.get("ai")),
             "baseline",
         )
@@ -393,6 +444,9 @@ class Promotion:
         )
         self.put(staged, final, "frontend")
         self.verify(final, {"backend": self.backend, "frontend": self.frontend}, baseline)
+        if self.external is not None and self.external.policy.upgrade_source == self.backend.sha:
+            final = self.external.upgrade(self, final, self.backend)
+            self.verify(final, {"backend": self.backend, "frontend": self.frontend}, baseline)
         self.phase = "verified"
         self.io.checkpoint(self.phase)
         return final
@@ -404,15 +458,27 @@ class Promotion:
         baseline: Object,
         compatible_schema: str,
     ) -> Snapshot:
+        if self.external is not None:
+            require(
+                previous["backend"].sha in self.external.policy.core_compatible_sources,
+                "external_core_rollback_source_not_reviewed",
+            )
         # Explicit reconciliation is required even after a failed promotion.
         require(compatible_schema == SCHEMA, "rollback_schema_compatibility")
         require(current.same(self.read()), "rollback_drift")
         safety = self.io.safety()
         require(safety.get("schema") == SCHEMA, "rollback_schema_changed")
         require(
-            safety.get("ai") == baseline.get("ai") and safety.get("external_delivery") == "stopped",
+            safety.get("ai") == baseline.get("ai")
+            and (
+                safety.get("external_delivery") == "stopped"
+                if self.external is None
+                else safety.get("external_delivery") == self.external.observe()
+            ),
             "rollback_ownership_changed",
         )
+        if self.external is not None and "external" in previous:
+            current = self.external.upgrade(self, current, previous["external"])
         # Keep ALL approved maps so already-loaded newer clients retain support.
         ui = current.changed({FRONTEND: previous["frontend"].reference})
         self.put(current, ui, "rollback_frontend")

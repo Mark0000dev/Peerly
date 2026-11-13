@@ -1,0 +1,38 @@
+# Explicit reviewed baseline addition; the release CLI never loads it implicitly.
+# The coordinator first verifies endpoint ownership and adopts the exact combined
+# source with replicas zero. Activation is a separate operation.
+services:
+  external_delivery:
+    image: ${EXTERNAL_DELIVERY_IMAGE:?Set the separately reviewed immutable backend digest}
+    pull_policy: never
+    profiles: [external-delivery]
+    deploy:
+      replicas: 0
+    command: [python, -m, studymate.external_delivery_worker]
+    user: '10001:10001'
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 160m
+    cpus: 0.25
+    stop_grace_period: 45s
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
+    healthcheck: {disable: true}
+    networks: [application]
+    environment:
+      OBSERVABILITY__COLLECTOR_ORIGIN: ${EXTERNAL_DELIVERY_COLLECTOR_ORIGIN:?Set the existing reachable collector origin}
+      OBSERVABILITY__ENVIRONMENT: staging
+      OBSERVABILITY__RELEASE: ${EXTERNAL_DELIVERY_RELEASE:?Set the independently verified image source SHA}
+      DATABASE_URL: ${PEERLY_DATABASE_URL:?Set the existing staging database URL}
+      UMAMI__HOSTNAME: ${EXTERNAL_UMAMI_HOSTNAME:?Set the actual application hostname}
+      UMAMI__REVISION: ${EXTERNAL_UMAMI_REVISION:?Set the actually registered revision}
+      UMAMI__ORIGIN: ${EXTERNAL_UMAMI_ORIGIN:?Set the registered Umami origin}
+      UMAMI__WEBSITE_ID: ${EXTERNAL_UMAMI_WEBSITE_ID:?Set the registered website}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'

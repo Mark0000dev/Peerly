@@ -7,6 +7,7 @@ on:
     paths:
       - deployment/staging/release/**
       - deployment/staging/release_ssh/**
+      - deployment/staging/external-delivery.compose.yml
       - backend/pyproject.toml
       - backend/uv.lock
       - backend/.python-version
@@ -19,6 +20,7 @@ on:
     paths:
       - deployment/staging/release/**
       - deployment/staging/release_ssh/**
+      - deployment/staging/external-delivery.compose.yml
       - backend/pyproject.toml
       - backend/uv.lock
       - backend/.python-version

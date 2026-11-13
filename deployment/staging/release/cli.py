@@ -13,6 +13,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from deployment.staging.release.data import Object, RejectedError, load, obj, require, text
+from deployment.staging.release.external_lifecycle import EXTERNAL_IMAGE, EXTERNAL_RELEASE
+from deployment.staging.release.external_policy import policy, read_private
 from deployment.staging.release.journal import Journal
 from deployment.staging.release.portainer import Portainer
 from deployment.staging.release.provenance import digest
@@ -58,9 +60,13 @@ def secret(name: str) -> str:
 
 def previous_images(runtime: Runtime, registry: Registry, snapshot: Snapshot) -> dict[str, Image]:
     result = {}
-    for role, key in [("backend", BACKEND), ("frontend", FRONTEND)]:
+    roles = [("backend", BACKEND), ("frontend", FRONTEND)]
+    if runtime.external is not None:
+        roles.append(("external", EXTERNAL_IMAGE))
+    for role, key in roles:
         reference = snapshot.env()[key]
-        manifest, config = registry.fetch(role, reference)
+        image_role = "backend" if role == "external" else role
+        manifest, config = registry.fetch(image_role, reference)
         inspected = runtime.portainer.image(reference)
         labels = obj(obj(load(config)["config"])["Labels"])
         sha = text(labels["org.opencontainers.image.revision"])
@@ -72,7 +78,7 @@ def previous_images(runtime: Runtime, registry: Registry, snapshot: Snapshot) ->
             and inspected["Id"] == digest(config),
             "previous_image_identity",
         )
-        result[role] = Image(role, sha, reference, digest(config))
+        result[role] = Image(image_role, sha, reference, digest(config))
     return result
 
 
@@ -137,6 +143,7 @@ def execute(args: argparse.Namespace, sha: str, directory: Path) -> None:
         ai_id,
         secret("PEERLY_STAGING_DATABASE_NAME"),
         (lambda: github.source(sha)) if operation == "promote" else (lambda: None),
+        policy(),
     )
     runtime = Runtime(client, http, journal, packages, inputs)
     proofs: Object = {role: package.proof for role, package in packages.items()}
@@ -147,6 +154,7 @@ def execute(args: argparse.Namespace, sha: str, directory: Path) -> None:
         packages["frontend"].image,
         proofs,
     )
+    promotion.external = runtime.external
     try:
         snapshot = promotion.read()
         private_write(
@@ -156,6 +164,10 @@ def execute(args: argparse.Namespace, sha: str, directory: Path) -> None:
         if operation == "promote":
             baseline = runtime.evidence()
             previous = previous_images(runtime, registry, snapshot)
+            if runtime.external is not None:
+                require(
+                    previous["external"] == runtime.external.image(), "external_previous_binding"
+                )
             private_write(
                 directory / "recovery.private.json",
                 {
@@ -169,6 +181,11 @@ def execute(args: argparse.Namespace, sha: str, directory: Path) -> None:
             if (
                 snapshot.env()[BACKEND] == packages["backend"].image.reference
                 and snapshot.env()[FRONTEND] == packages["frontend"].image.reference
+                and (
+                    runtime.external is None
+                    or runtime.external.policy.upgrade_source != sha
+                    or runtime.external.image() == packages["backend"].image
+                )
             ):
                 promotion.verify(snapshot, {r: p.image for r, p in packages.items()}, baseline)
                 promotion.phase = "already_verified"
@@ -233,13 +250,39 @@ def recover(
     )
     final_candidate = staged.changed({FRONTEND: packages["frontend"].image.reference})
     rollback_candidate = before.changed({ASSETS: approved})
+    candidates = [before, staged, final_candidate, rollback_candidate]
     require(
-        any(
-            snapshot.same(candidate)
-            for candidate in [before, staged, final_candidate, rollback_candidate]
-        ),
-        "unknown_reconciliation_state",
+        runtime.external is not None or obj(original["baseline"])["external_delivery"] == "stopped",
+        "external_recovery_acceptance_missing",
     )
+    transition_directory, target = external_transition(
+        runtime,
+        directory.parent,
+        recovery.parent,
+        pending,
+        {packages["backend"].image, previous.get("external")},
+    )
+    if target is not None:
+        candidates.extend(
+            candidate.changed({EXTERNAL_IMAGE: target.reference, EXTERNAL_RELEASE: target.sha})
+            for candidate in list(candidates)
+        )
+    require(
+        any(snapshot.same(candidate) for candidate in candidates), "unknown_reconciliation_state"
+    )
+    if runtime.external is not None:
+        if not blocker.exists():
+            private_write(
+                blocker,
+                {
+                    "attempt": directory.name,
+                    "sha": text(args.sha),
+                    "operation": text(args.operation),
+                },
+            )
+        snapshot = runtime.external.reconcile(
+            promotion, snapshot, transition_directory, rollback=args.operation == "rollback"
+        )
     if args.operation == "reconcile":
         known = {
             role: packages[role].image
@@ -267,6 +310,26 @@ def recover(
     blocker.unlink()
     sync_directory(blocker.parent)
     return final
+
+
+def external_transition(
+    runtime: Runtime, root: Path, original: Path, pending: Object, allowed: set[Image | None]
+) -> tuple[Path, Image | None]:
+    directory = original
+    if pending:
+        candidate = root / text(pending["attempt"])
+        require(candidate.parent == root, "external_recovery_attempt_scope")
+        if (candidate / "external-before.private.json").exists():
+            directory = candidate
+    path = directory / "external-before.private.json"
+    if runtime.external is None or not path.exists():
+        return directory, None
+    target = Image(**image_fields(obj(read_private(path)["target"])))
+    require(
+        target.sha in runtime.external.policy.compatible_sources and target in allowed,
+        "external_recovery_compatibility",
+    )
+    return directory, target
 
 
 def sync_directory(path: Path) -> None:

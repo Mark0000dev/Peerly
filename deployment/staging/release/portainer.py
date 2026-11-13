@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 import struct
 import tarfile
 from http import HTTPStatus
@@ -58,6 +59,14 @@ class Portainer:
         if method == "POST":
             allowed = (path.startswith(DOCKER + "/containers/") and path.endswith("/exec")) or (
                 path.startswith(DOCKER + "/exec/") and path.endswith("/start")
+            )
+        if method == "POST" and data is None:
+            allowed = (
+                re.fullmatch(
+                    re.escape(DOCKER) + r"/containers/[a-f0-9]{64}/(?:kill\?signal=SIGTERM|start)",
+                    path,
+                )
+                is not None
             )
         require(allowed and method in {"GET", "PUT", "POST"}, "portainer_operation")
         response = self.http.send(
@@ -123,9 +132,13 @@ class Portainer:
             return stream.read()
 
     def probe(self, cid: str, script: str) -> Object:
+        from deployment.staging.release.external_probe import EXTERNAL_DATABASE, EXTERNAL_REGISTRY
         from deployment.staging.release.probes import DATABASE, SAFETY_DATABASE
 
-        require(script in {DATABASE, SAFETY_DATABASE}, "fixed_probe_only")
+        require(
+            script in {DATABASE, SAFETY_DATABASE, EXTERNAL_DATABASE, EXTERNAL_REGISTRY},
+            "fixed_probe_only",
+        )
         container_id(cid)
         created = self.request(
             DOCKER + f"/containers/{cid}/exec",
@@ -145,3 +158,11 @@ class Portainer:
         state = self.request(DOCKER + f"/exec/{eid}/json")
         require(state.get("Running") is False and state.get("ExitCode") == 0, "probe_failed")
         return load(demultiplex(raw))
+
+    def terminate_owned(self, cid: str) -> None:
+        container_id(cid)
+        self.response(DOCKER + f"/containers/{cid}/kill?signal=SIGTERM", method="POST")
+
+    def start_owned_recovery(self, cid: str) -> None:
+        container_id(cid)
+        self.response(DOCKER + f"/containers/{cid}/start", method="POST")

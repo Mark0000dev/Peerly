@@ -21,6 +21,8 @@ from deployment.staging.release.data import (
     rows,
     text,
 )
+from deployment.staging.release.external import observe as observe_external
+from deployment.staging.release.external_lifecycle import ExternalLifecycle
 from deployment.staging.release.metrics import METRICS, counters
 from deployment.staging.release.native import render_native
 from deployment.staging.release.probes import DATABASE, SAFETY_DATABASE
@@ -39,6 +41,7 @@ from deployment.staging.release.transport import Request
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from deployment.staging.release.external_policy import ExternalPolicy
     from deployment.staging.release.journal import Journal
     from deployment.staging.release.portainer import Portainer
     from deployment.staging.release.providers import Package
@@ -57,6 +60,7 @@ class ObservationInputs:
     ai_id: str
     database_name: str
     check_source: Callable[[], None]
+    external_policy: ExternalPolicy | None = None
 
 
 class Runtime:
@@ -70,6 +74,9 @@ class Runtime:
     ) -> None:
         self.portainer, self.http, self.journal = portainer, http, journal
         self.packages, self.inputs = packages, inputs
+        self.external = (
+            ExternalLifecycle(self, inputs.external_policy) if inputs.external_policy else None
+        )
 
     def request(self, path: str, data: Object | None = None, method: str | None = None) -> Object:
         if method == "PUT":
@@ -93,17 +100,24 @@ class Runtime:
 
     def inventory(self) -> tuple[dict[str, Object], Object]:
         all_containers = self.portainer.containers()
+        if self.external is not None:
+            self.external.observe()
+        else:
+            observe_external(self.portainer, None)
         core: dict[str, Object] = {}
         for item in all_containers:
             command = text(item.get("Command", ""))
             running = item.get("State") == "running"
             require(
-                not (running and "studymate.external_delivery_worker" in command),
+                not (running and "studymate.external_delivery_worker" in command)
+                or self.external is not None,
                 "external_delivery_running",
             )
             labels = obj(item.get("Labels", {}))
             if labels.get("com.docker.compose.project") == "peerly-staging" and running:
                 role = text(labels.get("com.docker.compose.service"))
+                if self.external is not None and role == self.external.service:
+                    continue
                 require(role in ROLES and role not in core, "core_role_count")
                 core[role] = self.portainer.inspect(text(item["Id"]))
         require(set(core) == ROLES, "core_role_count")
@@ -249,8 +263,11 @@ class Runtime:
         snapshot = self.snapshot()
         all_containers = self.portainer.containers()
         running = [c for c in all_containers if c.get("State") == "running"]
+        if self.external is None:
+            observe_external(self.portainer, None)
         require(
-            not any(
+            self.external is not None
+            or not any(
                 "studymate.external_delivery_worker" in text(c.get("Command", "")) for c in running
             ),
             "external_delivery_running",
@@ -285,7 +302,12 @@ class Runtime:
             "pid": obj(ai["State"])["Pid"],
             "slot": slot,
         }
-        return {"schema": heads[0], "ai": identity, "external_delivery": "stopped"}
+        external: object = "stopped"
+        if self.external is not None:
+            self.external.known_snapshot(snapshot)
+            external = self.external.observe()
+            self.external.bindings()
+        return {"schema": heads[0], "ai": identity, "external_delivery": external}
 
     def evidence(self) -> Object:
         snapshot = self.snapshot()
@@ -341,10 +363,14 @@ class Runtime:
             "pid": obj(ai["State"])["Pid"],
             "slot": slot,
         }
+        external: object = "stopped"
+        if self.external is not None:
+            external = self.external.evidence(snapshot)
+            roles[self.external.service] = external
         return {
             "schema": heads[0],
             "ai": ai_identity,
-            "external_delivery": "stopped",
+            "external_delivery": external,
             "roles": roles,
             "ready_path": "/api/ready",
             "ready_status": ready.status,
