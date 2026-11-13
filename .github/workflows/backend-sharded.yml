@@ -1,0 +1,181 @@
+name: Backend optional four-shard quality
+
+# Candidate only: the required serial Backend workflow remains unchanged.
+on:
+  push:
+    branches: ["work/backend-sharded-*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-sharded-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.13.7"
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Freeze actual complete ordered pytest inventory and tracked source hashes
+        run: uv run python ci_shard.py inventory --commit "$GITHUB_SHA" --output shard-inventory.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-shard-inventory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: backend/shard-inventory.json
+          if-no-files-found: error
+          retention-days: 7
+
+  static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16.15
+        env:
+          POSTGRES_USER: studymate
+          POSTGRES_PASSWORD: studymate
+          POSTGRES_DB: studymate_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U studymate -d studymate_test"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.13.7"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: make lint typecheck architecture
+      - name: Explicit strict typing for the two CI-only root helpers
+        run: uv run mypy ci_shard.py ci_combine_coverage.py
+      - run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://studymate:studymate@localhost:5432/studymate_test
+
+  shards:
+    needs: inventory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    services:
+      postgres:
+        image: postgres:16.15
+        env:
+          POSTGRES_USER: studymate
+          POSTGRES_PASSWORD: studymate
+          POSTGRES_DB: studymate_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U studymate -d studymate_test"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://studymate:studymate@localhost:5432/studymate_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.13.7"
+          enable-cache: true
+      - run: uv sync --locked
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: backend-shard-inventory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: backend
+      - name: Verify full collection, execute exact partition and retain actual outcomes
+        env:
+          PEERLY_SHARD: ${{ matrix.shard }}
+        run: >-
+          uv run python ci_shard.py run --commit "$GITHUB_SHA"
+          --inventory shard-inventory.json --shard "$PEERLY_SHARD" --output shard-output
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: backend-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: backend/shard-output/
+          if-no-files-found: error
+          retention-days: 7
+
+  aggregate:
+    name: Backend sharded final exact-union and coverage gate
+    needs: [inventory, static, shards]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Require every prerequisite job to have actually succeeded
+        working-directory: ${{ runner.temp }}
+        env:
+          INVENTORY_RESULT: ${{ needs.inventory.result }}
+          STATIC_RESULT: ${{ needs.static.result }}
+          SHARDS_RESULT: ${{ needs.shards.result }}
+        run: |
+          test "$INVENTORY_RESULT" = success
+          test "$STATIC_RESULT" = success
+          test "$SHARDS_RESULT" = success
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.13.7"
+          enable-cache: true
+      - run: uv sync --locked
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: backend-shard-inventory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: backend
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: backend-shard-[0-3]-${{ github.run_id }}-${{ github.run_attempt }}
+          path: backend/shard-downloads
+          merge-multiple: false
+      - name: Require four artifacts from this exact run attempt
+        run: |
+          test ! -e shard-artifacts
+          mkdir shard-artifacts
+          for shard in 0 1 2 3; do
+            mv "shard-downloads/backend-shard-$shard-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+              "shard-artifacts/backend-shard-$shard"
+          done
+      - name: Require four exact results and unchanged source, combine branch coverage and enforce95
+        run: >-
+          uv run python ci_combine_coverage.py --commit "$GITHUB_SHA"
+          --inventory shard-inventory.json --artifacts shard-artifacts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: backend-sharded-combined-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            backend/coverage.xml
+            backend/sharded-coverage-receipt.json
+          if-no-files-found: error
+          retention-days: 7
