@@ -1917,7 +1917,7 @@
             "type": "string"
           }
         },
-        "required": ["suggested_text", "own_goal"],
+        "required": ["kind", "suggested_text", "own_goal"],
         "title": "LearningTooOptionResponse",
         "type": "object"
       },
@@ -7736,7 +7736,7 @@
             "type": "string"
           }
         },
-        "required": ["suggested_text", "own_goal", "peer_help"],
+        "required": ["kind", "suggested_text", "own_goal", "peer_help"],
         "title": "SwapOptionResponse",
         "type": "object"
       },
@@ -7843,7 +7843,7 @@
             "type": "string"
           }
         },
-        "required": ["suggested_text"],
+        "required": ["kind", "suggested_text"],
         "title": "WriteOwnOptionResponse",
         "type": "object"
       },

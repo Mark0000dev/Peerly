@@ -629,7 +629,7 @@ export interface Api {
     readonly JobState: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
     readonly LanguageOptionResponse: { readonly code: string; readonly label: string };
     readonly LearningTooOptionResponse: {
-      readonly kind?: 'learning_too';
+      readonly kind: 'learning_too';
       readonly own_goal: Api['schemas']['ResponseGoalSourceResponse'];
       readonly suggested_text: string;
     };
@@ -2477,7 +2477,7 @@ export interface Api {
       | 'deleted_account'
       | 'other';
     readonly SwapOptionResponse: {
-      readonly kind?: 'swap';
+      readonly kind: 'swap';
       readonly own_goal: Api['schemas']['ResponseGoalSourceResponse'];
       readonly peer_help: Api['schemas']['ResponsePeerHelpSourceResponse'];
       readonly suggested_text: string;
@@ -2504,7 +2504,7 @@ export interface Api {
       readonly stored_version: number;
     };
     readonly WriteOwnOptionResponse: {
-      readonly kind?: 'write_my_own';
+      readonly kind: 'write_my_own';
       readonly suggested_text: string;
     };
     readonly studymate__domain__ai__tasks__Observation: 'yes' | 'no' | 'uncertain';
