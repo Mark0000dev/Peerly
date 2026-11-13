@@ -80,7 +80,7 @@ async def test_metadata_list_and_full_exact_private_report_detail_are_separate()
     assert len(store.audit) == len((listing, detail))
 
 
-@pytest.mark.parametrize("path", [ROOT, f"{ROOT}/{uuid4()}"])
+@pytest.mark.parametrize("path", [ROOT, f"{ROOT}/{uuid4()}"], ids=("report-list", "report-detail"))
 async def test_only_actual_cookie_and_explicit_role_not_headers_authorize_report_read(
     path: str,
 ) -> None:
