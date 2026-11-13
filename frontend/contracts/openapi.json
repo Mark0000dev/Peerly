@@ -1900,6 +1900,27 @@
         "title": "LanguageOptionResponse",
         "type": "object"
       },
+      "LearningTooOptionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "learning_too",
+            "default": "learning_too",
+            "title": "Kind",
+            "type": "string"
+          },
+          "own_goal": { "$ref": "#/components/schemas/ResponseGoalSourceResponse" },
+          "suggested_text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Suggested Text",
+            "type": "string"
+          }
+        },
+        "required": ["suggested_text", "own_goal"],
+        "title": "LearningTooOptionResponse",
+        "type": "object"
+      },
       "LifecycleOperation": {
         "enum": ["ban", "unban", "delete"],
         "title": "LifecycleOperation",
@@ -6865,6 +6886,39 @@
         "title": "RequestPublicState",
         "type": "string"
       },
+      "RequestResponseOptionsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "default_choice": { "$ref": "#/components/schemas/ResponseChoice" },
+          "observed_at": { "format": "date-time", "title": "Observed At", "type": "string" },
+          "options": {
+            "items": { "$ref": "#/components/schemas/ResponseOptionResponse" },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Options",
+            "type": "array"
+          },
+          "person_id": { "format": "uuid", "title": "Person Id", "type": "string" },
+          "request_expires_at": {
+            "format": "date-time",
+            "title": "Request Expires At",
+            "type": "string"
+          },
+          "request_id": { "format": "uuid", "title": "Request Id", "type": "string" },
+          "request_version": { "minimum": 1, "title": "Request Version", "type": "integer" }
+        },
+        "required": [
+          "request_id",
+          "request_version",
+          "person_id",
+          "observed_at",
+          "request_expires_at",
+          "default_choice",
+          "options"
+        ],
+        "title": "RequestResponseOptionsResponse",
+        "type": "object"
+      },
       "RequestState": {
         "enum": [
           "pending",
@@ -6952,6 +7006,47 @@
         },
         "required": ["id", "version"],
         "title": "ResourceSourceResponse",
+        "type": "object"
+      },
+      "ResponseChoice": { "enum": ["learning_too", "swap", "write_my_own"], "type": "string" },
+      "ResponseGoalSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": { "format": "uuid", "title": "Id", "type": "string" },
+          "subject_id": { "format": "uuid", "title": "Subject Id", "type": "string" },
+          "subject_label": { "title": "Subject Label", "type": "string" },
+          "topic": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Topic" },
+          "version": { "minimum": 1, "title": "Version", "type": "integer" }
+        },
+        "required": ["id", "version", "subject_id", "subject_label", "topic"],
+        "title": "ResponseGoalSourceResponse",
+        "type": "object"
+      },
+      "ResponseOptionResponse": {
+        "discriminator": {
+          "mapping": {
+            "learning_too": "#/components/schemas/LearningTooOptionResponse",
+            "swap": "#/components/schemas/SwapOptionResponse",
+            "write_my_own": "#/components/schemas/WriteOwnOptionResponse"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          { "$ref": "#/components/schemas/LearningTooOptionResponse" },
+          { "$ref": "#/components/schemas/SwapOptionResponse" },
+          { "$ref": "#/components/schemas/WriteOwnOptionResponse" }
+        ]
+      },
+      "ResponsePeerHelpSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": { "format": "uuid", "title": "Account Id", "type": "string" },
+          "subject_id": { "format": "uuid", "title": "Subject Id", "type": "string" },
+          "subject_label": { "title": "Subject Label", "type": "string" },
+          "version": { "minimum": 1, "title": "Version", "type": "integer" }
+        },
+        "required": ["account_id", "version", "subject_id", "subject_label"],
+        "title": "ResponsePeerHelpSourceResponse",
         "type": "object"
       },
       "RestoreRequirement": {
@@ -7628,6 +7723,23 @@
         "title": "SupportTopic",
         "type": "string"
       },
+      "SwapOptionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "const": "swap", "default": "swap", "title": "Kind", "type": "string" },
+          "own_goal": { "$ref": "#/components/schemas/ResponseGoalSourceResponse" },
+          "peer_help": { "$ref": "#/components/schemas/ResponsePeerHelpSourceResponse" },
+          "suggested_text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Suggested Text",
+            "type": "string"
+          }
+        },
+        "required": ["suggested_text", "own_goal", "peer_help"],
+        "title": "SwapOptionResponse",
+        "type": "object"
+      },
       "UnobservedOperationResponse": {
         "additionalProperties": false,
         "properties": {
@@ -7713,6 +7825,26 @@
           "acknowledged_at"
         ],
         "title": "ViewedResponse",
+        "type": "object"
+      },
+      "WriteOwnOptionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "write_my_own",
+            "default": "write_my_own",
+            "title": "Kind",
+            "type": "string"
+          },
+          "suggested_text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Suggested Text",
+            "type": "string"
+          }
+        },
+        "required": ["suggested_text"],
+        "title": "WriteOwnOptionResponse",
         "type": "object"
       },
       "studymate__domain__ai__tasks__Observation": {
@@ -20672,6 +20804,68 @@
         },
         "security": [{ "SessionCookie": [] }],
         "summary": "Httprequestaction",
+        "tags": ["requests"]
+      }
+    },
+    "/api/v1/requests/{request_id}/response-options": {
+      "get": {
+        "operationId": "read_options_api_v1_requests__request_id__response_options_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": { "format": "uuid", "title": "Request Id", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestResponseOptionsResponse" }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [{ "SessionCookie": [] }],
+        "summary": "Read Options",
         "tags": ["requests"]
       }
     },

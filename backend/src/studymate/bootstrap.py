@@ -184,6 +184,7 @@ from studymate.application.requests.actions import (
 )
 from studymate.application.requests.expiry import ExpireRequests
 from studymate.application.requests.queries import ListRequests, ReadRequest
+from studymate.application.requests.response_options import ReadRequestResponseOptions
 from studymate.application.requests.send import PreviewRequest, SendRequest
 from studymate.application.requests.viewing import AcknowledgeRequestViewed
 from studymate.application.safety.block_list import ReadOwnBlocks
@@ -463,6 +464,7 @@ from studymate.infrastructure.requests.cursors import FernetRequestCursorCodec
 from studymate.infrastructure.requests.expiry import SqlRequestExpiryUnitOfWork
 from studymate.infrastructure.requests.expiry_loop import run_expiry_loop
 from studymate.infrastructure.requests.queries import SqlRequestQueryUnitOfWork
+from studymate.infrastructure.requests.response_options import SqlResponseOptionsUnitOfWork
 from studymate.infrastructure.requests.transactions import SqlRequestUnitOfWork
 from studymate.infrastructure.requests.viewing import SqlRequestViewUnitOfWork
 from studymate.infrastructure.safety.message_reports import SqlMessageReportUnitOfWork
@@ -639,6 +641,10 @@ from studymate.presentation.report_moderation.router import (
 )
 from studymate.presentation.request_correlation import RequestCorrelation
 from studymate.presentation.request_errors import validation_problem
+from studymate.presentation.requests.response_options_router import (
+    ResponseOptionsHttpServices,
+    response_options_router,
+)
 from studymate.presentation.requests.router import RequestHttpServices, requests_router
 from studymate.presentation.storage_errors import storage_problem
 from studymate.presentation.study_context import StudyServices, study_router
@@ -1255,6 +1261,13 @@ def _student_routers(
         people_routes,
         discovery_routes,
         _requests_router(configuration, sessions, auth_services, intent_fingerprinter),
+        response_options_router(
+            ResponseOptionsHttpServices(
+                ReadRequestResponseOptions(
+                    SqlResponseOptionsUnitOfWork(sessions), Sha256SessionHasher()
+                )
+            )
+        ),
         _messaging_router(
             configuration, sessions, auth_services, media_storage, intent_fingerprinter
         ),

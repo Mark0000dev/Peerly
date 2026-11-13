@@ -628,6 +628,11 @@ export interface Api {
     };
     readonly JobState: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
     readonly LanguageOptionResponse: { readonly code: string; readonly label: string };
+    readonly LearningTooOptionResponse: {
+      readonly kind?: 'learning_too';
+      readonly own_goal: Api['schemas']['ResponseGoalSourceResponse'];
+      readonly suggested_text: string;
+    };
     readonly LifecycleOperation: 'ban' | 'unban' | 'delete';
     readonly LifecycleResponse: {
       readonly changed_at: string;
@@ -2187,6 +2192,15 @@ export interface Api {
     readonly RequestPeerState: 'public' | 'unavailable' | 'deleted';
     readonly RequestPublicState:
       'pending' | 'pending_decline' | 'accepted' | 'declined' | 'withdrawn' | 'expired' | 'closed';
+    readonly RequestResponseOptionsResponse: {
+      readonly default_choice: Api['schemas']['ResponseChoice'];
+      readonly observed_at: string;
+      readonly options: readonly Api['schemas']['ResponseOptionResponse'][];
+      readonly person_id: string;
+      readonly request_expires_at: string;
+      readonly request_id: string;
+      readonly request_version: number;
+    };
     readonly RequestState:
       | 'pending'
       | 'pending_decline'
@@ -2223,6 +2237,24 @@ export interface Api {
     readonly ResourceSourceResponse: {
       readonly id: string;
       readonly kind?: 'resource';
+      readonly version: number;
+    };
+    readonly ResponseChoice: 'learning_too' | 'swap' | 'write_my_own';
+    readonly ResponseGoalSourceResponse: {
+      readonly id: string;
+      readonly subject_id: string;
+      readonly subject_label: string;
+      readonly topic: string | null;
+      readonly version: number;
+    };
+    readonly ResponseOptionResponse:
+      | Api['schemas']['LearningTooOptionResponse']
+      | Api['schemas']['SwapOptionResponse']
+      | Api['schemas']['WriteOwnOptionResponse'];
+    readonly ResponsePeerHelpSourceResponse: {
+      readonly account_id: string;
+      readonly subject_id: string;
+      readonly subject_label: string;
       readonly version: number;
     };
     readonly RestoreRequirement: 'photo' | 'photo_review' | 'study_context';
@@ -2444,6 +2476,12 @@ export interface Api {
       | 'email_already_in_use'
       | 'deleted_account'
       | 'other';
+    readonly SwapOptionResponse: {
+      readonly kind?: 'swap';
+      readonly own_goal: Api['schemas']['ResponseGoalSourceResponse'];
+      readonly peer_help: Api['schemas']['ResponsePeerHelpSourceResponse'];
+      readonly suggested_text: string;
+    };
     readonly UnobservedOperationResponse: {
       readonly client_message_id: string;
       readonly conversation_id: string;
@@ -2464,6 +2502,10 @@ export interface Api {
       readonly disclosure_id: string;
       readonly request_id: string;
       readonly stored_version: number;
+    };
+    readonly WriteOwnOptionResponse: {
+      readonly kind?: 'write_my_own';
+      readonly suggested_text: string;
     };
     readonly studymate__domain__ai__tasks__Observation: 'yes' | 'no' | 'uncertain';
     readonly studymate__domain__client_observations__events__Observation:
@@ -5268,6 +5310,21 @@ export interface Api {
           readonly '409': Api['schemas']['ProblemResponse'];
           readonly '422': Api['schemas']['ProblemResponse'];
           readonly '429': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/requests/{request_id}/response-options': {
+      readonly get: {
+        readonly parameters: { readonly 'path:request_id': string };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['RequestResponseOptionsResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
           readonly '500': Api['schemas']['ProblemResponse'];
           readonly '503': Api['schemas']['ProblemResponse'];
         };
