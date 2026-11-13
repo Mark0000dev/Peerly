@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from studymate.application.ai.ports import AiUnavailableError
 from studymate.application.errors import StorageUnavailableError
-from studymate.infrastructure.ai import persistence
+from studymate.infrastructure.ai import admission_transaction
 from studymate.infrastructure.ai.persistence import SqlAiUnitOfWork
 
 
@@ -31,7 +31,7 @@ def unavailable(sessions: async_sessionmaker[AsyncSession]) -> UnavailableTransa
 async def test_isolated_ai_pool_outage_is_safe_nonblocking_feature_unavailability(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(persistence, "open_transaction", unavailable)
+    monkeypatch.setattr(admission_transaction, "open_transaction", unavailable)
     uow = SqlAiUnitOfWork(async_sessionmaker(expire_on_commit=False))
 
     async def submit() -> None:

@@ -44,6 +44,7 @@ from studymate.infrastructure.ai.admission_slot import (
     acquire_admission_slot,
     ensure_admission_slot,
 )
+from studymate.infrastructure.ai.admission_transaction import admission_transaction
 from studymate.infrastructure.ai.admission_writes import insert_admission
 from studymate.infrastructure.ai.codec import RESULT_CODEC, TASK_CODEC
 from studymate.infrastructure.ai.models import (
@@ -69,7 +70,6 @@ from studymate.infrastructure.persistence.identity_sessions import SqlIdentityTr
 from studymate.infrastructure.persistence.media_models import PhotoUploadRevisionRecord
 from studymate.infrastructure.persistence.media_uploads import SqlMediaTransaction
 from studymate.infrastructure.persistence.product_events import record_ai_terminal
-from studymate.infrastructure.persistence.transactions import open_transaction
 
 
 def job_value(record: AiJobRecord) -> AiJob:
@@ -371,7 +371,7 @@ class SqlAiUnitOfWork:
         progress = TransactionProgress()
         deadline = asyncio.timeout(self.policy.request_budget_seconds)
         try:
-            async with deadline, open_transaction(self.sessions) as session:
+            async with deadline, admission_transaction(self.sessions) as session:
                 progress.phase = TransactionPhase.BODY
                 yield SqlAiTransaction(session, self.policy, diagnostic_progress=progress)
                 progress.phase = TransactionPhase.COMMIT
