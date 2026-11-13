@@ -122,6 +122,7 @@ from studymate.infrastructure.persistence.message_read_models import (
     ConversationReadRevisionRecord,
 )
 from studymate.infrastructure.persistence.message_report_models import MessageReportContextRecord
+from studymate.infrastructure.persistence.native_login import NativeAttemptRecord
 from studymate.infrastructure.persistence.onboarding_models import (
     ProfileActivationRecord,
     VisibilityIntentRecord,
@@ -238,6 +239,7 @@ MODELS: tuple[type[Base], ...] = (
     AccountRecord,
     ExternalIdentityRecord,
     SessionRecord,
+    NativeAttemptRecord,
     InstitutionalBindingRecord,
     LoginFlowRecord,
     CallbackAttemptRecord,

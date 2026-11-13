@@ -32,22 +32,22 @@ def upgrade() -> None:
             name="fk_native_login_attempts_source_digest_sessions",
         ),
         sa.CheckConstraint(
-            "length(challenge) = 43", name="ck_native_login_attempts_native_challenge_length"
+            "length(challenge) = 43", name=op.f("ck_native_login_attempts_native_challenge_length")
         ),
         sa.CheckConstraint(
             "octet_length(browser_digest) = 32",
-            name="ck_native_login_attempts_native_browser_digest_length",
+            name=op.f("ck_native_login_attempts_native_browser_digest_length"),
         ),
         sa.CheckConstraint(
-            "expires_at > created_at", name="ck_native_login_attempts_native_expiry"
+            "expires_at > created_at", name=op.f("ck_native_login_attempts_native_expiry")
         ),
         sa.CheckConstraint(
             "consumed_at IS NULL OR (source_digest IS NOT NULL AND consumed_at >= created_at)",
-            name="ck_native_login_attempts_native_consumption",
+            name=op.f("ck_native_login_attempts_native_consumption"),
         ),
         sa.CheckConstraint(
             "cancelled_at IS NULL OR (consumed_at IS NULL AND cancelled_at >= created_at)",
-            name="ck_native_login_attempts_native_cancellation",
+            name=op.f("ck_native_login_attempts_native_cancellation"),
         ),
     )
     op.create_index("ix_native_login_attempts_expires_at", "native_login_attempts", ["expires_at"])

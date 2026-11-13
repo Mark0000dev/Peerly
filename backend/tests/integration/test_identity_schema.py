@@ -113,6 +113,7 @@ async def test_revision_upgrade_matches_models_and_can_be_reversed(engine: Async
             "profile_report_intents",
             "external_identities",
             "sessions",
+            "native_login_attempts",
             "institutional_bindings",
             "alembic_version",
             "login_transactions",
