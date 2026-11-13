@@ -102,11 +102,13 @@ reactivate restored real sessions, worker jobs or external delivery queues. None
 of these helper results sets `full_restore_proven=true` or establishes RPO/RTO.
 
 
-Catalog format 2 normalizes the PostgreSQL 16 logical-restore representation of
+Catalog format 3 retains the PostgreSQL 16 logical-restore normalization of
 constant varchar arrays cast to text arrays. It tokenizes definitions, preserves
 literal/identifier/operator boundaries, and distributes only that exact cast over
 constant varchar literal elements. Other casts/expressions remain exact. Raw
 constraint/index definition text is transient private native metadata, checked
 against its native hash; the capture artifact stores normalized hashes only.
-Routine bodies/defaults remain server-hashed. Format 1 catalog artifacts are not
-accepted or relabeled. The existing row/media baseline remains format 1.
+Routine bodies/defaults remain server-hashed. Format 3 also handles ordered
+associative CHECK-AND grouping; see [the exact scope and installation requirements](CATALOG-FORMAT3.md).
+Historical format-1/2 catalog artifacts are rejected, never relabeled. The existing
+row/media baseline remains format 1.

@@ -1,6 +1,8 @@
 # Same-snapshot recovery catalog capture
 
-Install `recovery_catalog.sql` and `recovery_checks.py` beside `capture_backup.py`.
+Install `recovery_catalog.sql`, `recovery_checks.py` and `recovery_and.py` beside
+`capture_backup.py`. Deploy the matched files together; see
+[Recovery catalog format 3](CATALOG-FORMAT3.md).
 The capture module pins the exact SQL SHA256 and rejects a changed SQL file or
 invalid exported snapshot token before starting capture consumers. Keep installed
 code and SQL root-owned and immutable to the runtime account. Update the configured
@@ -21,11 +23,11 @@ captured file before recovery acceptance. The catalog's database/head must match
 the source request. The snapshot token is provenance for this completed attempt,
 not a reusable token after its exporter closes.
 
-Catalog format 2 checks definition metadata across all non-system schemas. Native
+Catalog format 3 checks definition metadata across all non-system schemas. Native
 constraint/index definitions are hashed and token-normalized as documented in
 RECOVERY-CHECKS.md. The published catalog contains hashes, not definition bodies.
 Keep transient native metadata and any diagnostic output private; do not log it.
-Format-1 catalogs and historical captures without a same-snapshot catalog are not
+Format-1/2 catalogs and historical captures without a same-snapshot catalog are not
 upgraded, relabeled or substituted with a later live source catalog.
 
 The catalog native output remains within the existing 8 MiB JSON cap and 20,000

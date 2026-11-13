@@ -4,6 +4,8 @@ extend = "../../backend/pyproject.toml"
 [tool.ruff.lint.per-file-ignores]
 "test_accept_restore.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
 "test_capture_backup.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
-"**/backup/tests/test_backup.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
-"**/backup/tests/test_streaming.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
+"test_backup.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
+"test_streaming.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
 "test_recovery_checks.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
+"test_recovery_and.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
+"test_recovery_http.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.

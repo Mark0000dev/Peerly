@@ -19,7 +19,7 @@ from deployment.restore.accept_restore import MAX_DUMP_BYTES, MAX_JSON, digest, 
 from deployment.restore.recovery_checks import catalog
 
 SQL_SHA256 = "f4be591e5a15edde65eba095a09c4161925be5babe554a6b02539de3cbf38a64"
-CATALOG_SQL_SHA256 = "621fa7039207b1657f78948098afa9c9c279c066d02ff08d36d1d3f43ee710dc"
+CATALOG_SQL_SHA256 = "9cd7bfa5f4b49910a493dc995e4b1d0d6052c369c4ef3168714808f8e767dd51"
 PG_MAJOR = 16
 MAX_PORT = 65535
 PRIVATE_FILE_MODE = 0o600

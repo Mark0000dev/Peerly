@@ -12,7 +12,7 @@ TARGET = "peerly_restore_" + "a" * 32 + "_test"
 
 def metadata() -> dict[str, object]:
     return {
-        "format": 2,
+        "format": 3,
         "database": "peerly_staging",
         "heads": ["0060"],
         "invalid_indexes": 0,
@@ -270,6 +270,7 @@ def test_native_definition_hash_is_bound_before_normalization() -> None:
 
 def test_old_catalog_format_cannot_be_relabelled() -> None:
     value = metadata()
-    value["format"] = 1
-    with pytest.raises(RejectedError, match="recovery_catalog"):
-        catalog(value, ["0060"])
+    for historical_format in (1, 2):
+        value["format"] = historical_format
+        with pytest.raises(RejectedError, match="recovery_catalog"):
+            catalog(value, ["0060"])

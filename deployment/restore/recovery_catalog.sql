@@ -69,7 +69,7 @@ WITH namespaces AS (
  LEFT JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum=d.refobjsubid
 ), bounded AS (SELECT * FROM entries ORDER BY kind,schema,name LIMIT 20001)
 SELECT jsonb_build_object(
- 'format',2,'database',current_database(),
+ 'format',3,'database',current_database(),
  'heads',(SELECT jsonb_agg(version_num ORDER BY version_num) FROM public.alembic_version),
  'entries',(SELECT coalesce(jsonb_agg(jsonb_build_object('kind',kind,'schema',schema,
  'name',name,'sha256',encode(sha256(convert_to(detail,'UTF8')),'hex'),

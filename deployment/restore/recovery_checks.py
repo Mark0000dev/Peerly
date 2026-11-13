@@ -10,8 +10,9 @@ import sys
 from pathlib import Path
 
 from deployment.restore.accept_restore import RejectedError, inventory, load, unique
+from deployment.restore.recovery_and import canonical_check
 
-CATALOG_FORMAT = 2
+CATALOG_FORMAT = 3
 MAX_IDENTIFIER = 63
 MAX_DEFINITION_NAME = 4096
 MAX_SEQUENCE_LINE = 2048
@@ -44,7 +45,7 @@ TOKENS = re.compile(
 MAX_DEFINITION = 65536
 
 
-def definition_hash(definition: str) -> str:
+def definition_tokens(definition: str) -> list[str]:
     if len(definition.encode()) > MAX_DEFINITION:
         raise RejectedError("recovery_definition_bound")
     tokens = TOKENS.findall(definition)
@@ -58,6 +59,17 @@ def definition_hash(definition: str) -> str:
         else:
             index, replacement = match
             normalized.extend(replacement)
+    return normalized
+
+
+def legacy_definition_hash(definition: str) -> str:
+    return hashlib.sha256(
+        json.dumps(definition_tokens(definition), ensure_ascii=True).encode()
+    ).hexdigest()
+
+
+def definition_hash(definition: str) -> str:
+    normalized = canonical_check(definition_tokens(definition))
     return hashlib.sha256(json.dumps(normalized, ensure_ascii=True).encode()).hexdigest()
 
 

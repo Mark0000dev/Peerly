@@ -1,6 +1,7 @@
 """Synthetic native boundary stand-ins; never connect PostgreSQL or real credentials."""
 
 import asyncio
+import hashlib
 import json
 import os
 import stat
@@ -11,12 +12,14 @@ from pathlib import Path
 import pytest
 from deployment.restore import capture_backup as capture
 from deployment.restore.accept_restore import MAX_JSON, REQUIRED, digest, load
+from deployment.restore.recovery_checks import legacy_definition_hash
 
 PRIVATE = "SYNTHETIC_PRIVATE_PASSWORD_MUST_NOT_ESCAPE"
 SNAPSHOT = "00000001-00000001-1"
 RENDITIONS = 2
 EXPORTER_CALL = 3
 CATALOG_CALL = 6
+FIXTURE_CATALOG_FORMAT = 3
 PRIVATE_DIRECTORY_MODE = 0o700
 FAKE_NATIVE = r"""
 import json, os, pathlib, sys, time
@@ -143,7 +146,7 @@ class StandIn:
             "identity": metadata(self.request),
             "baseline": fixture_data(),
             "catalog": {
-                "format": 2,
+                "format": 3,
                 "database": self.request.database,
                 "heads": [self.request.head],
                 "invalid_indexes": 0,
@@ -232,6 +235,7 @@ async def test_both_children_finish_before_snapshot_release_and_private_publicat
     assert receipt["media_capture_complete"] is False
     assert receipt["full_restore_proven"] is False
     assert load(output / "baseline.json") == fixture_data()
+    assert load(output / "source-catalog.json")["format"] == FIXTURE_CATALOG_FORMAT
     assert receipt["source_catalog_sql_sha256"] == capture.CATALOG_SQL_SHA256
     assert receipt["source_catalog_snapshot"] == SNAPSHOT
     assert receipt["source_catalog_sha256"] == digest(output / "source-catalog.json", MAX_JSON)
@@ -577,6 +581,33 @@ def test_catalog_snapshot_injection_rejected(snapshot: str) -> None:
 
 def test_catalog_sql_exact_pin(tmp_path: Path) -> None:
     source = Path(capture.__file__).with_name("recovery_catalog.sql")
+    assert digest(source, MAX_JSON) == capture.CATALOG_SQL_SHA256
+    rendered = capture.catalog_sql(source, SNAPSHOT)
+    assert b"'format',3" in rendered
+    nested = "c|t|CHECK (((a > 1) AND (b < 2)) AND (c = 3))"
+    flat = "c|t|CHECK ((a > 1) AND (b < 2) AND (c = 3))"
+    # Exercise the actual capture->checker->new AND module composition, not an
+    # imported format constant that could silently follow a future version.
+    payload: dict[str, object] = {
+        "format": 3,
+        "database": "synthetic_source",
+        "heads": ["0060_report_triage"],
+        "invalid_indexes": 0,
+        "entries": [
+            {"kind": "schema", "schema": "public", "name": "", "sha256": "a" * 64},
+            {
+                "kind": "constraint",
+                "schema": "public",
+                "name": "accounts.synthetic_check",
+                "sha256": hashlib.sha256(nested.encode()).hexdigest(),
+                "definition": nested,
+            },
+        ],
+    }
+    encoded = capture.catalog_bytes(json.dumps(payload).encode(), request(tmp_path))
+    assert legacy_definition_hash(flat).encode() in encoded
+    assert legacy_definition_hash(nested).encode() not in encoded
+    assert b'"definition"' not in encoded
     changed = tmp_path / "changed.sql"
     changed.write_bytes(source.read_bytes() + b"\n")
     with pytest.raises(capture.CaptureError, match="catalog_sql_or_snapshot_pin"):
