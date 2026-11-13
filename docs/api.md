@@ -102,6 +102,23 @@ returned exactly as stored; legacy nulls stay null. No grantor/session/action is
 inferred. Audit failure, session expiry and cancellation never release the private
 result; audit and canonical inspection writes share the read transaction.
 
+## Operator email verification history
+
+`GET /api/v1/operator/accounts/{account_id}/email-verification-history` returns
+retained email challenges, optional stored delivery metadata and manual-verification
+attribution through the current operator authority. Each read records an atomic
+`READ_ACCOUNT` audit; deleted/banned target accounts remain inspectable. Missing
+accounts return an audited404, existing accounts without challenges an empty page.
+No verification, delivery or session mutation occurs. Codes, secret digests,
+credentials and provider response bodies are excluded from the query and response.
+
+Pages contain at most50 challenges ordered by created_at/id descending. Encrypted
+cursors bind requester/grant, target and creation-time boundary. Later challenges
+are excluded from continuation; mutable status fields are read fresh and are not
+an historical status snapshot. Optional source relationships are returned only
+when actually stored. A delivered status means SMTP acceptance, never proof of
+inbox delivery. Origin request/action/trace/span IDs retain their stored nulls.
+
 ## SSE
 
 One authenticated change stream carries bounded source/version hints, reset and

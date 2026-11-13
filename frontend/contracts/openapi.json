@@ -1141,6 +1141,124 @@
         "title": "EmailDeliveryState",
         "type": "string"
       },
+      "EmailHistoryChallengeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": { "format": "uuid", "title": "Account Id", "type": "string" },
+          "attempts": { "maximum": 5, "minimum": 0, "title": "Attempts", "type": "integer" },
+          "consumed_at": {
+            "anyOf": [{ "format": "date-time", "type": "string" }, { "type": "null" }],
+            "title": "Consumed At"
+          },
+          "created_at": { "format": "date-time", "title": "Created At", "type": "string" },
+          "delivery": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/EmailHistoryDeliveryResponse" },
+              { "type": "null" }
+            ]
+          },
+          "email": { "title": "Email", "type": "string" },
+          "expires_at": { "format": "date-time", "title": "Expires At", "type": "string" },
+          "id": { "format": "uuid", "title": "Id", "type": "string" },
+          "manual_verification": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/EmailHistoryManualVerificationResponse" },
+              { "type": "null" }
+            ]
+          },
+          "resend_at": { "format": "date-time", "title": "Resend At", "type": "string" },
+          "session_id": { "format": "uuid", "title": "Session Id", "type": "string" },
+          "superseded_at": {
+            "anyOf": [{ "format": "date-time", "type": "string" }, { "type": "null" }],
+            "title": "Superseded At"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "session_id",
+          "email",
+          "created_at",
+          "expires_at",
+          "resend_at",
+          "attempts",
+          "consumed_at",
+          "superseded_at",
+          "delivery",
+          "manual_verification"
+        ],
+        "title": "EmailHistoryChallengeResponse",
+        "type": "object"
+      },
+      "EmailHistoryDeliveryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": { "maximum": 3, "minimum": 0, "title": "Attempts", "type": "integer" },
+          "created_at": { "format": "date-time", "title": "Created At", "type": "string" },
+          "delivered_at": {
+            "anyOf": [{ "format": "date-time", "type": "string" }, { "type": "null" }],
+            "description": "SMTP/provider acceptance timestamp; not proof of inbox delivery or reading",
+            "title": "Delivered At"
+          },
+          "due_at": { "format": "date-time", "title": "Due At", "type": "string" },
+          "id": { "format": "uuid", "title": "Id", "type": "string" },
+          "last_error": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/StoredEmailDeliveryError" },
+              { "type": "null" }
+            ]
+          },
+          "origin_action_id": {
+            "anyOf": [{ "format": "uuid", "type": "string" }, { "type": "null" }],
+            "title": "Origin Action Id"
+          },
+          "origin_request_id": {
+            "anyOf": [{ "format": "uuid", "type": "string" }, { "type": "null" }],
+            "title": "Origin Request Id"
+          },
+          "origin_span_id": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Origin Span Id"
+          },
+          "origin_trace_id": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Origin Trace Id"
+          },
+          "status": { "$ref": "#/components/schemas/StoredEmailDeliveryStatus" }
+        },
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "due_at",
+          "attempts",
+          "delivered_at",
+          "last_error",
+          "origin_request_id",
+          "origin_action_id",
+          "origin_trace_id",
+          "origin_span_id"
+        ],
+        "title": "EmailHistoryDeliveryResponse",
+        "type": "object"
+      },
+      "EmailHistoryManualVerificationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": { "format": "uuid", "title": "Event Id", "type": "string" },
+          "id": { "format": "uuid", "title": "Id", "type": "string" },
+          "operator_access_version": {
+            "minimum": 1,
+            "title": "Operator Access Version",
+            "type": "integer"
+          },
+          "operator_id": { "format": "uuid", "title": "Operator Id", "type": "string" },
+          "verified_at": { "format": "date-time", "title": "Verified At", "type": "string" }
+        },
+        "required": ["id", "operator_id", "operator_access_version", "event_id", "verified_at"],
+        "title": "EmailHistoryManualVerificationResponse",
+        "type": "object"
+      },
       "ErrorCategory": {
         "enum": [
           "network",
@@ -3233,6 +3351,31 @@
           "observed_at"
         ],
         "title": "OperatorDisclosuresResponse",
+        "type": "object"
+      },
+      "OperatorEmailHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": { "format": "uuid", "title": "Account Id", "type": "string" },
+          "as_of": {
+            "description": "Upper creation boundary for challenges only; mutable delivery/verification state is freshly read on every page",
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "challenges": {
+            "items": { "$ref": "#/components/schemas/EmailHistoryChallengeResponse" },
+            "maxItems": 50,
+            "title": "Challenges",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Next Cursor"
+          }
+        },
+        "required": ["account_id", "challenges", "next_cursor", "as_of"],
+        "title": "OperatorEmailHistoryResponse",
         "type": "object"
       },
       "OperatorEventFacts": {
@@ -7194,6 +7337,21 @@
       "StatusClass": {
         "enum": ["1xx", "2xx", "3xx", "4xx", "5xx", "network", "cancelled"],
         "title": "StatusClass",
+        "type": "string"
+      },
+      "StoredEmailDeliveryError": {
+        "enum": [
+          "provider_unavailable",
+          "provider_rejected",
+          "envelope_invalid",
+          "delivery_expired"
+        ],
+        "title": "StoredEmailDeliveryError",
+        "type": "string"
+      },
+      "StoredEmailDeliveryStatus": {
+        "enum": ["queued", "inflight", "delivered", "failed", "cancelled"],
+        "title": "StoredEmailDeliveryStatus",
         "type": "string"
       },
       "StudyAgain": { "enum": ["yes", "maybe", "no"], "title": "StudyAgain", "type": "string" },
@@ -15524,6 +15682,80 @@
         },
         "security": [{ "SessionCookie": [] }],
         "summary": "Conversations",
+        "tags": ["operator"]
+      }
+    },
+    "/api/v1/operator/accounts/{account_id}/email-verification-history": {
+      "get": {
+        "operationId": "history_api_v1_operator_accounts__account_id__email_verification_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": { "format": "uuid", "title": "Account Id", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "maxLength": 1024, "minLength": 1, "type": "string" },
+                { "type": "null" }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OperatorEmailHistoryResponse" }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [{ "SessionCookie": [] }],
+        "summary": "History",
         "tags": ["operator"]
       }
     },

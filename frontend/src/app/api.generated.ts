@@ -389,6 +389,40 @@ export interface Api {
       readonly version: number;
     };
     readonly EmailDeliveryState: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled';
+    readonly EmailHistoryChallengeResponse: {
+      readonly account_id: string;
+      readonly attempts: number;
+      readonly consumed_at: string | null;
+      readonly created_at: string;
+      readonly delivery: Api['schemas']['EmailHistoryDeliveryResponse'] | null;
+      readonly email: string;
+      readonly expires_at: string;
+      readonly id: string;
+      readonly manual_verification: Api['schemas']['EmailHistoryManualVerificationResponse'] | null;
+      readonly resend_at: string;
+      readonly session_id: string;
+      readonly superseded_at: string | null;
+    };
+    readonly EmailHistoryDeliveryResponse: {
+      readonly attempts: number;
+      readonly created_at: string;
+      readonly delivered_at: string | null;
+      readonly due_at: string;
+      readonly id: string;
+      readonly last_error: Api['schemas']['StoredEmailDeliveryError'] | null;
+      readonly origin_action_id: string | null;
+      readonly origin_request_id: string | null;
+      readonly origin_span_id: string | null;
+      readonly origin_trace_id: string | null;
+      readonly status: Api['schemas']['StoredEmailDeliveryStatus'];
+    };
+    readonly EmailHistoryManualVerificationResponse: {
+      readonly event_id: string;
+      readonly id: string;
+      readonly operator_access_version: number;
+      readonly operator_id: string;
+      readonly verified_at: string;
+    };
     readonly ErrorCategory:
       'network' | 'http' | 'timeout' | 'offline' | 'javascript' | 'render' | 'resource' | 'unknown';
     readonly ErrorObserved: {
@@ -1019,6 +1053,12 @@ export interface Api {
       readonly pagination?: 'anchored_search_not_commit_order';
       readonly request: Api['schemas']['OperatorRequestRootResponse'];
       readonly root_observation?: 'current_recorded_not_revision_snapshot';
+    };
+    readonly OperatorEmailHistoryResponse: {
+      readonly account_id: string;
+      readonly as_of: string;
+      readonly challenges: readonly Api['schemas']['EmailHistoryChallengeResponse'][];
+      readonly next_cursor: string | null;
     };
     readonly OperatorEventFacts: {
       readonly ai_kind?: Api['schemas']['AiKind'] | null;
@@ -2307,6 +2347,10 @@ export interface Api {
       readonly size_bytes: number;
     };
     readonly StatusClass: '1xx' | '2xx' | '3xx' | '4xx' | '5xx' | 'network' | 'cancelled';
+    readonly StoredEmailDeliveryError:
+      'provider_unavailable' | 'provider_rejected' | 'envelope_invalid' | 'delivery_expired';
+    readonly StoredEmailDeliveryStatus:
+      'queued' | 'inflight' | 'delivered' | 'failed' | 'cancelled';
     readonly StudyAgain: 'yes' | 'maybe' | 'no';
     readonly StudyAnswer: 'yes' | 'not_yet' | 'did_not_work_out';
     readonly StudyOutcomeBody: {
@@ -4127,6 +4171,24 @@ export interface Api {
         readonly body: undefined;
         readonly responses: {
           readonly '200': Api['schemas']['OperatorConversationsResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/email-verification-history': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorEmailHistoryResponse'];
           readonly '401': Api['schemas']['ProblemResponse'];
           readonly '403': Api['schemas']['ProblemResponse'];
           readonly '404': Api['schemas']['ProblemResponse'];

@@ -122,6 +122,7 @@ from studymate.application.operator.connection_requests import (
     ReadOperatorRequests,
 )
 from studymate.application.operator.conversation_index import ReadOperatorConversations
+from studymate.application.operator.email_history import ReadOperatorEmailHistory
 from studymate.application.operator.goals import ReadOperatorGoalHistory, ReadOperatorGoals
 from studymate.application.operator.help_history import ReadOperatorHelpHistory
 from studymate.application.operator.identity_links import ReadOperatorIdentityLinks
@@ -325,6 +326,12 @@ from studymate.infrastructure.operator.cursors import FernetOperatorCursorCodec
 from studymate.infrastructure.operator.disclosure_cursors import FernetOperatorDisclosureCursorCodec
 from studymate.infrastructure.operator.disclosure_transactions import (
     SqlOperatorDisclosureUnitOfWork,
+)
+from studymate.infrastructure.operator.email_history_cursors import (
+    FernetOperatorEmailHistoryCursorCodec,
+)
+from studymate.infrastructure.operator.email_history_transactions import (
+    SqlOperatorEmailHistoryUnitOfWork,
 )
 from studymate.infrastructure.operator.feedback_cursors import FernetOperatorFeedbackCursorCodec
 from studymate.infrastructure.operator.feedback_transactions import SqlOperatorFeedbackUnitOfWork
@@ -535,6 +542,10 @@ from studymate.presentation.operator.conversation_index_router import (
 from studymate.presentation.operator.disclosure_router import (
     OperatorDisclosureHttpServices,
     operator_disclosure_router,
+)
+from studymate.presentation.operator.email_history_router import (
+    OperatorEmailHistoryHttpServices,
+    operator_email_history_router,
 )
 from studymate.presentation.operator.feedback_router import (
     OperatorFeedbackHttpServices,
@@ -1689,6 +1700,15 @@ def _operator_routers(
                     SqlOperatorIdentityLinksUnitOfWork(sessions, record_operator_audit),
                     hasher,
                     FernetOperatorIdentityLinksCursorCodec.from_key(key),
+                )
+            )
+        ),
+        operator_email_history_router(
+            OperatorEmailHistoryHttpServices(
+                ReadOperatorEmailHistory(
+                    SqlOperatorEmailHistoryUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    FernetOperatorEmailHistoryCursorCodec.from_key(key),
                 )
             )
         ),
