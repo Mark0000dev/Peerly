@@ -118,7 +118,7 @@ jobs:
         with:
           node-version-file: frontend/.nvmrc
 
-      - name: Require already installed SDK36 and Build Tools36 with accepted license
+      - name: Require already installed SDK37.0 and Build Tools36 with accepted license
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tooling \

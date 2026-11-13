@@ -10,14 +10,14 @@ import { preflightSdk, verifyManifest, verifyPackagedConfig } from './native-and
 const installedLicenseText = 'Synthetic installed SDK terms; never compiler input';
 const acceptedSdkLicense = createHash('sha1').update(installedLicenseText).digest('hex');
 const installedMetadata = (path) =>
-  `<repository><license id="android-sdk-license" type="text">${installedLicenseText}</license><localPackage path="${path}"><uses-license ref="android-sdk-license"/></localPackage></repository>`;
+  `<repository><license id="android-sdk-license" type="text">${installedLicenseText}</license><localPackage path="${path}">${path.startsWith('platforms;') ? '<type-details><api-level>37.0</api-level></type-details>' : ''}<uses-license ref="android-sdk-license"/></localPackage></repository>`;
 function fixtureSdk() {
   const root = mkdtempSync(join(tmpdir(), 'peerly-sdk-static-'));
   const files = {
     'licenses/android-sdk-license': acceptedSdkLicense + '\n',
-    'platforms/android-36/android.jar': 'synthetic file, never a compiler input',
-    'platforms/android-36/source.properties': 'AndroidVersion.ApiLevel=36\n',
-    'platforms/android-36/package.xml': installedMetadata('platforms;android-36'),
+    'platforms/android-37.0/android.jar': 'synthetic file, never a compiler input',
+    'platforms/android-37.0/source.properties': 'AndroidVersion.ApiLevel=37.0\n',
+    'platforms/android-37.0/package.xml': installedMetadata('platforms;android-37.0'),
     'build-tools/36.0.0/source.properties': 'Pkg.Revision=36.0.0\n',
     'build-tools/36.0.0/package.xml': installedMetadata('build-tools;36.0.0'),
     'build-tools/36.0.0/aapt2': 'synthetic file, never executed',
@@ -102,13 +102,14 @@ test('requires preexisting exact license record and installed package/tool metad
   const root = fixtureSdk();
   try {
     assert.equal(preflightSdk(root).buildTools, '36.0.0');
+    assert.equal(preflightSdk(root).platform, 'android-37.0');
     writeFileSync(
       join(root, 'licenses/android-sdk-license'),
       '24333f8a63b6825ea9c5514f83c2829b004d1fee\n',
     );
     assert.throws(() => preflightSdk(root), /preflight rejected/);
     writeFileSync(join(root, 'licenses/android-sdk-license'), acceptedSdkLicense + '\n');
-    rmSync(join(root, 'platforms/android-36/android.jar'));
+    rmSync(join(root, 'platforms/android-37.0/android.jar'));
     assert.throws(() => preflightSdk(root));
   } finally {
     rmSync(root, { recursive: true, force: true });

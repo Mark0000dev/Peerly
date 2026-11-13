@@ -7,7 +7,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.13.0'
+        classpath 'com.android.tools.build:gradle:9.1.1'
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
@@ -30,9 +30,17 @@ task clean(type: Delete) {
 // Use only the explicitly preflighted build-tools package for every Android module.
 subprojects { nativeProject ->
     nativeProject.plugins.withId('com.android.application') {
-        nativeProject.android.buildToolsVersion = '36.0.0'
+        nativeProject.androidComponents.finalizeDsl { androidDsl ->
+            androidDsl.compileSdk = 37
+            androidDsl.compileSdkMinor = 0
+            androidDsl.buildToolsVersion = '36.0.0'
+        }
     }
     nativeProject.plugins.withId('com.android.library') {
-        nativeProject.android.buildToolsVersion = '36.0.0'
+        nativeProject.androidComponents.finalizeDsl { androidDsl ->
+            androidDsl.compileSdk = 37
+            androidDsl.compileSdkMinor = 0
+            androidDsl.buildToolsVersion = '36.0.0'
+        }
     }
 }

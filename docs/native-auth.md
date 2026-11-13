@@ -161,8 +161,12 @@ Source checks, synthetic tool fixtures and an unexecuted workflow are not compil
 
 ### Android
 
-Required: already-installed Android SDK36, Build Tools36.0.0 and Java21. `ANDROID_HOME`
-must name that SDK; `ANDROID_SDK_ROOT`, when present, must agree. The compile helper
+Required: already-installed Android platform `platforms;android-37.0`, Build Tools36.0.0 and Java21. AGP9.1.1 and checksum-pinned Gradle9.3.1 compile API37.0
+while targetSdk36/minSdk24 remain unchanged. `android-37` aliases or SDK metadata
+rewrites are not supported. A runner missing API37.0 or its exact accepted license
+fails before Gradle; there is no automatic package installation.
+
+`ANDROID_HOME` must name that SDK; `ANDROID_SDK_ROOT`, when present, must agree. The compile helper
 uses `JAVA_HOME_21_X64` for the installed Java21 directory and rejects machine-local
 `android/local.properties` so SDK selection remains explicit.
 

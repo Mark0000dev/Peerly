@@ -79,9 +79,7 @@ def parse_metadata(value: bytes) -> ET.Element:
         content = value.decode("utf-8-sig")
     except UnicodeError:
         raise SDKPreflightError("metadata_not_utf8") from None
-    if "\x00" in content or any(
-        token in content.upper() for token in ("<!DOCTYPE", "<!ENTITY")
-    ):
+    if "\x00" in content or any(token in content.upper() for token in ("<!DOCTYPE", "<!ENTITY")):
         raise SDKPreflightError("xml_declarations_forbidden")
 
     def reject_declaration(*_arguments: object) -> NoReturn:
@@ -132,9 +130,17 @@ def license_report(root: Path, identifier: str, content: str) -> LicenseReport:
     )
 
 
-def package_report(
-    root: Path, package: str, directory: str, properties: str
-) -> PackageReport:
+def check_platform_api(package: str, installed: ET.Element) -> None:
+    if package == "platforms;android-37.0":
+        levels = [node.text for node in installed.iter() if local_name(node) == "api-level"]
+        previews = [
+            node.text for node in installed.iter() if local_name(node) == "codename" and node.text
+        ]
+        if levels != ["37.0"] or previews:
+            raise SDKPreflightError("installed_platform_api_mismatch")
+
+
+def package_report(root: Path, package: str, directory: str, properties: str) -> PackageReport:
     metadata_hash: str | None = None
     properties_hash: str | None = None
     reports: list[LicenseReport] = []
@@ -147,11 +153,8 @@ def package_report(
         packages = [node for node in tree.iter() if local_name(node) == "localPackage"]
         if len(packages) != 1 or packages[0].get("path") != package:
             raise SDKPreflightError("installed_package_identity_mismatch")
-        refs = [
-            node.get("ref", "")
-            for node in packages[0]
-            if local_name(node) == "uses-license"
-        ]
+        check_platform_api(package, packages[0])
+        refs = [node.get("ref", "") for node in packages[0] if local_name(node) == "uses-license"]
         safe_refs = tuple(ref for ref in refs if LICENSE_ID.fullmatch(ref))
         if not refs or len(set(refs)) != len(refs):
             raise SDKPreflightError("missing_or_duplicate_license_refs")
@@ -197,9 +200,9 @@ def inspect_sdk(path: Path) -> SDKReport:
     packages = (
         package_report(
             root,
-            "platforms;android-36",
-            "platforms/android-36",
-            r"^AndroidVersion\.ApiLevel\s*=\s*36\s*$",
+            "platforms;android-37.0",
+            "platforms/android-37.0",
+            r"^AndroidVersion\.ApiLevel\s*=\s*37\.0\s*$",
         ),
         package_report(
             root,
@@ -210,25 +213,19 @@ def inspect_sdk(path: Path) -> SDKReport:
     )
     errors: list[str] = []
     try:
-        jar = root / "platforms/android-36/android.jar"
+        jar = root / "platforms/android-37.0/android.jar"
         if not jar.resolve().is_relative_to(root) or jar.stat().st_size == 0:
             raise SDKPreflightError("missing_or_empty_platform_jar")
         for tool in ("aapt2", "apksigner"):
             target = root / "build-tools/36.0.0" / tool
-            if not target.resolve().is_relative_to(root) or not os.access(
-                target, os.X_OK
-            ):
+            if not target.resolve().is_relative_to(root) or not os.access(target, os.X_OK):
                 raise SDKPreflightError("missing_or_nonexecutable_build_tool")
     except OSError:
         errors.append("missing_or_unreadable_platform_jar")
     except SDKPreflightError as failure:
         errors.append(str(failure))
-    accepted = not errors and all(
-        not report.errors and report.licenses for report in packages
-    )
-    return SDKReport(
-        str(root), "android-36", "36.0.0", packages, accepted, tuple(errors)
-    )
+    accepted = not errors and all(not report.errors and report.licenses for report in packages)
+    return SDKReport(str(root), "android-37.0", "36.0.0", packages, accepted, tuple(errors))
 
 
 def main() -> int:

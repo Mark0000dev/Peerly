@@ -41,7 +41,7 @@ export function preflightSdk(sdk, diagnosticDirectory) {
   );
   assert.equal(report.accepted, true);
   assert.equal(report.root, resolve(sdk));
-  assert.equal(report.platform, 'android-36');
+  assert.equal(report.platform, 'android-37.0');
   assert.equal(report.build_tools, '36.0.0');
   assert.equal(report.packages.length, 2);
   return {

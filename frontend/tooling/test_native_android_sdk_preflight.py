@@ -25,19 +25,16 @@ class InstalledLicenseTests(unittest.TestCase):
 
     def make_sdk(self, platform_text: str, tools_text: str | None = None) -> None:
         texts = (platform_text, platform_text if tools_text is None else tools_text)
-        hashes = {
-            hashlib.sha1(text.encode(), usedforsecurity=False).hexdigest()
-            for text in texts
-        }
+        hashes = {hashlib.sha1(text.encode(), usedforsecurity=False).hexdigest() for text in texts}
         record = self.root / "licenses/android-sdk-license"
         record.parent.mkdir(parents=True)
         record.write_text("\n" + "\n".join(sorted(hashes)) + "\n")
         for directory, package, terms, properties in [
             (
-                "platforms/android-36",
-                "platforms;android-36",
+                "platforms/android-37.0",
+                "platforms;android-37.0",
                 texts[0],
-                "AndroidVersion.ApiLevel=36\n",
+                "AndroidVersion.ApiLevel=37.0\n",
             ),
             (
                 "build-tools/36.0.0",
@@ -53,16 +50,62 @@ class InstalledLicenseTests(unittest.TestCase):
                 metadata, "license", {"id": "android-sdk-license", "type": "text"}
             ).text = terms
             local = ET.SubElement(metadata, "localPackage", {"path": package})
+            if package.startswith("platforms;"):
+                details = ET.SubElement(local, "type-details")
+                ET.SubElement(details, "api-level").text = "37.0"
             ET.SubElement(local, "uses-license", {"ref": "android-sdk-license"})
             ET.ElementTree(metadata).write(target / "package.xml", encoding="utf-8")
             (target / "source.properties").write_text(properties)
-        (self.root / "platforms/android-36/android.jar").write_bytes(
-            b"synthetic, never compiled"
-        )
+        (self.root / "platforms/android-37.0/android.jar").write_bytes(b"synthetic, never compiled")
         for name in ("aapt2", "apksigner"):
             path = self.root / "build-tools/36.0.0" / name
             path.write_text("synthetic, never executed")
             path.chmod(448)
+
+    def test_platform_identity_api_minor_and_properties_fail_closed(self) -> None:
+        self.make_sdk("Installed terms")
+        path = self.root / "platforms/android-37.0/package.xml"
+        original = path.read_text()
+        for replacement in (
+            original.replace("platforms;android-37.0", "platforms;android-37"),
+            original.replace("<api-level>37.0</api-level>", "<api-level>37.1</api-level>"),
+            original.replace("<api-level>37.0</api-level>", "<api-level>36</api-level>"),
+            original.replace("</type-details>", "<codename>PREVIEW</codename></type-details>"),
+            original.replace("<api-level>37.0</api-level>", ""),
+        ):
+            path.write_text(replacement)
+            if inspect_sdk(self.root).accepted:
+                raise AssertionError("Wrong or preview platform metadata was accepted")
+        path.write_text(original)
+        properties = self.root / "platforms/android-37.0/source.properties"
+        for value in ("37", "36", "37.1"):
+            properties.write_text("AndroidVersion.ApiLevel=" + value + "\n")
+            if inspect_sdk(self.root).accepted:
+                raise AssertionError("Wrong installed platform properties were accepted")
+
+    def test_inspection_does_not_change_package_or_acceptance_files(self) -> None:
+        self.make_sdk("Installed terms")
+        before = {
+            str(path.relative_to(self.root)): path.read_bytes()
+            for path in self.root.rglob("*")
+            if path.is_file()
+        }
+        if not inspect_sdk(self.root).accepted:
+            raise AssertionError("Valid synthetic SDK was rejected")
+        after = {
+            str(path.relative_to(self.root)): path.read_bytes()
+            for path in self.root.rglob("*")
+            if path.is_file()
+        }
+        if before != after:
+            raise AssertionError("Read-only inspection modified installed SDK files")
+
+    def test_sdk36_only_cannot_satisfy_api37_preflight(self) -> None:
+        self.make_sdk("Installed terms")
+        platform = self.root / "platforms/android-37.0"
+        platform.rename(self.root / "platforms/android-36")
+        if inspect_sdk(self.root).accepted:
+            raise AssertionError("SDK36-only installation was accepted")
 
     def test_old_installed_accepted_terms_do_not_require_online_new_terms(self) -> None:
         self.make_sdk("Synthetic old installed terms")
@@ -71,9 +114,7 @@ class InstalledLicenseTests(unittest.TestCase):
             raise AssertionError("SDK provenance expectation failed")
         if not all(package.metadata_sha256 for package in report.packages):
             raise AssertionError("SDK provenance expectation failed")
-        if not all(
-            check.accepted for package in report.packages for check in package.licenses
-        ):
+        if not all(check.accepted for package in report.packages for check in package.licenses):
             raise AssertionError("SDK provenance expectation failed")
 
     def test_new_installed_accepted_terms_are_checked_the_same_way(self) -> None:
@@ -87,8 +128,7 @@ class InstalledLicenseTests(unittest.TestCase):
             raise AssertionError("SDK provenance expectation failed")
         path = self.root / "licenses/android-sdk-license"
         path.write_text(
-            hashlib.sha1(b"Old platform terms", usedforsecurity=False).hexdigest()
-            + "\n"
+            hashlib.sha1(b"Old platform terms", usedforsecurity=False).hexdigest() + "\n"
         )
         report = inspect_sdk(self.root)
         if report.accepted:
@@ -110,30 +150,24 @@ class InstalledLicenseTests(unittest.TestCase):
         self.make_sdk(" \nExact & decoded terms\n ")
         if not inspect_sdk(self.root).accepted:
             raise AssertionError("SDK provenance expectation failed")
-        digest = hashlib.sha1(
-            b"Exact & decoded terms", usedforsecurity=False
-        ).hexdigest()
+        digest = hashlib.sha1(b"Exact & decoded terms", usedforsecurity=False).hexdigest()
         (self.root / "licenses/android-sdk-license").write_text(digest + "\n")
         if inspect_sdk(self.root).accepted:
             raise AssertionError("SDK provenance expectation failed")
-        exact = hashlib.sha1(
-            b" \nExact & decoded terms\n ", usedforsecurity=False
-        ).hexdigest()
+        exact = hashlib.sha1(b" \nExact & decoded terms\n ", usedforsecurity=False).hexdigest()
         for record in [" " + exact + "\n", exact + "\u2028not-a-java-line"]:
             (self.root / "licenses/android-sdk-license").write_text(record)
             if inspect_sdk(self.root).accepted:
-                raise AssertionError(
-                    "Whitespace or Unicode separator bypassed exact record match"
-                )
+                raise AssertionError("Whitespace or Unicode separator bypassed exact record match")
 
     def test_missing_license_reference_or_text_fails_closed(self) -> None:
         self.make_sdk("Installed terms")
-        path = self.root / "platforms/android-36/package.xml"
+        path = self.root / "platforms/android-37.0/package.xml"
         original = path.read_bytes()
         for replacement in [
-            b'<repository><localPackage path="platforms;android-36"/></repository>',
+            b'<repository><localPackage path="platforms;android-37.0"/></repository>',
             (
-                b'<repository><localPackage path="platforms;android-36">'
+                b'<repository><localPackage path="platforms;android-37.0">'
                 b'<uses-license ref="unknown"/></localPackage></repository>'
             ),
         ]:
@@ -159,18 +193,14 @@ class InstalledLicenseTests(unittest.TestCase):
                     parse_metadata(data)
                 except SDKPreflightError as error:
                     if not str(error):
-                        raise AssertionError(
-                            "Expected a fixed rejection code"
-                        ) from error
+                        raise AssertionError("Expected a fixed rejection code") from error
                 else:
                     raise AssertionError("Malformed/declarative XML was accepted")
 
     def test_safe_diagnostic_contains_hashes_not_license_contents_or_urls(self) -> None:
         terms = "SYNTHETIC_LICENSE_CANARY https://never-output.invalid/body"
         self.make_sdk(terms)
-        (self.root / "licenses/android-sdk-license").write_text(
-            "SYNTHETIC_RECORD_CANARY\n"
-        )
+        (self.root / "licenses/android-sdk-license").write_text("SYNTHETIC_RECORD_CANARY\n")
         report = inspect_sdk(self.root)
         text = json.dumps(asdict(report))
         if report.accepted:
@@ -189,7 +219,7 @@ class InstalledLicenseTests(unittest.TestCase):
     ) -> None:
         self.make_sdk("Installed terms")
         before = inspect_sdk(self.root)
-        path = self.root / "platforms/android-36/package.xml"
+        path = self.root / "platforms/android-37.0/package.xml"
         path.write_text(path.read_text() + "\n")
         after = inspect_sdk(self.root)
         if not after.accepted:
@@ -202,7 +232,7 @@ class InstalledLicenseTests(unittest.TestCase):
 
     def test_namespaced_installed_package_metadata(self) -> None:
         self.make_sdk("Installed namespaced terms")
-        for package in ("platforms/android-36", "build-tools/36.0.0"):
+        for package in ("platforms/android-37.0", "build-tools/36.0.0"):
             path = self.root / package / "package.xml"
             path.write_text(
                 path.read_text().replace(
@@ -214,15 +244,13 @@ class InstalledLicenseTests(unittest.TestCase):
 
     def test_file_bounds_and_missing_tools_fail_closed(self) -> None:
         self.make_sdk("Installed terms")
-        path = self.root / "platforms/android-36/package.xml"
+        path = self.root / "platforms/android-37.0/package.xml"
         original = path.read_bytes()
         path.write_bytes(b"x" * (MAX_XML + 1))
         if inspect_sdk(self.root).accepted:
             raise AssertionError("Oversized metadata was accepted")
         path.write_bytes(original)
-        (self.root / "licenses/android-sdk-license").write_bytes(
-            b"x" * (MAX_RECORD + 1)
-        )
+        (self.root / "licenses/android-sdk-license").write_bytes(b"x" * (MAX_RECORD + 1))
         if inspect_sdk(self.root).accepted:
             raise AssertionError("Oversized record was accepted")
         (self.root / "build-tools/36.0.0/aapt2").unlink()
