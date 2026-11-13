@@ -20,7 +20,7 @@ from studymate.infrastructure.persistence.registration_models import (
 )
 
 
-def _context(
+def context_from_record(
     record: RegistrationContextRecord,
     terms_version: str,
     terms_published: datetime,
@@ -69,7 +69,9 @@ async def read_context(
     if row is None:
         return None
     record, terms_version, terms_published, privacy_version, privacy_published = row
-    return _context(record, terms_version, terms_published, privacy_version, privacy_published)
+    return context_from_record(
+        record, terms_version, terms_published, privacy_version, privacy_published
+    )
 
 
 async def read_receipt(session: AsyncSession, account_id: UUID) -> RegistrationReceipt | None:
@@ -97,10 +99,23 @@ async def read_receipt(session: AsyncSession, account_id: UUID) -> RegistrationR
     if row is None:
         return None
     receipt, context, terms_version, terms_published, privacy_version, privacy_published = row
+    return receipt_from_records(
+        receipt,
+        context_from_record(
+            context, terms_version, terms_published, privacy_version, privacy_published
+        ),
+    )
+
+
+def receipt_from_records(
+    receipt: RegistrationReceiptRecord,
+    context: RegistrationContext,
+) -> RegistrationReceipt:
+    """Map exact recorded notice/context/policy versions, never current policy or consent."""
     return RegistrationReceipt(
         receipt.id,
         receipt.account_id,
-        _context(context, terms_version, terms_published, privacy_version, privacy_published),
+        context,
         receipt.registered_at,
         receipt.intent_key,
     )

@@ -8,7 +8,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -38,14 +38,21 @@ from studymate.domain.ai.tasks import (
 )
 from studymate.domain.media import MediaObjectKind, MediaObjectRef
 from studymate.domain.study_context import CustomSubjectRef
+from studymate.infrastructure.ai.admission_observation import observe_admission
+from studymate.infrastructure.ai.admission_slot import (
+    AdmissionSlotLock,
+    acquire_admission_slot,
+    ensure_admission_slot,
+)
+from studymate.infrastructure.ai.admission_writes import insert_admission
 from studymate.infrastructure.ai.codec import RESULT_CODEC, TASK_CODEC
 from studymate.infrastructure.ai.models import (
-    AiBudgetRecord,
     AiIntentRecord,
     AiJobRecord,
     AiSlotRecord,
 )
 from studymate.infrastructure.ai.runtime.availability import require_runtime_ready
+from studymate.infrastructure.ai.student_identity import lock_student_identity
 from studymate.infrastructure.ai.transaction_diagnostics import (
     AiTransactionDiagnostic,
     TransactionOperation,
@@ -144,14 +151,20 @@ class SqlAiTransaction(SqlIdentityTransaction):
         default_factory=TransactionProgress, kw_only=True, repr=False, compare=False
     )
 
+    admission_slot_lock: AdmissionSlotLock = field(
+        default_factory=AdmissionSlotLock, init=False, repr=False, compare=False
+    )
+
     async def lock_identity(self, secret_digest: bytes) -> IdentitySnapshot | None:
         self.diagnostic_progress.operation = TransactionOperation.IDENTITY
-        return await SqlIdentityTransaction.lock_identity(self, secret_digest)
+        if self.shared_identity_locks:
+            return await SqlIdentityTransaction.lock_identity(self, secret_digest)
+        return await lock_student_identity(self.session, secret_digest)
 
     async def runtime_versions(self, at: datetime) -> Versions:
         self.diagnostic_progress.operation = TransactionOperation.RUNTIME
         del at  # Re-read DB clock after acquiring the bounded canonical lock.
-        slot = await lock_slot(self.session)
+        slot = await acquire_admission_slot(self.session, self.admission_slot_lock)
         return require_runtime_ready(slot, await self.now())
 
     async def prepare(self, actor_id: UUID, submission: StudentSubmission) -> AiTask:
@@ -240,27 +253,18 @@ class SqlAiTransaction(SqlIdentityTransaction):
             intent.digest,
             intent.versions,
         )
-        slot = await lock_slot(self.session)
-        at = await self.now()
+        del at  # Sample a real fresh DB clock only after the actual slot lock is held.
+        await ensure_admission_slot(self.session, self.admission_slot_lock)
+        facts = await observe_admission(self.session, intent)
+        slot, at = facts.slot, facts.at
         require_runtime_ready(slot, at, versions)
-        prior = await self.replay(actor_id, kind_of(task), key, digest)
-        self.diagnostic_progress.operation = TransactionOperation.ADMIT
-        if prior is not None:
-            return prior
-        matching = (
-            await self.session.scalars(
-                select(AiJobRecord)
-                .where(
-                    AiJobRecord.actor_id == actor_id,
-                    AiJobRecord.kind == kind_of(task).value,
-                    AiJobRecord.digest == digest,
-                    AiJobRecord.state.in_(("queued", "running")),
-                    AiJobRecord.deadline > at,
-                )
-                .order_by(AiJobRecord.created_at)
-                .limit(1)
-            )
-        ).one_or_none()
+        if facts.prior_digest is not None:
+            if not hmac.compare_digest(facts.prior_digest, digest):
+                raise IdempotencyConflictError
+            if facts.prior_job is None:
+                raise AiJobNotFoundError
+            return job_value(facts.prior_job)
+        matching = facts.matching
         if matching is not None:
             self.session.add(
                 AiIntentRecord(
@@ -274,35 +278,18 @@ class SqlAiTransaction(SqlIdentityTransaction):
             return job_value(matching)
         if slot.circuit is not None or (slot.paused_until is not None and slot.paused_until > at):
             raise AiUnavailableError
-        expired = tuple(
-            await self.session.scalars(
-                update(AiJobRecord)
-                .where(AiJobRecord.state == "queued", AiJobRecord.deadline <= at)
-                .values(state="expired")
-                .returning(AiJobRecord)
-            )
-        )
-        for record in expired:
-            await terminal_event(self.session, record, at)
-        # One snapshot under the existing slot lock; actor scope applies only to
-        # outstanding work, while global capacity and reserve include every actor.
-        queued, interactive, outstanding = (
-            await self.session.execute(
-                select(
-                    func.count().filter(AiJobRecord.state == "queued"),
-                    func.count().filter(
-                        AiJobRecord.state == "queued",
-                        AiJobRecord.kind != AiKind.TRIAGE_REPORT.value,
-                    ),
-                    func.count().filter(
-                        AiJobRecord.actor_id == actor_id,
-                        AiJobRecord.state.in_(("queued", "running")),
-                    ),
+        if facts.expired:
+            expired = tuple(
+                await self.session.scalars(
+                    update(AiJobRecord)
+                    .where(AiJobRecord.state == "queued", AiJobRecord.deadline <= at)
+                    .values(state="expired")
+                    .returning(AiJobRecord)
                 )
-                .select_from(AiJobRecord)
-                .where(AiJobRecord.state.in_(("queued", "running")))
             )
-        ).one()
+            for record in expired:
+                await terminal_event(self.session, record, at)
+        queued, interactive, outstanding = facts.queued, facts.interactive, facts.outstanding
         internal = kind_of(task) == AiKind.TRIAGE_REPORT
         if queued >= self.policy.queue_limit or (
             not internal and interactive >= self.policy.queue_limit - self.policy.internal_reserve
@@ -310,24 +297,18 @@ class SqlAiTransaction(SqlIdentityTransaction):
             raise AiUnavailableError
         if outstanding >= self.policy.student_outstanding:
             raise AiQuotaError
-        budget = await self.session.get(AiBudgetRecord, actor_id)
-        if budget is None:
-            budget = AiBudgetRecord(
-                actor_id=actor_id,
-                tokens=float(self.policy.bucket_capacity),
-                refilled_at=at,
-                last_served=0,
+        budget = facts.budget
+        tokens = (
+            float(self.policy.bucket_capacity)
+            if budget is None
+            else min(
+                float(self.policy.bucket_capacity),
+                budget.tokens
+                + max(0.0, (at - budget.refilled_at).total_seconds()) / self.policy.refill_seconds,
             )
-            self.session.add(budget)
-        tokens = min(
-            float(self.policy.bucket_capacity),
-            budget.tokens
-            + max(0.0, (at - budget.refilled_at).total_seconds()) / self.policy.refill_seconds,
         )
         if tokens < 1:
             raise AiQuotaError
-        budget.tokens = tokens - 1
-        budget.refilled_at = at
         record = AiJobRecord(
             id=uuid4(),
             actor_id=actor_id,
@@ -354,13 +335,7 @@ class SqlAiTransaction(SqlIdentityTransaction):
             record.action_id = origin.action_id
             record.trace_id = origin.trace_id
             record.span_id = origin.span_id
-        self.session.add(record)
-        await self.session.flush()
-        self.session.add(
-            AiIntentRecord(
-                actor_id=actor_id, kind=record.kind, key=key.value, job_id=record.id, digest=digest
-            )
-        )
+        await insert_admission(self.session, record, key, tokens - 1, budget is not None)
         return job_value(record)
 
     async def owned(self, actor_id: UUID, job_id: UUID, *, cancel: bool = False) -> AiJob:

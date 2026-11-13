@@ -7,7 +7,8 @@ from sqlalchemy import event, select
 from sqlalchemy.engine import ExecutionContext
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from sqlalchemy.sql.elements import FunctionFilter
-from sqlalchemy.sql.selectable import Select
+from sqlalchemy.sql.selectable import CTE, Select
+from sqlalchemy.sql.visitors import iterate
 
 from studymate.application.ai.policy import AdmissionPolicy
 from studymate.application.ai.ports import AiQuotaError, AiUnavailableError
@@ -100,8 +101,12 @@ class AggregateQueries:
 
     def before(self, *, context: ExecutionContext, **_ignored: object) -> None:
         compiled = context.compiled.statement if context.compiled is not None else None
-        if isinstance(compiled, Select) and any(
-            isinstance(column, FunctionFilter) for column in compiled.selected_columns
+        if isinstance(compiled, Select) and (
+            any(isinstance(column, FunctionFilter) for column in compiled.selected_columns)
+            or any(
+                isinstance(node, CTE) and node.name == "student_admission_clock"
+                for node in iterate(compiled)
+            )
         ):
             self.count += 1
 
