@@ -1654,6 +1654,12 @@ export interface Api {
       readonly stored_version: number;
       readonly viewer_id: string;
     };
+    readonly OperatorSessionHistoryResponse: {
+      readonly account_id: string;
+      readonly as_of: string;
+      readonly next_cursor: string | null;
+      readonly sessions: readonly Api['schemas']['SessionHistoryEntryResponse'][];
+    };
     readonly OperatorSourceKind:
       | 'account_lifecycle_revision'
       | 'account'
@@ -2286,6 +2292,13 @@ export interface Api {
       readonly person_id: string;
       readonly preview_id: string;
       readonly text: string;
+    };
+    readonly SessionHistoryEntryResponse: {
+      readonly account_id: string;
+      readonly expires_at: string;
+      readonly id: string;
+      readonly issued_at: string;
+      readonly revoked_at: string | null;
     };
     readonly ShareCurrentGoalBody: {
       readonly expected_context_version: number;
@@ -4595,6 +4608,24 @@ export interface Api {
         readonly body: undefined;
         readonly responses: {
           readonly '200': Api['schemas']['OperatorBlockHistoryResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '404': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/operator/accounts/{account_id}/session-history': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'path:account_id': string;
+          readonly 'query:cursor'?: string | null;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['OperatorSessionHistoryResponse'];
           readonly '401': Api['schemas']['ProblemResponse'];
           readonly '403': Api['schemas']['ProblemResponse'];
           readonly '404': Api['schemas']['ProblemResponse'];

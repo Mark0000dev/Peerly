@@ -159,6 +159,7 @@ from studymate.application.operator.report_triage import (
     ReadReportTriageContext,
 )
 from studymate.application.operator.request_disclosures import ReadOperatorRequestDisclosures
+from studymate.application.operator.session_history import ReadOperatorSessionHistory
 from studymate.application.operator.timeline import (
     ReadOperatorAudit,
     ReadOperatorEvent,
@@ -390,6 +391,12 @@ from studymate.infrastructure.operator.report_triage_transactions import (
 )
 from studymate.infrastructure.operator.request_cursors import FernetOperatorRequestCursorCodec
 from studymate.infrastructure.operator.request_transactions import SqlOperatorRequestUnitOfWork
+from studymate.infrastructure.operator.session_history_cursors import (
+    FernetOperatorSessionHistoryCursorCodec,
+)
+from studymate.infrastructure.operator.session_history_transactions import (
+    SqlOperatorSessionHistoryUnitOfWork,
+)
 from studymate.infrastructure.operator.timeline_cursors import FernetOperatorEventCursorCodec
 from studymate.infrastructure.operator.timeline_transactions import SqlOperatorTimelineUnitOfWork
 from studymate.infrastructure.operator.transactions import SqlOperatorUnitOfWork
@@ -609,6 +616,10 @@ from studymate.presentation.operator.request_router import (
     operator_request_router,
 )
 from studymate.presentation.operator.router import OperatorHttpServices, operator_router
+from studymate.presentation.operator.session_history_router import (
+    OperatorSessionHistoryHttpServices,
+    operator_session_history_router,
+)
 from studymate.presentation.operator.timeline_router import (
     OperatorTimelineHttpServices,
     operator_timeline_router,
@@ -1700,6 +1711,15 @@ def _operator_routers(
                     SqlOperatorIdentityLinksUnitOfWork(sessions, record_operator_audit),
                     hasher,
                     FernetOperatorIdentityLinksCursorCodec.from_key(key),
+                )
+            )
+        ),
+        operator_session_history_router(
+            OperatorSessionHistoryHttpServices(
+                ReadOperatorSessionHistory(
+                    SqlOperatorSessionHistoryUnitOfWork(sessions, record_operator_audit),
+                    hasher,
+                    FernetOperatorSessionHistoryCursorCodec.from_key(key),
                 )
             )
         ),

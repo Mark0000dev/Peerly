@@ -119,6 +119,20 @@ an historical status snapshot. Optional source relationships are returned only
 when actually stored. A delivered status means SMTP acceptance, never proof of
 inbox delivery. Origin request/action/trace/span IDs retain their stored nulls.
 
+## Operator session history
+
+`GET /api/v1/operator/accounts/{account_id}/session-history` exposes retained
+session IDs, account IDs and issued/expires/revoked timestamps through current
+operator authority with atomic `READ_ACCOUNT` auditing. Deleted/banned target
+accounts remain inspectable; missing accounts return an audited404. No token,
+secret digest or inferred active-session authority is returned, and no session is
+created or revoked by inspection.
+
+Pages contain at most50 sessions ordered by issued_at/id descending. Encrypted
+cursors bind requester/grant, target and issuance-time boundary. Later sessions
+are excluded from continuation; revocation metadata remains current, rather than
+a historical snapshot. Logout/ban/account policies still determine actual access.
+
 ## SSE
 
 One authenticated change stream carries bounded source/version hints, reset and

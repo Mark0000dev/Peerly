@@ -5305,6 +5305,31 @@
         "title": "OperatorRetainedDisclosureResponse",
         "type": "object"
       },
+      "OperatorSessionHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": { "format": "uuid", "title": "Account Id", "type": "string" },
+          "as_of": {
+            "description": "Upper issuance boundary only; stored revocation timestamps are freshly read. Timestamps are not a statement of effective account/session authorization.",
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "next_cursor": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Next Cursor"
+          },
+          "sessions": {
+            "items": { "$ref": "#/components/schemas/SessionHistoryEntryResponse" },
+            "maxItems": 50,
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": ["account_id", "sessions", "next_cursor", "as_of"],
+        "title": "OperatorSessionHistoryResponse",
+        "type": "object"
+      },
       "OperatorSourceKind": {
         "enum": [
           "account_lifecycle_revision",
@@ -7117,6 +7142,22 @@
         },
         "required": ["person_id", "preview_id", "text"],
         "title": "SendRequestBody",
+        "type": "object"
+      },
+      "SessionHistoryEntryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": { "format": "uuid", "title": "Account Id", "type": "string" },
+          "expires_at": { "format": "date-time", "title": "Expires At", "type": "string" },
+          "id": { "format": "uuid", "title": "Id", "type": "string" },
+          "issued_at": { "format": "date-time", "title": "Issued At", "type": "string" },
+          "revoked_at": {
+            "anyOf": [{ "format": "date-time", "type": "string" }, { "type": "null" }],
+            "title": "Revoked At"
+          }
+        },
+        "required": ["id", "account_id", "issued_at", "expires_at", "revoked_at"],
+        "title": "SessionHistoryEntryResponse",
         "type": "object"
       },
       "ShareCurrentGoalBody": {
@@ -17497,6 +17538,80 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/OperatorBlockHistoryResponse" }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [{ "SessionCookie": [] }],
+        "summary": "History",
+        "tags": ["operator"]
+      }
+    },
+    "/api/v1/operator/accounts/{account_id}/session-history": {
+      "get": {
+        "operationId": "history_api_v1_operator_accounts__account_id__session_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": { "format": "uuid", "title": "Account Id", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "maxLength": 1024, "minLength": 1, "type": "string" },
+                { "type": "null" }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OperatorSessionHistoryResponse" }
               }
             },
             "description": "Successful Response"
