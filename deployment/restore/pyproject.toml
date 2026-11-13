@@ -9,3 +9,6 @@ extend = "../../backend/pyproject.toml"
 "test_recovery_checks.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
 "test_recovery_and.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
 "test_recovery_http.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
+"test_backup_install.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
+"test_backup_status.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.
+"test_backup_keys.py" = ["S101"] # Synthetic pytest assertions, never runtime validation.

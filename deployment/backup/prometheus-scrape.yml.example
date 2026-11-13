@@ -1,0 +1,16 @@
+# Append to existing scrape_configs; preserve all other projects/jobs/routing.
+- job_name: peerly-backup
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  honor_labels: false
+  scheme: https
+  static_configs:
+    - targets: ['@@STAGING_OBSERVABILITY_TLS_TARGET@@']
+      labels:
+        deployment_environment_name: '@@PEERLY_ENVIRONMENT@@'
+  metrics_path: /peerly-observe/metrics/backup
+  tls_config:
+    ca_file: '@@MONITORING_CA_FILE@@'
+  basic_auth:
+    username: peerly-read
+    password_file: '@@SCRAPE_READ_PASSWORD_FILE@@'

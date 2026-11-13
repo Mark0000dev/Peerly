@@ -1,6 +1,5 @@
-# PROPOSAL ONLY. Parent approves RPO/window and installs/enables separately.
 [Unit]
-Description=Proposed daily Peerly encrypted business backup
+Description=Daily Peerly encrypted PostgreSQL and media backup
 
 [Timer]
 OnCalendar=*-*-* 02:00:00 UTC

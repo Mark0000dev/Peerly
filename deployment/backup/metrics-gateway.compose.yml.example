@@ -1,0 +1,7 @@
+# Merge only after the existing read-gateway overlay; no new service or host port.
+services:
+  read-gateway:
+    volumes:
+      - /var/lib/peerly-backup-metrics:/etc/nginx/backup-metrics:ro
+# Separately merge metrics-gateway.location.conf inside the existing server block.
+# Never mount backup state, source credentials, keys or payloads into nginx.

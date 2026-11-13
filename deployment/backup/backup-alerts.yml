@@ -1,0 +1,32 @@
+groups:
+- name: peerly-business-backup
+  rules:
+  - alert: PeerlyBackupMetricsUnavailable
+    expr: up{job="peerly-backup"} == 0 or absent(up{job="peerly-backup"})
+    for: 2m
+    labels: {severity: critical, owner: peerly-team}
+    annotations:
+      summary: Peerly backup status metrics are unavailable
+      description: Check the protected metadata file, gateway reader route and scrape configuration. Missing telemetry is not a successful backup.
+  - alert: PeerlyBackupStatusInvalid
+    expr: peerly_backup_status_valid{job="peerly-backup"} == 0 or peerly_backup_unit_result_known{job="peerly-backup"} == 0 or absent(peerly_backup_status_valid{job="peerly-backup"}) or absent(peerly_backup_unit_result_known{job="peerly-backup"})
+    for: 2m
+    labels: {severity: critical, owner: peerly-team}
+    annotations:
+      summary: Peerly backup state is missing, invalid or not yet observed
+      description: Inspect protected local receipts and systemd status. Do not manufacture a verified timestamp or clear quarantined runs.
+  - alert: PeerlyBackupFailed
+    expr: (peerly_backup_unit_success{job="peerly-backup"} == 0 and on(job,instance) peerly_backup_unit_result_known{job="peerly-backup"} == 1) or (peerly_backup_last_attempt_success{job="peerly-backup"} == 0 and on(job,instance) peerly_backup_status_valid{job="peerly-backup"} == 1)
+    for: 2m
+    labels: {severity: critical, owner: peerly-team}
+    annotations:
+      summary: Peerly encrypted backup attempt failed
+      description: Read the closed failure status and bounded private diagnostics. An upload alone is not verified readback. Retain owned failure artifacts for reconciliation.
+  - alert: PeerlyBackupVerifiedGenerationOld
+    # Example operational freshness policy, NOT a measured RPO/RTO or approved SLO.
+    expr: time() - peerly_backup_last_verified_timestamp_seconds{job="peerly-backup"} > 108000 or peerly_backup_last_verified_timestamp_seconds{job="peerly-backup"} == 0
+    for: 5m
+    labels: {severity: critical, owner: peerly-team}
+    annotations:
+      summary: Peerly has no recently verified backup generation
+      description: The example threshold is 30 hours for the daily timer. Select the policy explicitly before activation and verify actual capture/readback/recovery independently.

@@ -1,7 +1,8 @@
 [Unit]
-Description=Peerly approved PG/media encrypted backup and bounded readback
+Description=Peerly PostgreSQL/media encrypted backup with streamed readback
 After=network-online.target
 Wants=network-online.target
+OnFailure=peerly-backup-failed.service
 
 [Service]
 Type=oneshot
@@ -9,20 +10,26 @@ User=peerly-backup
 Group=peerly-backup
 StateDirectory=peerly-backup
 StateDirectoryMode=0700
-WorkingDirectory=/usr/local/lib/peerly-backup
-Environment=PYTHONPATH=/usr/local/lib/peerly-backup
+WorkingDirectory=@@BACKUP_RELEASE@@
+Environment=PYTHONPATH=@@BACKUP_RELEASE@@
+Environment=PEERLY_BACKUP_PYTHON=@@BACKUP_PYTHON@@
+Environment=HOME=/nonexistent
+Environment=PYTHONNOUSERSITE=1
 LoadCredential=plan:/etc/peerly-backup/plan.json
 LoadCredential=source-request:/etc/peerly-backup/source-request.json
 LoadCredential=pgpass:/etc/peerly-backup/pgpass
 LoadCredential=rclone:/etc/peerly-backup/rclone.conf
-# For verify-full also configure LoadCredential=pg-ca:/etc/peerly-backup/pg-ca.pem
-ExecStart=/bin/sh /usr/local/lib/peerly-backup/deployment/backup/run-backup.sh
+@@BACKUP_OPTIONAL_CA@@
+ExecStart=/bin/sh @@BACKUP_RELEASE@@/deployment/backup/run-installed-backup.sh
+ExecStopPost=@@BACKUP_PYTHON@@ -s -B -m deployment.backup.backup_status --state /var/lib/peerly-backup --output /var/lib/peerly-backup-metrics/backup.prom
+ReadWritePaths=/var/lib/peerly-backup-metrics
 TimeoutStartSec=35min
 TimeoutStopSec=10s
 KillMode=control-group
 Restart=no
 UMask=0077
 MemoryMax=512M
+MemorySwapMax=0
 CPUQuota=50%
 TasksMax=64
 LimitNOFILE=128

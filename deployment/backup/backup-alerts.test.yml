@@ -1,0 +1,288 @@
+{
+  "rule_files": [
+    "backup-alerts.yml"
+  ],
+  "evaluation_interval": "1m",
+  "tests": [
+    {
+      "name": "healthy native-readback metadata",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_status_valid{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_unit_result_known{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_unit_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_last_attempt_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_last_verified_timestamp_seconds{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+60x240"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "10m",
+          "alertname": "PeerlyBackupMetricsUnavailable",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "10m",
+          "alertname": "PeerlyBackupStatusInvalid",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "10m",
+          "alertname": "PeerlyBackupFailed",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "10m",
+          "alertname": "PeerlyBackupVerifiedGenerationOld",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "early systemd failure despite previous successful receipt",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_status_valid{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_unit_result_known{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_unit_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "0+0x240"
+        },
+        {
+          "series": "peerly_backup_last_attempt_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_last_verified_timestamp_seconds{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+60x240"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "10m",
+          "alertname": "PeerlyBackupFailed",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "severity": "critical",
+                "owner": "peerly-team",
+                "job": "peerly-backup",
+                "instance": "synthetic"
+              },
+              "exp_annotations": {
+                "summary": "Peerly encrypted backup attempt failed",
+                "description": "Read the closed failure status and bounded private diagnostics. An upload alone is not verified readback. Retain owned failure artifacts for reconciliation."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "missing scrape and status are not healthy",
+      "interval": "1m",
+      "input_series": [],
+      "alert_rule_test": [
+        {
+          "eval_time": "10m",
+          "alertname": "PeerlyBackupMetricsUnavailable",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "severity": "critical",
+                "owner": "peerly-team",
+                "job": "peerly-backup"
+              },
+              "exp_annotations": {
+                "summary": "Peerly backup status metrics are unavailable",
+                "description": "Check the protected metadata file, gateway reader route and scrape configuration. Missing telemetry is not a successful backup."
+              }
+            }
+          ]
+        },
+        {
+          "eval_time": "10m",
+          "alertname": "PeerlyBackupStatusInvalid",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "severity": "critical",
+                "owner": "peerly-team",
+                "job": "peerly-backup"
+              },
+              "exp_annotations": {
+                "summary": "Peerly backup state is missing, invalid or not yet observed",
+                "description": "Inspect protected local receipts and systemd status. Do not manufacture a verified timestamp or clear quarantined runs."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "invalid metadata fails closed",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_status_valid{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "0+0x240"
+        },
+        {
+          "series": "peerly_backup_unit_result_known{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_unit_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_last_attempt_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_last_verified_timestamp_seconds{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+60x240"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "10m",
+          "alertname": "PeerlyBackupStatusInvalid",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "severity": "critical",
+                "owner": "peerly-team",
+                "job": "peerly-backup",
+                "instance": "synthetic"
+              },
+              "exp_annotations": {
+                "summary": "Peerly backup state is missing, invalid or not yet observed",
+                "description": "Inspect protected local receipts and systemd status. Do not manufacture a verified timestamp or clear quarantined runs."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "original verified time grows stale",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x1920"
+        },
+        {
+          "series": "peerly_backup_status_valid{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x1920"
+        },
+        {
+          "series": "peerly_backup_unit_result_known{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x1920"
+        },
+        {
+          "series": "peerly_backup_unit_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x1920"
+        },
+        {
+          "series": "peerly_backup_last_attempt_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x1920"
+        },
+        {
+          "series": "peerly_backup_last_verified_timestamp_seconds{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x1920"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "31h",
+          "alertname": "PeerlyBackupVerifiedGenerationOld",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "severity": "critical",
+                "owner": "peerly-team",
+                "job": "peerly-backup",
+                "instance": "synthetic"
+              },
+              "exp_annotations": {
+                "summary": "Peerly has no recently verified backup generation",
+                "description": "The example threshold is 30 hours for the daily timer. Select the policy explicitly before activation and verify actual capture/readback/recovery independently."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unit recovery resolves failure alert",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "up{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_status_valid{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_unit_result_known{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_unit_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "0+0x4 1+0x20"
+        },
+        {
+          "series": "peerly_backup_last_attempt_success{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+0x240"
+        },
+        {
+          "series": "peerly_backup_last_verified_timestamp_seconds{job=\"peerly-backup\",instance=\"synthetic\"}",
+          "values": "1+60x240"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "10m",
+          "alertname": "PeerlyBackupFailed",
+          "exp_alerts": []
+        }
+      ]
+    }
+  ]
+}
