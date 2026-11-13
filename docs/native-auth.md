@@ -166,12 +166,21 @@ must name that SDK; `ANDROID_SDK_ROOT`, when present, must agree. The compile he
 uses `JAVA_HOME_21_X64` for the installed Java21 directory and rejects machine-local
 `android/local.properties` so SDK selection remains explicit.
 
-The existing SDK license record at `$ANDROID_HOME/licenses/android-sdk-license` must
-already contain the accepted license-content SHA1
-`9002c006f4b8d9a16e715a9fa4df30ddb8abf9d9`. Preflight does not authorize accepting terms,
-writing the hash or installing missing SDK packages. Missing tools, package metadata
-or acceptance fail closed. There is no SDK installer or download fallback; any required
-installation/license decision belongs to the build-environment owner.
+Preflight requires existing Python3 and reads each installed platform/build-tools
+`package.xml` with bounded stdlib XML parsing. DTD/entity declarations and external
+resolution are forbidden. Every referenced license must have exact embedded text;
+its UTF-8 SHA1 must already occur as a complete line in the corresponding existing
+`$ANDROID_HOME/licenses/<license-id>` record. There is no global online-license hash
+or old-hash allowlist. Metadata, properties and license-record SHA256s bind the SDK
+snapshot checked again after compilation.
+
+The safe `android/native-evidence/sdk-preflight-diagnostic.json` is written even on
+rejection. It reports package/license IDs, metadata/content/record hashes and fixed
+error codes, without raw license text or URLs. Missing metadata/text/reference,
+mismatched acceptance or wrong installed versions fail closed. Preflight does not
+authorize accepting terms, writing records or installing missing packages. There is
+no SDK installer or download fallback; environment owners handle any required
+installation/license decision separately.
 
 From `frontend/`:
 

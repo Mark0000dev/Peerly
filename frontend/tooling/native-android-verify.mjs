@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
-import { constants, accessSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 
-export const acceptedSdkLicense = '9002c006f4b8d9a16e715a9fa4df30ddb8abf9d9';
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const variants = {
   production: { id: 'dev.alekseiorlov.peerly', origin: 'https://peerly.aleksei-orlov.dev' },
@@ -14,40 +13,42 @@ const variants = {
     origin: 'https://peerly-staging.aleksei-orlov.dev',
   },
 };
-const nonempty = (path) =>
-  assert.ok(statSync(path).size > 0, `Required preinstalled SDK file empty: ${path}`);
-
-export function preflightSdk(sdk) {
+// The installed package's own license text is authoritative; no online-license
+// hash/old-hash allowlist and no license acceptance or package installation occurs.
+export function preflightSdk(sdk, diagnosticDirectory) {
   assert.ok(sdk, 'ANDROID_HOME must name an existing SDK; no install/download fallback');
-  const root = resolve(sdk);
-  const licensePath = join(root, 'licenses/android-sdk-license');
-  const license = readFileSync(licensePath);
+  const result = spawnSync(
+    'python3',
+    [fileURLToPath(new URL('./native_android_sdk_preflight.py', import.meta.url)), sdk],
+    { encoding: 'utf8', maxBuffer: 128 * 1024 },
+  );
   assert.ok(
-    license.toString('utf8').split(/\r?\n/).includes(acceptedSdkLicense),
-    'SDK36 license is not already recorded as accepted; no terms will be accepted',
+    result.stdout,
+    'Installed SDK inspection requires existing Python3; no installer fallback',
   );
-  const platform = join(root, 'platforms/android-36');
-  const tools = join(root, 'build-tools/36.0.0');
-  nonempty(join(platform, 'android.jar'));
-  assert.match(
-    readFileSync(join(platform, 'source.properties'), 'utf8'),
-    /^AndroidVersion\.ApiLevel\s*=\s*36\s*$/m,
-  );
-  assert.match(
-    readFileSync(join(tools, 'source.properties'), 'utf8'),
-    /^Pkg\.Revision\s*=\s*36\.0\.0\s*$/m,
-  );
-  for (const path of [join(platform, 'package.xml'), join(tools, 'package.xml')]) {
-    assert.match(readFileSync(path, 'utf8'), /<uses-license\s+ref="android-sdk-license"\s*\/?\s*>/);
+  const report = JSON.parse(result.stdout);
+  if (diagnosticDirectory !== undefined) {
+    mkdirSync(diagnosticDirectory, { recursive: true });
+    writeFileSync(
+      join(diagnosticDirectory, 'sdk-preflight-diagnostic.json'),
+      JSON.stringify(report, null, 2) + '\n',
+    );
   }
-  for (const tool of ['aapt2', 'apksigner']) accessSync(join(tools, tool), constants.X_OK);
+  assert.equal(
+    result.status,
+    0,
+    'Installed SDK/license preflight rejected; inspect safe metadata diagnostic; no terms will be accepted',
+  );
+  assert.equal(report.accepted, true);
+  assert.equal(report.root, resolve(sdk));
+  assert.equal(report.platform, 'android-36');
+  assert.equal(report.build_tools, '36.0.0');
+  assert.equal(report.packages.length, 2);
   return {
-    root,
-    platform: 'android-36',
-    buildTools: '36.0.0',
-    licensePath,
-    licenseSha256: hash(license),
-    acceptedLicenseSha1: acceptedSdkLicense,
+    root: report.root,
+    platform: report.platform,
+    buildTools: report.build_tools,
+    provenance: report,
   };
 }
 
@@ -217,7 +218,7 @@ function verifyApk(sdk, variant, apk, output) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const [mode, sdk, ...args] = process.argv.slice(2);
   if (mode === 'preflight') {
-    const record = preflightSdk(sdk);
+    const record = preflightSdk(sdk, args[0]);
     mkdirSync(args[0], { recursive: true });
     writeFileSync(join(args[0], 'sdk-preflight.json'), JSON.stringify(record, null, 2) + '\n');
   } else if (mode === 'verify') {

@@ -4,7 +4,7 @@ name: Native unsigned compile
 on:
   # Native feature branches compile before PR integration, without deployment secrets.
   push:
-    branches: ['work/native-*']
+    branches: ["work/native-*"]
   pull_request:
     paths:
       - ".github/workflows/native-ios-unsigned.yml"
@@ -23,6 +23,8 @@ on:
       - "frontend/tooling/native-android-compile.sh"
       - "frontend/tooling/native-android-verify.mjs"
       - "frontend/tooling/native-android-verify.test.mjs"
+      - "frontend/tooling/native_android_sdk_preflight.py"
+      - "frontend/tooling/test_native_android_sdk_preflight.py"
       - "frontend/tooling/font-watcher-patch.mjs"
   workflow_dispatch:
 
@@ -119,6 +121,8 @@ jobs:
       - name: Require already installed SDK36 and Build Tools36 with accepted license
         run: |
           set -euo pipefail
+          python3 -m unittest discover -s tooling \
+            -p 'test_native_android_sdk_preflight.py' -v
           bash tooling/native-android-compile.sh --preflight-only \
             2>&1 | tee "$RUNNER_TEMP/peerly-native-android-preflight.log"
 

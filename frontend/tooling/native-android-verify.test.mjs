@@ -1,25 +1,25 @@
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  acceptedSdkLicense,
-  preflightSdk,
-  verifyManifest,
-  verifyPackagedConfig,
-} from './native-android-verify.mjs';
+import { preflightSdk, verifyManifest, verifyPackagedConfig } from './native-android-verify.mjs';
 
 // Synthetic metadata/unit checks only: no SDK install, compiler, real APK or device proof.
+const installedLicenseText = 'Synthetic installed SDK terms; never compiler input';
+const acceptedSdkLicense = createHash('sha1').update(installedLicenseText).digest('hex');
+const installedMetadata = (path) =>
+  `<repository><license id="android-sdk-license" type="text">${installedLicenseText}</license><localPackage path="${path}"><uses-license ref="android-sdk-license"/></localPackage></repository>`;
 function fixtureSdk() {
   const root = mkdtempSync(join(tmpdir(), 'peerly-sdk-static-'));
   const files = {
     'licenses/android-sdk-license': acceptedSdkLicense + '\n',
     'platforms/android-36/android.jar': 'synthetic file, never a compiler input',
     'platforms/android-36/source.properties': 'AndroidVersion.ApiLevel=36\n',
-    'platforms/android-36/package.xml': '<uses-license ref="android-sdk-license"/>',
+    'platforms/android-36/package.xml': installedMetadata('platforms;android-36'),
     'build-tools/36.0.0/source.properties': 'Pkg.Revision=36.0.0\n',
-    'build-tools/36.0.0/package.xml': '<uses-license ref="android-sdk-license"/>',
+    'build-tools/36.0.0/package.xml': installedMetadata('build-tools;36.0.0'),
     'build-tools/36.0.0/aapt2': 'synthetic file, never executed',
     'build-tools/36.0.0/apksigner': 'synthetic file, never executed',
   };
@@ -106,11 +106,31 @@ test('requires preexisting exact license record and installed package/tool metad
       join(root, 'licenses/android-sdk-license'),
       '24333f8a63b6825ea9c5514f83c2829b004d1fee\n',
     );
-    assert.throws(() => preflightSdk(root), /not already recorded as accepted/);
+    assert.throws(() => preflightSdk(root), /preflight rejected/);
     writeFileSync(join(root, 'licenses/android-sdk-license'), acceptedSdkLicense + '\n');
     rmSync(join(root, 'platforms/android-36/android.jar'));
     assert.throws(() => preflightSdk(root));
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('failure writes safe installed metadata diagnostic before any compile', () => {
+  const root = fixtureSdk();
+  const diagnostics = mkdtempSync(join(tmpdir(), 'peerly-sdk-diagnostic-'));
+  try {
+    writeFileSync(join(root, 'licenses/android-sdk-license'), '0'.repeat(40) + '\n');
+    assert.throws(() => preflightSdk(root, diagnostics), /preflight rejected/);
+    const report = JSON.parse(
+      readFileSync(join(diagnostics, 'sdk-preflight-diagnostic.json'), 'utf8'),
+    );
+    assert.equal(report.accepted, false);
+    assert.equal(report.packages.length, 2);
+    assert.ok(report.packages.every((item) => /^[a-f0-9]{64}$/.test(item.metadata_sha256)));
+    assert.ok(report.packages.every((item) => item.licenses[0].accepted === false));
+    assert.equal(JSON.stringify(report).includes(installedLicenseText), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(diagnostics, { recursive: true, force: true });
   }
 });
