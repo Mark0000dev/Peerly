@@ -1,3 +1,4 @@
+import { applicationOrigin, isBusinessWrite } from '../../../../testing/readonly-requests.mts';
 import type { Page, Route } from '@playwright/test';
 import { test, expect } from '../../../../testing/visual';
 import { actor, pending, challenge } from './onboarding.fixtures';
@@ -398,9 +399,10 @@ test('verification quarantine guidance remains readable at320 and200percent with
   checkpoint,
 }: Context) => {
   await page.setViewportSize({ width: 320, height: 800 });
+  const expectedOrigin = applicationOrigin(test.info().project.use.baseURL);
   let writes: readonly string[] = [];
   page.on('request', (request) => {
-    if (request.method() !== 'GET' && new URL(request.url()).pathname.startsWith('/api/v1/'))
+    if (isBusinessWrite(request.method(), request.url(), expectedOrigin))
       writes = [...writes, request.method()];
   });
   await page.route('**/api/v1/me', async (route) => {

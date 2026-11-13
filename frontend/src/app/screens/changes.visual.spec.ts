@@ -1,3 +1,4 @@
+import { applicationOrigin, isBusinessWrite } from '../../../testing/readonly-requests.mts';
 import type { Page, Route } from '@playwright/test';
 import { test, expect } from '../../../testing/visual';
 import { jpegBase64 } from '../../../testing/image-fixture';
@@ -42,6 +43,7 @@ test('SSE peer hint refetches canonical visible data and resumes exact cursor wi
   await fixtures(page);
   let changed = false;
   let reads = 0;
+  const expectedOrigin = applicationOrigin(test.info().project.use.baseURL);
   let writes = 0;
   let cursors: readonly (string | null)[] = [];
   let release: (() => void) | undefined;
@@ -49,7 +51,7 @@ test('SSE peer hint refetches canonical visible data and resumes exact cursor wi
     release = resolve;
   });
   page.on('request', (request) => {
-    if (request.method() !== 'GET') writes += 1;
+    if (isBusinessWrite(request.method(), request.url(), expectedOrigin)) writes += 1;
   });
   await page.route('**/api/v1/discovery?*', (route: Readonly<Route>) => {
     reads += 1;
@@ -143,9 +145,10 @@ test('SSE unavailable transport retries only its safe GET while canonical screen
 }: Scenario) => {
   await fixtures(page);
   let streams = 0;
+  const expectedOrigin = applicationOrigin(test.info().project.use.baseURL);
   let writes = 0;
   page.on('request', (request) => {
-    if (request.method() !== 'GET') writes += 1;
+    if (isBusinessWrite(request.method(), request.url(), expectedOrigin)) writes += 1;
   });
   await page.route('**/api/v1/events', (route: Readonly<Route>) => {
     streams += 1;

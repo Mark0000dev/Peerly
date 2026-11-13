@@ -1126,7 +1126,7 @@ for (const mode of ['offer_help', 'study_together'] as const)
     await open(page, true);
     const region = page.getByRole('region', { name: 'Original accepted context' });
     await expect(region).toContainText(
-      mode === 'offer_help' ? 'Sender’s help subject' : 'neither person is presented as a teacher',
+      mode === 'offer_help' ? 'Sender’s help area' : 'neither person is presented as a teacher',
     );
     await page.getByRole('button', { name: 'Original accepted context', exact: true }).click();
     await expect(

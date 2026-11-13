@@ -266,7 +266,7 @@ test('A04 unsent and unconfirmed leave guards preserve the form without claiming
   });
   await page.goto('/help/contact');
   await fill(page);
-  await page.getByRole('link', { name: 'Help and contact', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to help', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Discard unsaved changes?' })).toBeVisible();
   await checkpoint('support-unsent-leave-confirmation.png');
   await page.getByRole('button', { name: 'Keep editing', exact: true }).click();
@@ -276,7 +276,7 @@ test('A04 unsent and unconfirmed leave guards preserve the form without claiming
   await page.getByRole('button', { name: 'Send to the team' }).click();
   await expect(page.getByRole('status')).toContainText('Sending your request');
   await checkpoint('support-sending.png');
-  await page.getByRole('link', { name: 'Help and contact', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to help', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Leave before the save is confirmed?' }),
   ).toBeVisible();
