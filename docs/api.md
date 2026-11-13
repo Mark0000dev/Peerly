@@ -133,6 +133,28 @@ cursors bind requester/grant, target and issuance-time boundary. Later sessions
 are excluded from continuation; revocation metadata remains current, rather than
 a historical snapshot. Logout/ban/account policies still determine actual access.
 
+## Request response options
+
+`GET /api/v1/requests/{request_id}/response-options` returns up to three editable
+response suggestions for the verified, activated recipient of a currently
+actionable incoming request. Current contact permissions are checked before
+private context is read. Unavailable, expired, foreign or terminal requests return
+the existing `request_unavailable` response; this read does not acknowledge viewing
+or grant future acceptance permission. Responses use `no-store` and `no-referrer`.
+
+Every option has a required `kind`: `learning_too`, `swap` or `write_my_own`.
+Learning together requires the recipient's current active goal in the same
+canonical area; swapping also identifies the peer's currently matching help
+declaration. Returned source IDs, versions and labels describe actual declarations,
+not inferred competence. The neutral option is always available. The server selects
+the first available default; background refresh must preserve an edited draft.
+
+Accepting and sending remain separate existing commands. Settle acceptance before
+sending a first message to the confirmed conversation. If only message delivery
+fails or becomes uncertain, reconcile or retry that original message intent with
+the same idempotency key and client message ID; do not repeat acceptance. These
+suggestions neither send a message nor use AI.
+
 ## SSE
 
 One authenticated change stream carries bounded source/version hints, reset and
