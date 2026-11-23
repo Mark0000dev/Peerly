@@ -235,13 +235,6 @@ jobs:
                             "See retained raw logs, coverage and browser artifacts.\n")
           PY
 
-          # Missing references may be written outside test-results by Playwright.
-          # Retain candidates for manual review; never stage or accept them here.
-          git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard -z \
-            -- ':(glob)frontend/src/app/screens/**/__screenshots__/**/*.png' |
-            tar --null --no-recursion -C "$GITHUB_WORKSPACE" \
-              -czf "$QUALITY_RECEIPTS/new-reference-candidates.tar.gz" --files-from=-
-
       - name: Retain failure evidence and coverage
         if: always() && env.QUALITY_RECEIPTS != ''
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5

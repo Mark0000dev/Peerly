@@ -1,5 +1,6 @@
 // Node-side Playwright imports partially compiled Angular boundary guards.
 import '@angular/compiler';
+import { existsSync } from 'node:fs';
 import { test as base, expect } from '@playwright/test';
 import type {
   ConsoleMessage,
@@ -138,6 +139,15 @@ export const test = base.extend<VisualFixtures>({
         });
         await use(async (name: string, options: CheckpointOptions = { fullPage: true }) => {
           phase = 'screenshot';
+          // With updateSnapshots:none Playwright fails before capturing a missing PNG.
+          // Retain a diagnostic frame without creating or accepting a reference.
+          if (!('webkitPreview' in options) && !existsSync(info.snapshotPath(name))) {
+            const body =
+              'target' in options
+                ? await options.target.screenshot({ animations: 'disabled' })
+                : await page.screenshot({ fullPage: options.fullPage, animations: 'disabled' });
+            await info.attach(`${name}-missing-reference`, { body, contentType: 'image/png' });
+          }
           if ('webkitPreview' in options) {
             if (browserName === 'webkit') {
               const artifact = info.outputPath(`${name}-ordinary.png`);
