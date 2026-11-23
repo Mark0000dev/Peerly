@@ -415,4 +415,68 @@ describe('M02 human decision intent ownership', () => {
     await open();
     backend.expectNone((value) => value.method !== 'GET');
   });
+  it('does not turn a successful history read into confirmation of an uncertain decision', async () => {
+    await open();
+    draft('Original uncertain reason');
+    click('Review decision');
+    click('Record reviewed decision');
+    const original = await request('POST');
+    const key = original.request.headers.get('Idempotency-Key');
+    original.error(new ProgressEvent('error'));
+    await shown('The decision outcome is unknown.');
+    click('Read current review state');
+    (await request('GET')).flush(emptyHistory);
+    await fixture.whenStable();
+    await shown('The decision outcome is unknown.');
+    expect(host().querySelector('textarea')?.value).toBe('Original uncertain reason');
+    backend.expectNone((value) => value.method === 'POST');
+    click('Retry identical decision');
+    const replay = await request('POST');
+    expect(replay.request.headers.get('Idempotency-Key')).toBe(key);
+    expect(replay.request.body).toEqual(original.request.body);
+    replay.flush({ ...revision(1), reason: 'Original uncertain reason' });
+    (await request('GET')).flush({
+      ...emptyHistory,
+      current: { ...revision(1), reason: 'Original uncertain reason' },
+      anchor_version: 1,
+      revisions: [{ ...revision(1), reason: 'Original uncertain reason' }],
+    });
+    await shown('Decision stored');
+  });
+
+  it('keeps an explicit identical retry pending when an older uncertain-history read completes', async () => {
+    await open();
+    draft('Exact original recovery reason');
+    click('Review decision');
+    click('Record reviewed decision');
+    const original = await request('POST');
+    const body: unknown = original.request.body;
+    const key = original.request.headers.get('Idempotency-Key');
+    original.error(new ProgressEvent('error'));
+    await shown('The decision outcome is unknown.');
+    click('Read current review state');
+    const history = await request('GET');
+    backend.expectNone((value) => value.method === 'POST');
+    client.setQueryData(['session'], { ...operatorIdentity, csrf_token: 'fresh-recovery-csrf' });
+    click('Retry identical decision');
+    const replay = await request('POST');
+    expect(replay.request.body).toEqual(body);
+    expect(replay.request.headers.get('Idempotency-Key')).toBe(key);
+    expect(replay.request.headers.get('X-CSRF-Token')).toBe('fresh-recovery-csrf');
+    history.flush(emptyHistory);
+    await shown('Recording the human decision…');
+    expect(host().querySelector('textarea')?.value).toBe('Exact original recovery reason');
+    backend.expectNone((value) => value.method === 'POST');
+    const stored = { ...revision(1), reason: 'Exact original recovery reason' };
+    replay.flush(stored);
+    (await request('GET')).flush({
+      ...emptyHistory,
+      current: stored,
+      anchor_version: 1,
+      revisions: [stored],
+    });
+    await shown('Decision stored');
+    expect(host().textContent).toContain('Exact original recovery reason');
+    backend.expectNone((value) => value.method === 'POST');
+  });
 });
