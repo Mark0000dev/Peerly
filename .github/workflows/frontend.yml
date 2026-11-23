@@ -25,9 +25,9 @@ jobs:
           --health-cmd "pg_isready -U studymate -d studymate_test"
           --health-interval 2s --health-timeout 3s --health-retries 20
     env:
-      CI: 'true'
-      HUSKY: '0'
-      NG_CLI_ANALYTICS: 'false'
+      CI: "true"
+      HUSKY: "0"
+      NG_CLI_ANALYTICS: "false"
     defaults:
       run:
         working-directory: frontend
@@ -64,7 +64,7 @@ jobs:
       - name: Install the repository uv version
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          version: '0.13.7'
+          version: "0.13.7"
           enable-cache: true
 
       - name: Prepare the locked backend for contract export and real fixtures
@@ -234,6 +234,13 @@ jobs:
                             "Complete `npm run check` sequence with serial browser orchestration. "
                             "See retained raw logs, coverage and browser artifacts.\n")
           PY
+
+          # Missing references may be written outside test-results by Playwright.
+          # Retain candidates for manual review; never stage or accept them here.
+          git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard -z \
+            -- ':(glob)frontend/src/app/screens/**/__screenshots__/**/*.png' |
+            tar --null --no-recursion -C "$GITHUB_WORKSPACE" \
+              -czf "$QUALITY_RECEIPTS/new-reference-candidates.tar.gz" --files-from=-
 
       - name: Retain failure evidence and coverage
         if: always() && env.QUALITY_RECEIPTS != ''

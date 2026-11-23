@@ -63,6 +63,12 @@ tolerances to obtain acceptance. Preserve raw command output, failure traces,
 expected/actual/diff images and coverage reports. Keep evidence synthetic and free
 of credentials or live private content.
 
+Frontend quality artifacts include `new-reference-candidates.tar.gz` containing
+untracked PNGs from screen screenshot directories. Playwright can write these when
+a reference is missing. Each candidate requires manual review before promotion and
+a normal strict comparison afterward. Retention leaves the original gate outcome
+unchanged and does not stage files in Git.
+
 ## Current limitations
 
 An aggregate browser ResizeObserver diagnostic remains unresolved; it must remain
