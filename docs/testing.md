@@ -63,6 +63,14 @@ tolerances to obtain acceptance. Preserve raw command output, failure traces,
 expected/actual/diff images and coverage reports. Keep evidence synthetic and free
 of credentials or live private content.
 
+For a missing ordinary PNG reference, the shared checkpoint attaches a diagnostic
+frame to the browser report before the normal strict assertion fails. Playwright's
+`updateSnapshots:none` fails before taking its own screenshot in this situation.
+Diagnostic frames are retained in the existing quality artifacts; they never write
+reference files or change the gate outcome. Each candidate requires manual review
+before promotion and a normal strict comparison afterward. The separate WebKit
+preview JPEG protocol remains unchanged.
+
 ## Current limitations
 
 An aggregate browser ResizeObserver diagnostic remains unresolved; it must remain

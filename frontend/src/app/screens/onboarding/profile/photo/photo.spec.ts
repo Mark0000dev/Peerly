@@ -119,7 +119,7 @@ describe('real photo recovery query boundary', () => {
   async function open(
     value: Readonly<Api['schemas']['PhotoUploadResponse']> = upload,
   ): Promise<void> {
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     request.flush(value);
     await shown(
@@ -138,6 +138,27 @@ describe('real photo recovery query boundary', () => {
     expect(client.getQueryData(['account', verifiedActor.account_id, 'photo-uploads'])).toEqual(
       history,
     );
+  });
+  it('checks the explicitly selected second recent upload without starting a transfer', async () => {
+    const second = { ...upload, id: '00000000-0000-0000-0000-000000000004' };
+    await load({
+      photo: null,
+      uploads: [
+        { upload, source_sha256: 'a'.repeat(64) },
+        { upload: second, source_sha256: 'b'.repeat(64) },
+      ],
+    });
+    expect(host(fixture).querySelector('button[aria-label="Check upload 1"]')).not.toBeNull();
+    expect(host(fixture).querySelector('button[aria-label="Check upload 2"]')).not.toBeNull();
+    click(fixture, 'Check upload 2');
+    const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${second.id}`));
+    expect(request.request.method).toBe('GET');
+    backend.expectNone(`/api/v1/media/${upload.id}`);
+    request.flush(second);
+    await shown(fixture, 'reselect the exact file');
+    backend.expectNone({ url: '/api/v1/media/uploads', method: 'POST' });
+    backend.expectNone(`/api/v1/media/uploads/${second.id}/access`);
+    backend.expectNone(`/api/v1/media/uploads/${upload.id}/access`);
   });
   it('requires explicit reselection after reload, not an automatic empty upload', async () => {
     await load();
@@ -387,7 +408,7 @@ describe('real photo recovery query boundary', () => {
   ] as const) {
     it(`projects actual ${scenario.state} without a fabricated progress estimate`, async () => {
       await load();
-      click(fixture, 'Check upload');
+      click(fixture, 'Check upload 1');
       const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
       request.flush({ ...upload, state: scenario.state });
       await shown(fixture, scenario.text);
@@ -398,7 +419,7 @@ describe('real photo recovery query boundary', () => {
   for (const failure of ['storage_unavailable', 'processing_unavailable'] as const) {
     it(`distinguishes ${failure} from a bad photo without retrying automatically`, async () => {
       await load();
-      click(fixture, 'Check upload');
+      click(fixture, 'Check upload 1');
       const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
       request.flush({ ...upload, state: 'rejected', failure });
       await shown(fixture, 'This upload wasn’t saved.');
@@ -1132,7 +1153,7 @@ describe('real photo recovery query boundary', () => {
   }
   it('can explicitly retry a failed status read after intent recovery without restarting creation', async () => {
     await load();
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const failed = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     failed.flush({ code: 'unavailable' }, { status: 503, statusText: 'Failure' });
     await shown(fixture, 'We couldn’t check the photo upload.');
@@ -1423,7 +1444,7 @@ describe('real photo recovery query boundary', () => {
   });
   it('waits for an initially unknown selected upload before accepting a local file', async () => {
     await load();
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const pending = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     fixture.detectChanges();
     const chooser = Array.from(host(fixture).querySelectorAll('button')).find(
@@ -1452,7 +1473,7 @@ describe('real photo recovery query boundary', () => {
     expect(host(fixture).querySelector('img')?.getAttribute('src')).toBe(
       projection.photo.display_url,
     );
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const status = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     status.flush(ready);
     await load(projection);

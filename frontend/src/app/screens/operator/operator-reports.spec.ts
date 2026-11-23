@@ -9,6 +9,7 @@ import { TuiRoot } from '@taiga-ui/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appConfig } from '../../app.config';
 import { OperatorReports } from './operator-reports';
+import { emptyHistory } from './reports/review/review.fixtures';
 import { operatorIdentity } from './operator.fixtures';
 import {
   auditId,
@@ -350,5 +351,61 @@ describe('M02/M06/M07 real report investigation ownership', () => {
     await shown('No canonical events');
     expect(router.url).not.toContain('cursor');
     expect(host().textContent).not.toContain(reportId);
+  });
+
+  async function reviewWorkspace(): Promise<void> {
+    await login({ report: reportId });
+    await list();
+    (await request(`reports/${reportId}`)).flush(reportDetail);
+    await shown(reportDetail.comment);
+    click('Human review');
+    (await request(`reports/${reportId}/reviews`)).flush(emptyHistory);
+    await shown('No dismiss or escalate decision is recorded.');
+  }
+  it('opens and closes the actual human review workspace without a write or extra inspection', async () => {
+    await reviewWorkspace();
+    click('Close human review');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host().querySelector('[aria-label="Human report review"]')).toBeNull();
+    });
+    expect(host().textContent).toContain(reportDetail.comment);
+    backend.expectNone((value) => value.method !== 'GET');
+    backend.expectNone((value) => value.url.startsWith('/api/v1/operator'));
+  });
+  it('keeps an unsaved private human decision until explicit discard when closing the workspace', async () => {
+    await reviewWorkspace();
+    const textarea = host().querySelector('textarea');
+    if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('Missing review reason');
+    textarea.setRangeText('Unsent operator reason');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    click('Close human review');
+    await shown('Discard unsaved changes?');
+    click('Keep editing');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host().querySelector('[role="dialog"]')).toBeNull();
+    });
+    expect(host().querySelector('textarea')?.value).toBe('Unsent operator reason');
+    click('Close human review');
+    await shown('Discard unsaved changes?');
+    click('Discard changes');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host().querySelector('[aria-label="Human report review"]')).toBeNull();
+    });
+    backend.expectNone((value) => value.method !== 'GET');
+  });
+  it('retires the old human review workspace when a different report is selected without sending a decision', async () => {
+    await reviewWorkspace();
+    await navigate({ report: auditId });
+    const read = await request(`reports/${auditId}`);
+    read.flush({ ...reportDetail, report: { ...reportDetail.report, id: auditId } });
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host().querySelector('[aria-label="Human report review"]')).toBeNull();
+    });
+    backend.expectNone((value) => value.method !== 'GET');
   });
 });

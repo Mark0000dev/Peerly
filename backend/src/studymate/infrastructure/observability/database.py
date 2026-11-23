@@ -2,8 +2,11 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
-from time import perf_counter
+from time import perf_counter, time_ns
 
+from opentelemetry import context as otel_context
+from opentelemetry import trace
+from opentelemetry.context import Context
 from opentelemetry.metrics import CallbackOptions, Meter, Observation
 from opentelemetry.trace import Span, SpanKind, StatusCode, Tracer
 from sqlalchemy import event
@@ -13,6 +16,11 @@ from sqlalchemy.pool import ConnectionPoolEntry, PoolProxiedConnection, QueuePoo
 from sqlalchemy.sql.ddl import ExecutableDDLElement
 from sqlalchemy.sql.dml import Delete, Insert, Update
 from sqlalchemy.sql.selectable import SelectBase
+
+from studymate.infrastructure.observability.idle_publication import (
+    PublicationQueries,
+    publication_queries,
+)
 
 _QUERY_KEY = "peerly_observed_query"
 
@@ -40,6 +48,9 @@ class PendingQuery:
     started: float
     operation: str
     span: Span | None
+    started_ns: int
+    parent_context: Context
+    publication: PublicationQueries | None
 
 
 def query_operation(context: ExecutionContext) -> str:
@@ -143,24 +154,42 @@ class EngineObservation:
         self.borrowed.clear()
         self.owner.snapshots.pop(self.pool, None)
 
-    def before(self, *, conn: Connection, context: ExecutionContext, **_ignored: object) -> None:
-        operation = query_operation(context)
+    def begin(self, operation: str) -> PendingQuery:
+        started, started_ns = perf_counter(), time_ns()
+        publication = publication_queries() if self.pool == DatabasePool.CHANGES else None
+        if publication is not None:
+            # User/claimed execution ancestry and every non-SELECT operation
+            # make an empty poll unproven, so retain the entire query batch.
+            if operation != "select" or trace.get_current_span().get_span_context().is_valid:
+                publication.retain()
+            if publication.keep:
+                publication = None
+            else:
+                publication.pending += 1
+        parent_context = otel_context.get_current()
         span = (
             self.owner.tracer.start_span(
                 "db.query",
                 kind=SpanKind.CLIENT,
-                attributes={
-                    "db.system": "postgresql",
-                    "db.pool.name": self.pool.value,
-                    "query.operation": operation,
-                },
+                attributes=self.attributes(operation),
             )
-            if self.owner.tracer
+            if self.owner.tracer and publication is None
             else None
         )
+        return PendingQuery(started, operation, span, started_ns, parent_context, publication)
+
+    def attributes(self, operation: str) -> dict[str, str]:
+        return {
+            "db.system": "postgresql",
+            "db.pool.name": self.pool.value,
+            "query.operation": operation,
+        }
+
+    def before(self, *, conn: Connection, context: ExecutionContext, **_ignored: object) -> None:
+        value = self.begin(query_operation(context))
         key = id(context)
         conn.info[_QUERY_KEY] = key
-        self.pending[key] = PendingQuery(perf_counter(), operation, span)
+        self.pending[key] = value
 
     def after(self, *, context: ExecutionContext, **_ignored: object) -> None:
         self.finish(id(context), "success")
@@ -182,6 +211,23 @@ class EngineObservation:
                     "outcome": outcome,
                 },
             )
+        if value.publication is not None:
+            ended_ns = time_ns()
+
+            def export() -> None:
+                if self.owner.tracer is not None:
+                    span = self.owner.tracer.start_span(
+                        "db.query",
+                        context=value.parent_context,
+                        kind=SpanKind.CLIENT,
+                        start_time=value.started_ns,
+                        attributes=self.attributes(value.operation),
+                    )
+                    if outcome != "success":
+                        span.set_status(StatusCode.ERROR)
+                    span.end(end_time=ended_ns)
+
+            value.publication.finish(export, outcome)
         if value.span is not None:
             if outcome != "success":
                 value.span.set_status(StatusCode.ERROR)

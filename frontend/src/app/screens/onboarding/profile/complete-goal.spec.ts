@@ -109,4 +109,83 @@ describe('explicit goal completion command', () => {
     expect(expired).toHaveBeenCalledOnce();
     backend.expectNone('/api/v1/me/goal/complete');
   });
+
+  it('emits current-owner authentication loss once without completing the goal', async () => {
+    const expired = vi.fn();
+    fixture.componentInstance.expired.subscribe(expired);
+    click(fixture, 'Mark goal done');
+    confirmation.next(true);
+    (await vi.waitFor(() => backend.expectOne('/api/v1/me/goal/complete'))).flush(
+      { code: 'unauthenticated' },
+      { status: 401, statusText: 'Unauthorized' },
+    );
+    await shown(fixture, 'Your goal could not be completed.');
+    expect(expired).toHaveBeenCalledOnce();
+    backend.expectNone('/api/v1/me/goal/complete');
+  });
+  for (const status of [200, 401, 403]) {
+    it(`ignores a retired owner's late completion ${String(status)} without invalidating replacement state`, async () => {
+      const expired = vi.fn();
+      fixture.componentInstance.expired.subscribe(expired);
+      click(fixture, 'Mark goal done');
+      confirmation.next(true);
+      const write = await vi.waitFor(() => backend.expectOne('/api/v1/me/goal/complete'));
+      const replacement = { ...verifiedActor, account_id: 'replacement-owner' };
+      client.setQueryData(['session'], replacement);
+      fixture.componentRef.setInput('actorId', replacement.account_id);
+      fixture.detectChanges();
+      const replacementKey = ['account', replacement.account_id, 'goal'];
+      client.setQueryData(replacementKey, { goal });
+      if (status === 200)
+        write.flush({ ...goal, version: 3, completed_at: '2026-11-09T08:00:00Z' });
+      else write.flush({ code: 'denied' }, { status, statusText: 'Denied' });
+      await fixture.whenStable();
+      expect(client.getQueryState(replacementKey)?.isInvalidated).toBe(false);
+      expect(client.getMutationCache().getAll()).toHaveLength(0);
+      expect(expired).not.toHaveBeenCalled();
+      backend.expectNone('/api/v1/me/goal/complete');
+    });
+  }
+  it('rejects a confirmation for a different goal even when its version is the same', async () => {
+    click(fixture, 'Mark goal done');
+    fixture.componentRef.setInput('goal', { ...goal, id: '00000000-0000-4000-8000-000000000099' });
+    fixture.detectChanges();
+    confirmation.next(true);
+    await fixture.whenStable();
+    backend.expectNone('/api/v1/me/goal/complete');
+  });
+  it('does not complete a goal when sign-in checking begins while confirmation is open', async () => {
+    click(fixture, 'Mark goal done');
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    confirmation.next(true);
+    await fixture.whenStable();
+    backend.expectNone('/api/v1/me/goal/complete');
+  });
+  it('keeps a successful owned completion invalidation deferred while membership is unavailable', async () => {
+    const key = ['account', verifiedActor.account_id, 'goal'];
+    client.setQueryData(key, { goal });
+    click(fixture, 'Mark goal done');
+    confirmation.next(true);
+    const write = await vi.waitFor(() => backend.expectOne('/api/v1/me/goal/complete'));
+    client.setQueryData(['session'], { ...verifiedActor, membership_status: 'unverified' });
+    write.flush({ ...goal, version: 3, completed_at: '2026-11-09T08:00:00Z' });
+    await shown(fixture, 'Goal completed.');
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    backend.expectNone('/api/v1/me/goal');
+  });
+
+  it('offers no completion action for an already completed canonical goal', async () => {
+    fixture.componentRef.setInput('goal', {
+      ...goal,
+      version: 3,
+      completed_at: '2026-11-09T08:00:00Z',
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element: unknown = fixture.nativeElement;
+    if (!(element instanceof HTMLElement)) throw new Error('Missing goal-completion host');
+    expect(element.querySelector('button')).toBeNull();
+    backend.expectNone('/api/v1/me/goal/complete');
+  });
 });

@@ -33,6 +33,12 @@ from maximum capacity; unknown values are omitted. SSE measures actual active
 streams, frames, resets/closure/lag/send time without changing cancellation or
 backpressure semantics. SDK callbacks only read cached state and never query DB.
 
+Empty background publication polls retain query duration metrics without creating
+query spans. This applies only to SELECTs in the publication task after it proves
+there was no work. Writes, failures, cancellation, real work and other tasks retain
+tracing; buffering is bounded and uses public SDK APIs. User-action tracing and
+the worker polling cadence are unchanged.
+
 Structured producer logs validate per-process release and allowlisted fields.
 Safe errors include class, validated SQLSTATE and bounded application frames,
 never exception text or SQL/params. Unknown legacy release is not replaced by a
