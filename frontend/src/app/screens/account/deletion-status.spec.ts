@@ -58,10 +58,13 @@ describe('P05 cookie-proof recovery without a live application session', () => {
       expect(host().textContent).toContain(text);
     });
   }
-  function check(): void {
+  function recheck(): HTMLButtonElement {
     const button = host().querySelector('button');
-    if (button === null) throw new Error('Missing retry');
-    button.click();
+    if (!(button instanceof HTMLButtonElement)) throw new Error('Missing retry');
+    return button;
+  }
+  function check(): void {
+    recheck().click();
   }
   it('recovers before ordinary authority checking and never exposes workflow/proof in its request URL', async () => {
     start();
@@ -96,13 +99,51 @@ describe('P05 cookie-proof recovery without a live application session', () => {
     (await vi.waitFor(() => backend.expectOne(url))).flush(pending);
     await shows('Deletion hasn’t been confirmed');
     backend.expectNone(url);
+    const button = recheck();
+    button.focus();
     check();
-    (await vi.waitFor(() => backend.expectOne(url))).flush(deleted);
+    const retry = await vi.waitFor(() => backend.expectOne(url));
+    await shows('Checking your deletion request');
+    expect(recheck()).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    check();
+    backend.expectNone(url);
+    retry.flush(deleted);
     await shows('Deletion confirmed');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement).toBe(host().querySelector('h2'));
+    });
+    expect(host().querySelector('button')).toBeNull();
+    backend.expectNone((request) => request.method === 'POST');
     (await vi.waitFor(() => backend.expectOne('/api/v1/me'))).flush(
       {},
       { status: 401, statusText: 'Unauthorized' },
     );
+  });
+  it('does not take focus from Help when a recheck confirms deletion', async () => {
+    start();
+    (await vi.waitFor(() => backend.expectOne(url))).flush(pending);
+    await shows('Deletion hasn’t been confirmed');
+    recheck().focus();
+    check();
+    const retry = await vi.waitFor(() => backend.expectOne(url));
+    await shows('Checking your deletion request');
+    const help = host().querySelector('main > a[href="/help"]');
+    if (!(help instanceof HTMLAnchorElement)) throw new Error('Missing Help');
+    help.focus();
+    expect(document.activeElement).toBe(help);
+    retry.flush(deleted);
+    await shows('Deletion confirmed');
+    expect(document.activeElement).toBe(help);
+    (await vi.waitFor(() => backend.expectOne('/api/v1/me'))).flush(
+      {},
+      { status: 401, statusText: 'Unauthorized' },
+    );
+    backend.expectNone((request) => request.method === 'POST');
   });
   it('withholds cached success until current browser proof is checked', async () => {
     client.setQueryData(['account-deletion-status'], deleted);
@@ -122,9 +163,22 @@ describe('P05 cookie-proof recovery without a live application session', () => {
       { status: 503, statusText: 'Unavailable' },
     );
     await shows('Reference: safe-reference');
+    const button = recheck();
+    button.focus();
     check();
-    (await vi.waitFor(() => backend.expectOne(url))).flush(pending);
+    const retry = await vi.waitFor(() => backend.expectOne(url));
+    await shows('Checking your deletion request');
+    expect(recheck()).toBe(button);
+    expect(document.activeElement).toBe(button);
+    check();
+    backend.expectNone(url);
+    retry.flush(pending);
     await shows('Deletion hasn’t been confirmed');
+    expect(recheck()).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(button.getAttribute('aria-busy')).toBe('false');
+    expect(button.getAttribute('aria-disabled')).toBe('false');
+    backend.expectNone((request) => request.method === 'POST');
   });
   it('rechecks ordinary authority after canonical deletion and clears stale private state without gating the proof result', async () => {
     client.setQueryData(['session'], verifiedActor);

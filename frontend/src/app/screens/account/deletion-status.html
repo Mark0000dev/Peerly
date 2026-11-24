@@ -11,7 +11,7 @@
       aria-label="Confirmed account deletion"
     >
       <peerly-mascot tuiSlot="top" name="hello" />
-      <h2>Deletion confirmed</h2>
+      <h2 #confirmedHeading tabindex="-1">Deletion confirmed</h2>
       <p>
         The account for this request is deleted. Its sessions have ended. Other people see “Deleted
         account” in those conversations.
@@ -35,7 +35,6 @@
         If you confirmed deletion and the connection dropped, it may still finish. Check again
         before making another request.
       </p>
-      <button tuiButton type="button" (click)="check()">Check again</button>
       <a tuiLink routerLink="/account/delete">Return to account deletion</a>
     </tui-block-status>
   } @else {
@@ -53,8 +52,19 @@
       } @else {
         <p>We couldn’t reach a confirmed result. Check again before making another request.</p>
       }
-      <button tuiButton type="button" (click)="check()">Check again</button>
     </tui-block-status>
+  }
+  @if (!confirmed) {
+    <button
+      #recheck
+      tuiButton
+      type="button"
+      [attr.aria-disabled]="status.isFetching"
+      [attr.aria-busy]="status.isFetching"
+      (click)="check()"
+    >
+      Check again
+    </button>
   }
   @if (reference; as id) {
     <p>Reference: {{ id }}</p>

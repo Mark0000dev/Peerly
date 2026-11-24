@@ -7,8 +7,10 @@ import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TuiRoot } from '@taiga-ui/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { userEvent } from 'vitest/browser';
 import { appConfig } from '../../app.config';
 import { OperatorReports } from './operator-reports';
+import { emptyHistory } from './reports/review/review.fixtures';
 import { operatorIdentity } from './operator.fixtures';
 import {
   auditId,
@@ -350,5 +352,189 @@ describe('M02/M06/M07 real report investigation ownership', () => {
     await shown('No canonical events');
     expect(router.url).not.toContain('cursor');
     expect(host().textContent).not.toContain(reportId);
+  });
+
+  async function reviewWorkspace(): Promise<void> {
+    await login({ report: reportId });
+    await list();
+    (await request(`reports/${reportId}`)).flush(reportDetail);
+    await shown(reportDetail.comment);
+    click('Human review');
+    (await request(`reports/${reportId}/reviews`)).flush(emptyHistory);
+    await shown('No dismiss or escalate decision is recorded.');
+  }
+  it('opens and closes the actual human review workspace without a write or extra inspection', async () => {
+    await reviewWorkspace();
+    click('Close human review');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host().querySelector('[aria-label="Human report review"]')).toBeNull();
+    });
+    expect(host().textContent).toContain(reportDetail.comment);
+    backend.expectNone((value) => value.method !== 'GET');
+    backend.expectNone((value) => value.url.startsWith('/api/v1/operator'));
+  });
+  it('keeps an unsaved private human decision until explicit discard when closing the workspace', async () => {
+    await reviewWorkspace();
+    const textarea = host().querySelector('textarea');
+    if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('Missing review reason');
+    textarea.setRangeText('Unsent operator reason');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    click('Close human review');
+    await shown('Discard unsaved changes?');
+    click('Keep editing');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host().querySelector('[role="dialog"]')).toBeNull();
+    });
+    expect(host().querySelector('textarea')?.value).toBe('Unsent operator reason');
+    click('Close human review');
+    await shown('Discard unsaved changes?');
+    click('Discard changes');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host().querySelector('[aria-label="Human report review"]')).toBeNull();
+    });
+    backend.expectNone((value) => value.method !== 'GET');
+  });
+  it('retires the old human review workspace when a different report is selected without sending a decision', async () => {
+    await reviewWorkspace();
+    await navigate({ report: auditId });
+    const read = await request(`reports/${auditId}`);
+    read.flush({ ...reportDetail, report: { ...reportDetail.report, id: auditId } });
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host().querySelector('[aria-label="Human report review"]')).toBeNull();
+    });
+    backend.expectNone((value) => value.method !== 'GET');
+  });
+  it('applies an explicit category filter and removes all-category and page cursor from a new search', async () => {
+    await login({ reports_cursor: 'old-page' });
+    await list();
+    const select = host().querySelector('#report-category');
+    if (!(select instanceof HTMLSelectElement)) throw new Error('Missing category select');
+    const category = Array.from(select.options).find(
+      (option: Readonly<HTMLOptionElement>) =>
+        option.textContent.trim() === reportDetail.report.category,
+    );
+    if (category === undefined) throw new Error('Missing stored report category');
+    await userEvent.selectOptions(select, category.value);
+    fixture.detectChanges();
+    click('Search retained reports');
+    const filtered = await request('reports?');
+    const query = new URL(filtered.request.url, 'https://peerly.test').searchParams;
+    expect(query.get('category')).toBe(reportDetail.report.category);
+    expect(query.get('cursor')).toBeNull();
+    filtered.flush(reportPage);
+    await shown(reportId);
+    const all = Array.from(select.options).find(
+      (option: Readonly<HTMLOptionElement>) => option.textContent.trim() === 'all',
+    );
+    if (all === undefined) throw new Error('Missing all categories');
+    await userEvent.selectOptions(select, all.value);
+    fixture.detectChanges();
+    click('Search retained reports');
+    const unfiltered = await request('reports?');
+    expect(
+      new URL(unfiltered.request.url, 'https://peerly.test').searchParams.has('category'),
+    ).toBe(false);
+    expect(router.url).not.toContain('category=');
+    expect(router.url).not.toContain('reports_cursor=');
+    unfiltered.flush(reportPage);
+    await shown(reportId);
+    backend.expectNone((value) => value.method !== 'GET');
+  });
+  it('revalidates an actor replacement without rewriting cursor-free filters or revealing the old pending record', async () => {
+    await login({ report: reportId, target_id: reportDetail.report.target_id });
+    await list();
+    const old = await request(`reports/${reportId}`);
+    const url = router.url;
+    const checking = client.invalidateQueries({ queryKey: ['session'] });
+    (await vi.waitFor(() => backend.expectOne('/api/v1/me'))).flush({
+      ...operatorIdentity,
+      account_id: auditId,
+    });
+    await checking;
+    const reports = await request('reports?');
+    expect(new URL(reports.request.url, 'https://peerly.test').searchParams.get('target_id')).toBe(
+      reportDetail.report.target_id,
+    );
+    expect(router.url).toBe(url);
+    expect(old.cancelled).toBe(true);
+    expect(host().textContent).not.toContain(reportDetail.comment);
+    reports.flush(reportPage);
+    (await request(`reports/${reportId}`)).flush(reportDetail);
+    await shown(reportDetail.comment);
+    backend.expectNone((value) => value.method !== 'GET');
+    backend.expectNone((value) => value.url.startsWith('/api/v1/operator/events'));
+  });
+  it('drops a previous actor review cursor before opening a newly authorized human review', async () => {
+    await login({ report: reportId, report_review_cursor: 'previous-actor-review-page' });
+    await list();
+    (await request(`reports/${reportId}`)).flush(reportDetail);
+    await shown(reportDetail.comment);
+    const checking = client.invalidateQueries({ queryKey: ['session'] });
+    (await vi.waitFor(() => backend.expectOne('/api/v1/me'))).flush({
+      ...operatorIdentity,
+      account_id: auditId,
+    });
+    await checking;
+    await list();
+    (await request(`reports/${reportId}`)).flush(reportDetail);
+    await shown(reportDetail.comment);
+    expect(router.url).not.toContain('report_review_cursor');
+    click('Human review');
+    const history = await request(`reports/${reportId}/reviews`);
+    expect(new URL(history.request.url, 'https://peerly.test').searchParams.has('cursor')).toBe(
+      false,
+    );
+    history.flush(emptyHistory);
+    await shown('No dismiss or escalate decision is recorded.');
+    backend.expectNone((value) => value.method !== 'GET');
+  });
+  it('keeps a denied report private when an explicit grant recheck is denied again', async () => {
+    await login({ report: reportId });
+    const pending = await request('reports?');
+    (await request(`reports/${reportId}`)).flush(
+      { code: 'operator_access_denied', detail: 'PRIVATE GRANT DETAIL' },
+      { status: 403, statusText: 'Denied' },
+    );
+    await shown('Operator access denied');
+    expect(pending.cancelled).toBe(true);
+    click('Check operator access again');
+    (await vi.waitFor(() => backend.expectOne('/api/v1/me'))).flush(operatorIdentity);
+    const recheckedList = await request('reports?');
+    expect(recheckedList.request.method).toBe('GET');
+    expect(recheckedList.request.url).toBe('/api/v1/operator/reports?');
+    expect(recheckedList.cancelled).toBe(false);
+    (await request(`reports/${reportId}`)).flush(
+      { code: 'operator_access_denied', detail: 'PRIVATE GRANT DETAIL' },
+      { status: 403, statusText: 'Denied' },
+    );
+    await shown('Operator access denied');
+    await vi.waitFor(() => {
+      expect(recheckedList.cancelled).toBe(true);
+    });
+    expect(host().textContent).not.toContain('PRIVATE GRANT DETAIL');
+    expect(host().textContent).not.toContain(reportDetail.comment);
+    expect(host().textContent).not.toContain('Human review');
+    backend.expectNone((value) => value.method !== 'GET');
+    backend.expectNone((value) => value.url.startsWith('/api/v1/operator'));
+  });
+  it('does not restart private report reads when a session recheck settles as the screen is retired', async () => {
+    backend.expectOne('/api/v1/me').flush({}, { status: 503, statusText: 'Unavailable' });
+    await shown('Your session could not be checked');
+    click('Retry');
+    const session = await vi.waitFor(() => backend.expectOne('/api/v1/me'));
+    session.flush(operatorIdentity);
+    fixture.destroy();
+    await fixture.whenStable();
+    backend.expectNone((value) => value.url.startsWith('/api/v1/operator'));
+    expect(
+      client
+        .getQueryCache()
+        .findAll({ queryKey: ['account', operatorIdentity.account_id, 'operator'] }),
+    ).toHaveLength(0);
   });
 });

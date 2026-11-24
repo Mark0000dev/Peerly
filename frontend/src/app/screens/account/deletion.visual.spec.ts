@@ -132,8 +132,23 @@ for (const state of ['pending', 'unavailable', 'transient'] as const) {
       await route.fulfill({ status: 401, json: { code: 'unauthenticated' } });
     });
     let reads = 0;
+    let writes = 0;
+    const retryGate = heldResponse();
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        new URL(request.url()).pathname.startsWith('/api/v1/me/deletion')
+      )
+        writes += 1;
+    });
     await page.route('**/api/v1/me/deletion-status', async (route) => {
+      expect(route.request().method()).toBe('GET');
       reads += 1;
+      if (reads === 2) await retryGate.promise;
+      if (reads === 3) {
+        await route.fulfill({ json: { ...receipt, state: 'deleted' } });
+        return;
+      }
       if (state === 'pending') await route.fulfill({ json: { ...preparation, state: 'pending' } });
       else
         await route.fulfill({
@@ -155,10 +170,32 @@ for (const state of ['pending', 'unavailable', 'transient'] as const) {
       page.getByRole('heading', { name: 'Deletion confirmed', exact: true }),
     ).toHaveCount(0);
     await checkpoint(`deletion-status-${state}.png`);
-    await page.getByRole('button', { name: 'Check again', exact: true }).click();
-    await expect.poll(() => reads).toBe(2);
-    await expect(page.getByRole('button', { name: 'Check again', exact: true })).toBeVisible();
+    const recheck = page.getByRole('button', { name: 'Check again', exact: true });
+    await recheck.focus();
+    try {
+      await recheck.press('Enter');
+      await expect.poll(() => reads).toBe(2);
+      await expect(recheck).toHaveAttribute('aria-busy', 'true');
+      await expect(recheck).toHaveAttribute('aria-disabled', 'true');
+      await expect(recheck).toBeFocused();
+      await recheck.press('Enter');
+      expect(reads).toBe(2);
+    } finally {
+      retryGate.resolve();
+    }
+    await expect(recheck).toHaveAttribute('aria-busy', 'false');
+    await expect(recheck).toHaveAttribute('aria-disabled', 'false');
+    await expect(recheck).toBeFocused();
+    expect(reads).toBe(2);
     await checkpoint(`deletion-status-${state}-retried.png`);
+    await recheck.press('Enter');
+    const confirmed = page.getByRole('heading', { name: 'Deletion confirmed', exact: true });
+    await expect(confirmed).toBeFocused();
+    await expect(confirmed).toBeInViewport();
+    await expect(recheck).toHaveCount(0);
+    expect(reads).toBe(3);
+    expect(writes).toBe(0);
+    await checkpoint(`deletion-status-${state}-confirmed-after-recheck.png`);
   });
 }
 

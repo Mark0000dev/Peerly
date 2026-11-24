@@ -1,10 +1,10 @@
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import type { TestRequest } from '@angular/common/http/testing';
-import { Component } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import type { Query } from '@tanstack/angular-query-experimental';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { TuiRoot } from '@taiga-ui/core';
@@ -19,11 +19,11 @@ import { emptyHistory, revision } from './review.fixtures';
   selector: 'report-review-test-host',
   imports: [TuiRoot, OperatorReportReview],
   template:
-    '<tui-root><app-operator-report-review [actorId]="actor" [reportId]="report" /></tui-root>',
+    '<tui-root><app-operator-report-review [actorId]="actor()" [reportId]="report()" /></tui-root>',
 })
 class Host {
-  protected readonly actor = operatorIdentity.account_id;
-  protected readonly report = reportId;
+  public readonly actor = input(operatorIdentity.account_id);
+  public readonly report = input(reportId);
 }
 describe('M02 human decision intent ownership', () => {
   let fixture: ComponentFixture<Host>;
@@ -244,5 +244,238 @@ describe('M02 human decision intent ownership', () => {
         .some((query: Readonly<Query>) => query.state.status === 'error'),
     ).toBe(true);
     subscription.unsubscribe();
+  });
+
+  for (const scenario of [
+    { status: 401, message: 'Operator access must be checked before continuing.' },
+    { status: 404, message: 'This report is unavailable for review.' },
+    { status: 422, message: 'The report, history cursor or decision could not be accepted.' },
+    { status: 503, message: 'The report review could not be loaded or confirmed.' },
+  ] as const) {
+    it(`recovers a history ${String(scenario.status)} only after an explicit read without recording a decision`, async () => {
+      (await request('GET')).flush(
+        { code: 'unavailable', detail: 'PRIVATE SERVER DETAIL' },
+        { status: scenario.status, statusText: 'Unavailable' },
+      );
+      await shown(scenario.message);
+      expect(host().textContent).not.toContain('PRIVATE SERVER DETAIL');
+      backend.expectNone((value) => value.method !== 'GET');
+      click('Read current review state');
+      await open();
+      backend.expectNone((value) => value.method !== 'GET');
+    });
+  }
+  for (const status of [404, 422]) {
+    it(`preserves an explicitly rejected decision ${String(status)} for review after canonical reload`, async () => {
+      await open();
+      draft('Keep my reason');
+      click('Review decision');
+      click('Record reviewed decision');
+      (await request('POST')).flush(
+        { code: 'unavailable', detail: 'PRIVATE SERVER DETAIL' },
+        { status, statusText: 'Rejected' },
+      );
+      await shown(status === 404 ? 'This report is unavailable' : 'could not be accepted');
+      expect(host().textContent).not.toContain('PRIVATE SERVER DETAIL');
+      expect(host().querySelector('textarea')?.value).toBe('Keep my reason');
+      backend.expectNone((value) => value.method === 'POST');
+      click('Read current review state');
+      await open();
+      click('Review decision');
+      await shown('Keep my reason');
+      expect(host().querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+      backend.expectNone((value) => value.method === 'POST');
+    });
+  }
+  it('requires re-review when a background canonical revision advances after preparation', async () => {
+    await open();
+    draft();
+    click('Review decision');
+    const refresh = client.refetchQueries({
+      queryKey: ['account', operatorIdentity.account_id, 'operator', 'report-review', reportId],
+    });
+    (await request('GET')).flush({
+      ...emptyHistory,
+      current: revision(2),
+      anchor_version: 2,
+      revisions: [revision(2)],
+    });
+    await refresh;
+    await shown('The current version changed.');
+    const apply = Array.from(host().querySelectorAll('button')).find(
+      (button: Readonly<HTMLButtonElement>) =>
+        button.textContent.trim() === 'Record reviewed decision',
+    );
+    expect(apply?.disabled).toBe(true);
+    click('Edit decision');
+    click('Review decision');
+    await shown('Expected current version 2.');
+    backend.expectNone((value) => value.method === 'POST');
+  });
+  it('cannot advance an exhausted revision and does not record a wrapped version', async () => {
+    (await request('GET')).flush({
+      ...emptyHistory,
+      current: revision(2147483647),
+      anchor_version: 2147483647,
+      revisions: [revision(2147483647)],
+    });
+    await shown('This review version cannot be advanced further.');
+    expect(host().querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+    backend.expectNone((value) => value.method === 'POST');
+  });
+  it('retires a pending decision on logout and ignores its late successful receipt', async () => {
+    await open();
+    draft('Private retiring reason');
+    click('Review decision');
+    click('Record reviewed decision');
+    const write = await request('POST');
+    client.setQueryData(['session'], null);
+    await shown('Operator access must be checked');
+    expect(host().textContent).not.toContain('Private retiring reason');
+    expect(client.getMutationCache().getAll()).toHaveLength(0);
+    write.flush({ ...revision(1), reason: 'Private retiring reason' });
+    await fixture.whenStable();
+    expect(host().textContent).not.toContain('Decision stored');
+    backend.expectNone((value) => value.url === path);
+  });
+
+  for (const field of ['actor', 'report']) {
+    it(`cancels the previous history read when the ${field} URL identity is malformed`, async () => {
+      const initial = await request('GET');
+      fixture.componentRef.setInput(field, 'not-a-uuid');
+      fixture.detectChanges();
+      await shown('The operator or report ID is invalid.');
+      expect(initial.cancelled).toBe(true);
+      backend.expectNone((value) => value.url.startsWith('/api/v1/operator'));
+    });
+  }
+  it('rechecks canonical authority before dispatching a queued review decision', async () => {
+    await open();
+    draft('Do not send after logout');
+    click('Review decision');
+    click('Record reviewed decision');
+    client.setQueryData(['session'], null);
+    await shown('Operator access must be checked');
+    backend.expectNone((value) => value.method === 'POST');
+    expect(host().textContent).not.toContain('Do not send after logout');
+  });
+  for (const status of [401, 403]) {
+    it(`reports a current-owner decision authority failure ${String(status)} without automatic replay`, async () => {
+      await open();
+      draft();
+      click('Review decision');
+      click('Record reviewed decision');
+      (await request('POST')).flush(
+        { code: 'operator_access_denied' },
+        { status, statusText: 'Denied' },
+      );
+      await shown('Operator access must be checked');
+      backend.expectNone((value) => value.method === 'POST');
+      expect(host().textContent).not.toContain('Decision stored');
+    });
+  }
+
+  it('pages anchored history through the URL and returns to current history without a decision', async () => {
+    (await request('GET')).flush({
+      ...emptyHistory,
+      current: revision(2),
+      anchor_version: 2,
+      revisions: [revision(2)],
+      next_cursor: 'earlier-signed-page',
+    });
+    await shown('Earlier review revisions');
+    click('Earlier review revisions');
+    const earlier = await vi.waitFor(() => backend.expectOne(`${path}?cursor=earlier-signed-page`));
+    expect(TestBed.inject(Router).url).toContain('report_review_cursor=earlier-signed-page');
+    earlier.flush({
+      ...emptyHistory,
+      current: revision(2),
+      anchor_version: 2,
+      revisions: [revision(1)],
+    });
+    await shown('First review-history page');
+    click('First review-history page');
+    (await request('GET')).flush({
+      ...emptyHistory,
+      current: revision(2),
+      anchor_version: 2,
+      revisions: [revision(2)],
+    });
+    await shown('Current recorded decision');
+    expect(TestBed.inject(Router).url).not.toContain('report_review_cursor');
+    backend.expectNone((value) => value.method !== 'GET');
+  });
+  it('rejects an invalid history cursor locally and recovers only by explicit first page', async () => {
+    const initial = await request('GET');
+    await TestBed.inject(Router).navigateByUrl('/?report_review_cursor=' + 'a'.repeat(1025));
+    await shown('The review-history cursor is invalid.');
+    expect(initial.cancelled).toBe(true);
+    backend.expectNone((value) => value.url.startsWith(path));
+    click('First review-history page');
+    await open();
+    backend.expectNone((value) => value.method !== 'GET');
+  });
+  it('does not turn a successful history read into confirmation of an uncertain decision', async () => {
+    await open();
+    draft('Original uncertain reason');
+    click('Review decision');
+    click('Record reviewed decision');
+    const original = await request('POST');
+    const key = original.request.headers.get('Idempotency-Key');
+    original.error(new ProgressEvent('error'));
+    await shown('The decision outcome is unknown.');
+    click('Read current review state');
+    (await request('GET')).flush(emptyHistory);
+    await fixture.whenStable();
+    await shown('The decision outcome is unknown.');
+    expect(host().querySelector('textarea')?.value).toBe('Original uncertain reason');
+    backend.expectNone((value) => value.method === 'POST');
+    click('Retry identical decision');
+    const replay = await request('POST');
+    expect(replay.request.headers.get('Idempotency-Key')).toBe(key);
+    expect(replay.request.body).toEqual(original.request.body);
+    replay.flush({ ...revision(1), reason: 'Original uncertain reason' });
+    (await request('GET')).flush({
+      ...emptyHistory,
+      current: { ...revision(1), reason: 'Original uncertain reason' },
+      anchor_version: 1,
+      revisions: [{ ...revision(1), reason: 'Original uncertain reason' }],
+    });
+    await shown('Decision stored');
+  });
+  it('keeps an explicit identical retry pending when an older uncertain-history read completes', async () => {
+    await open();
+    draft('Exact original recovery reason');
+    click('Review decision');
+    click('Record reviewed decision');
+    const original = await request('POST');
+    const body: unknown = original.request.body;
+    const key = original.request.headers.get('Idempotency-Key');
+    original.error(new ProgressEvent('error'));
+    await shown('The decision outcome is unknown.');
+    click('Read current review state');
+    const history = await request('GET');
+    backend.expectNone((value) => value.method === 'POST');
+    client.setQueryData(['session'], { ...operatorIdentity, csrf_token: 'fresh-recovery-csrf' });
+    click('Retry identical decision');
+    const replay = await request('POST');
+    expect(replay.request.body).toEqual(body);
+    expect(replay.request.headers.get('Idempotency-Key')).toBe(key);
+    expect(replay.request.headers.get('X-CSRF-Token')).toBe('fresh-recovery-csrf');
+    history.flush(emptyHistory);
+    await shown('Recording the human decision…');
+    expect(host().querySelector('textarea')?.value).toBe('Exact original recovery reason');
+    backend.expectNone((value) => value.method === 'POST');
+    const stored = { ...revision(1), reason: 'Exact original recovery reason' };
+    replay.flush(stored);
+    (await request('GET')).flush({
+      ...emptyHistory,
+      current: stored,
+      anchor_version: 1,
+      revisions: [stored],
+    });
+    await shown('Decision stored');
+    expect(host().textContent).toContain('Exact original recovery reason');
+    backend.expectNone((value) => value.method === 'POST');
   });
 });

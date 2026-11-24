@@ -4,9 +4,10 @@ import {
   ChangeDetectorRef,
   ErrorHandler,
   computed,
-  effect,
+  afterRenderEffect,
   untracked,
   viewChild,
+  ViewContainerRef,
   Component,
   DestroyRef,
   inject,
@@ -115,13 +116,15 @@ export class StudyProgress implements OnChanges, OnInit {
     () => this.view() === 'feedback' || this.view() === 'saved',
   );
   private readonly feedbackDialog = viewChild.required<TemplateRef<unknown>>('feedbackDialog');
+  private readonly feedbackContent = viewChild('feedbackContent', { read: ViewContainerRef });
   private readonly dialogs = inject(TuiDialogService);
   private readonly errors = inject(ErrorHandler);
   private readonly breakpoint = inject(TUI_BREAKPOINT);
 
   public constructor() {
-    // Only the explicit feedback view owns a modal. Automatic offers stay inline.
-    effect((cleanup) => {
+    // Clear private template content during Angular's render before Taiga keeps
+    // its leaving portal for the exit animation. Automatic offers stay inline.
+    afterRenderEffect((cleanup) => {
       if (!this.feedbackOpen()) return;
       const template = this.feedbackDialog();
       const subscription = untracked(() =>
@@ -143,6 +146,15 @@ export class StudyProgress implements OnChanges, OnInit {
           }),
       );
       cleanup(() => {
+        if (this.destroy.destroyed) {
+          // A destroyed route cannot render again. Its app-owned portal view can
+          // still retire private content before the dialog starts leaving.
+          this.view.set('hidden');
+          this.form.reset();
+          const content = this.feedbackContent()?.get(0);
+          if (content !== undefined && content !== null && !content.destroyed)
+            content.detectChanges();
+        }
         subscription.unsubscribe();
       });
     });

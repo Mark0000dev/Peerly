@@ -501,6 +501,102 @@ describe('authenticated ephemeral observation delivery', () => {
     expect(h.buffer.drops().invalid).toBe(1);
     h.buffer.dispose();
   });
+  it('retires a reserved quality report when its actor changes after assembly was interrupted', async () => {
+    let sequence = 1000;
+    const uuid = vi
+      .fn(() => `00000000-0000-4000-8000-${String(sequence++).padStart(12, '0')}`)
+      .mockReturnValueOnce('invalid');
+    const release = vi.fn(() => null);
+    const h = harness({ uuid, release });
+    expect(h.buffer.observe({ kind: 'screen.viewed' })).toBe(false);
+    release.mockImplementation(() => {
+      throw new Error('private release lookup');
+    });
+    h.buffer.flush();
+    expect(h.calls()).toHaveLength(0);
+    h.actor(actorB);
+    expect(h.buffer.drops().actor_changed).toBe(1);
+    release.mockReturnValue(null);
+    expect(h.buffer.observe({ kind: 'screen.viewed' })).toBe(true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(h.calls()).toHaveLength(1);
+    expect(h.calls()[0]?.body.expected_actor_id).toBe(actorB);
+    expect(h.calls()[0]?.body.events).toHaveLength(1);
+    expect(h.calls()[0]?.body.events[0]?.kind).toBe('screen.viewed');
+    expect(h.calls()[0]?.json).not.toContain('private release lookup');
+    h.buffer.dispose();
+  });
+  it('expires an interrupted quality report without recursively reporting its expiry', async () => {
+    let sequence = 1000;
+    const uuid = vi
+      .fn(() => `00000000-0000-4000-8000-${String(sequence++).padStart(12, '0')}`)
+      .mockReturnValueOnce('invalid');
+    const release = vi.fn(() => null);
+    const h = harness({ uuid, release });
+    expect(h.buffer.observe({ kind: 'screen.viewed' })).toBe(false);
+    release.mockImplementation(() => {
+      throw new Error('private release lookup');
+    });
+    h.buffer.flush();
+    release.mockReturnValue(null);
+    vi.setSystemTime(Date.now() + 60000);
+    h.buffer.flush();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.buffer.drops().expired).toBe(1);
+    expect(h.calls()).toHaveLength(0);
+    expect(h.buffer.observe({ kind: 'screen.viewed' })).toBe(true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(h.calls()).toHaveLength(1);
+    expect(h.calls()[0]?.body.events).toHaveLength(1);
+    expect(h.calls()[0]?.body.events[0]?.kind).toBe('screen.viewed');
+    h.buffer.dispose();
+  });
+  it('retries a rejected transport with the same intent and cancels further delivery on disposal', async () => {
+    const h = harness();
+    h.delivery(() => Promise.reject(new Error('private transport diagnostic')));
+    expect(h.buffer.observe({ kind: 'screen.viewed' })).toBe(true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(h.calls()).toHaveLength(1);
+    const original = h.calls()[0];
+    expect(original).toBeDefined();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(h.calls()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.calls()).toHaveLength(2);
+    expect(h.calls()[1]?.key).toBe(original?.key);
+    expect(h.calls()[1]?.json).toBe(original?.json);
+    expect(h.calls()[1]?.body.events).toEqual(original?.body.events);
+    expect(original?.json).not.toContain('private transport diagnostic');
+    h.buffer.dispose();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(h.calls()).toHaveLength(2);
+    expect(h.buffer.drops().exhausted).toBe(0);
+  });
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'isolates an invalid retry delay %s to the current actor epoch',
+    async (retryAfterMs) => {
+      const h = harness();
+      h.delivery(() => Promise.resolve({ kind: 'failed', status: 429, retryAfterMs }));
+      expect(h.buffer.observe({ kind: 'screen.viewed' })).toBe(true);
+      await vi.advanceTimersByTimeAsync(250);
+      expect(h.calls()).toHaveLength(1);
+      expect(h.buffer.drops().unavailable).toBe(1);
+      expect(h.buffer.observe({ kind: 'screen.viewed' })).toBe(false);
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(h.calls()).toHaveLength(1);
+      h.actor(actorB);
+      expect(h.buffer.observe({ kind: 'screen.viewed' })).toBe(true);
+      await vi.advanceTimersByTimeAsync(250);
+      expect(h.calls()).toHaveLength(2);
+      expect(h.calls()[1]?.body.expected_actor_id).toBe(actorB);
+      expect(h.calls()[1]?.body.events).toHaveLength(1);
+      expect(h.calls()[1]?.body.events[0]?.kind).toBe('screen.viewed');
+      expect(h.calls()[1]?.body.events[0]?.event_id).not.toBe(
+        h.calls()[0]?.body.events[0]?.event_id,
+      );
+      h.buffer.dispose();
+    },
+  );
   it('ignores a timeout callback already queued before disposal', async () => {
     let callbacks: readonly Readonly<{ readonly callback: () => void; readonly delay: number }>[] =
       [];

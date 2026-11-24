@@ -409,8 +409,17 @@ export class OperatorReportReview implements OnInit, OnChanges {
   protected async reload(): Promise<void> {
     if (this.operation.isPending || !this.authorized) return;
     const lifetime = this.lifetime();
+    // Reading history cannot confirm an unknown decision, even if an explicit
+    // retry changes its status before this read's continuation resumes.
+    const wasUncertain = this.uncertain;
     const result = await this.historyQuery.refetch();
-    if (lifetime === this.lifetime() && result.isSuccess && !result.isFetching && !this.uncertain) {
+    if (
+      lifetime === this.lifetime() &&
+      result.isSuccess &&
+      !result.isFetching &&
+      !wasUncertain &&
+      !isUncertain(this.operation.error)
+    ) {
       this.mutation.reset();
       this.staged.set(null);
     }

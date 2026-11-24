@@ -5,10 +5,12 @@ import { By } from '@angular/platform-browser';
 import { PhotoWorkflow } from './photo/photo';
 import { TestBed } from '@angular/core/testing';
 import type { ComponentFixture } from '@angular/core/testing';
+import type { Mutation } from '@tanstack/angular-query-experimental';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appConfig } from '../../../app.config';
 import { ProfileBasics } from './profile';
+import { PhotoAssistance } from '../study/ai/photo-assistance';
 import { OwnFeedbackSummary } from './feedback-summary';
 import { ApiFailure } from '../../../api-http';
 import { ownProfile, revision } from './profile.fixtures';
@@ -376,4 +378,223 @@ describe('owned profile name draft', () => {
       backend.expectNone('/api/v1/media/uploads');
     });
   }
+
+  it('pauses a queued profile save during identity checking and explicitly retries its original intent', async () => {
+    await load();
+    edit('Queued profile draft');
+    submit(fixture);
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    await shown(fixture, 'Your save paused during a sign-in check.');
+    backend.expectNone((request) => request.method === 'PUT');
+    expect(control(fixture, '#profile-name').value).toBe('Queued profile draft');
+    const rotated = { ...verifiedActor, csrf_token: 'rotated-after-check' };
+    client.setQueryData(['session'], rotated);
+    fixture.componentRef.setInput('actor', rotated);
+    fixture.componentRef.setInput('checking', false);
+    fixture.detectChanges();
+    // The same-owner projection is still fresh; checking must not refetch it.
+    backend.expectNone('/api/v1/me/profile');
+    submit(fixture);
+    const retry = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/profile', method: 'PUT' }),
+    );
+    expect(retry.request.headers.get('x-csrf-token')).toBe(rotated.csrf_token);
+    expect(retry.request.body).toMatchObject({
+      display_name: 'Queued profile draft',
+      expected_version: 2,
+    });
+    retry.flush({ ...revision, version: 3, display_name: 'Queued profile draft' });
+    await load({
+      profile: { ...revision, version: 3, display_name: 'Queued profile draft' },
+      photo: null,
+    });
+    await shown(fixture, 'Profile saved.');
+  });
+  it('accepts its owned save receipt during identity checking without launching a private read', async () => {
+    await load();
+    edit('Committed owner draft');
+    submit(fixture);
+    const save = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/profile', method: 'PUT' }),
+    );
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    save.flush({ ...revision, version: 3, display_name: 'Committed owner draft' });
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(control(fixture, '#profile-name').value).toBe('Committed owner draft');
+      expect(
+        client.getQueryState(['account', verifiedActor.account_id, 'profile'])?.isInvalidated,
+      ).toBe(true);
+    });
+    expect(control(fixture, '#profile-name').value).toBe('Committed owner draft');
+    expect(
+      client.getQueryState(['account', verifiedActor.account_id, 'profile'])?.isInvalidated,
+    ).toBe(true);
+    backend.expectNone('/api/v1/me/profile');
+  });
+  it('keeps a committed name when the subsequent canonical projection is older', async () => {
+    await load();
+    edit('Committed name');
+    submit(fixture);
+    const save = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/profile', method: 'PUT' }),
+    );
+    save.flush({ ...revision, version: 3, display_name: 'Committed name' });
+    await load();
+    expect(control(fixture, '#profile-name').value).toBe('Committed name');
+    await shown(fixture, 'Your profile changed elsewhere');
+    submit(fixture);
+    backend.expectNone((request) => request.method === 'PUT');
+  });
+
+  it('ignores stale-owner and non-authority photo-assistance failures without erasing the name draft', async () => {
+    await load();
+    edit('Current private name');
+    const advice = fixture.debugElement
+      .query(By.directive(PhotoAssistance))
+      .injector.get(PhotoAssistance);
+    const expired = vi.fn();
+    fixture.componentInstance.expired.subscribe(expired);
+    advice.expired.emit({
+      actorId: '00000000-0000-4000-8000-000000000099',
+      failure: new ApiFailure(401, 'denied', null),
+    });
+    advice.expired.emit({
+      actorId: verifiedActor.account_id,
+      failure: new ApiFailure(503, 'unavailable', null),
+    });
+    expect(control(fixture, '#profile-name').value).toBe('Current private name');
+    expect(expired).not.toHaveBeenCalled();
+    backend.expectNone((request) => request.method !== 'GET');
+  });
+  for (const status of [401, 403]) {
+    it(`retires the current owner name draft after photo-assistance authority failure ${String(status)}`, async () => {
+      await load();
+      edit('Private name to retire');
+      const advice = fixture.debugElement
+        .query(By.directive(PhotoAssistance))
+        .injector.get(PhotoAssistance);
+      const expired = vi.fn();
+      fixture.componentInstance.expired.subscribe(expired);
+      advice.expired.emit({
+        actorId: verifiedActor.account_id,
+        failure: new ApiFailure(status, 'denied', null),
+      });
+      expect(control(fixture, '#profile-name').value).toBe('');
+      expect(client.getQueryData(['account', verifiedActor.account_id, 'profile'])).toBeUndefined();
+      expect(expired).toHaveBeenCalledOnce();
+      backend.expectNone((request) => request.method !== 'GET');
+    });
+  }
+  it('preserves a committed profile receipt when the immediate canonical read has no projection yet', async () => {
+    await load();
+    edit('Committed without projection');
+    submit(fixture);
+    const write = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/profile', method: 'PUT' }),
+    );
+    write.flush({ ...revision, version: 3, display_name: 'Committed without projection' });
+    await load({ profile: null, photo: null });
+    expect(control(fixture, '#profile-name').value).toBe('Committed without projection');
+    await shown(fixture, 'Your profile changed elsewhere');
+    submit(fixture);
+    backend.expectNone((request) => request.method === 'PUT');
+  });
+  it('retains a committed name and exposes canonical refresh failure without silently replaying', async () => {
+    await load();
+    edit('Committed before read failure');
+    submit(fixture);
+    const write = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/profile', method: 'PUT' }),
+    );
+    write.flush({ ...revision, version: 3, display_name: 'Committed before read failure' });
+    const read = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/profile', method: 'GET' }),
+    );
+    read.flush({ code: 'unavailable' }, { status: 503, statusText: 'Unavailable' });
+    await shown(fixture, 'We couldn’t refresh your profile. Your draft is still here.');
+    expect(control(fixture, '#profile-name').value).toBe('Committed before read failure');
+    backend.expectNone((request) => request.method === 'PUT');
+  });
+  it('recovers a definitive validation rejection only through a corrected draft and a fresh save intent', async () => {
+    await load();
+    edit('Rejected profile draft');
+    submit(fixture);
+    const rejected = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/profile', method: 'PUT' }),
+    );
+    const rejectedKey = rejected.request.headers.get('idempotency-key');
+    expect(rejectedKey).toMatch(/^[a-f0-9-]{36}$/);
+    rejected.flush(
+      { code: 'profile_validation_failed', title: 'PRIVATE VALIDATION DETAIL' },
+      { status: 422, statusText: 'Invalid' },
+    );
+    await shown(fixture, 'We couldn’t save your profile');
+    expect(host(fixture).textContent).not.toContain('PRIVATE VALIDATION DETAIL');
+    expect(control(fixture, '#profile-name').value).toBe('Rejected profile draft');
+    const input = host(fixture).querySelector('#profile-name');
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing profile name input');
+    expect(input.readOnly).toBe(false);
+    backend.expectNone((request) => request.method === 'PUT');
+    edit('Corrected profile draft');
+    submit(fixture);
+    const corrected = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/profile', method: 'PUT' }),
+    );
+    expect(corrected.request.headers.get('idempotency-key')).toMatch(/^[a-f0-9-]{36}$/);
+    expect(corrected.request.headers.get('idempotency-key')).not.toBe(rejectedKey);
+    expect(corrected.request.body).toMatchObject({
+      display_name: 'Corrected profile draft',
+      expected_version: 2,
+    });
+    const saved = { ...revision, display_name: 'Corrected profile draft', version: 3 };
+    corrected.flush(saved);
+    await load({ profile: saved, photo: null });
+    await shown(fixture, 'Profile saved.');
+    backend.expectNone((request) => request.method === 'PUT');
+  });
+  it('ignores a retired owner’s late forbidden save without clearing the replacement draft or authority', async () => {
+    const expired = vi.fn();
+    fixture.componentInstance.expired.subscribe(expired);
+    await load();
+    edit('Retired owner private draft');
+    submit(fixture);
+    const retired = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/me/profile', method: 'PUT' }),
+    );
+    const replacement = { ...verifiedActor, account_id: '00000000-0000-4000-8000-000000000098' };
+    client.setQueryData(['session'], replacement);
+    fixture.componentRef.setInput('actor', replacement);
+    fixture.detectChanges();
+    const saved = { ...revision, display_name: 'Replacement saved name', version: 4 };
+    await load({ profile: saved, photo: null });
+    edit('Replacement private draft');
+    retired.flush({ code: 'access_denied' }, { status: 403, statusText: 'Denied' });
+    await vi.waitFor(() => {
+      expect(
+        client
+          .getMutationCache()
+          .getAll()
+          .some(
+            (mutation: Readonly<Mutation>) =>
+              mutation.state.status === 'error' &&
+              mutation.state.error instanceof ApiFailure &&
+              mutation.state.error.status === 403,
+          ),
+      ).toBe(true);
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(control(fixture, '#profile-name').value).toBe('Replacement private draft');
+    expect(expired).not.toHaveBeenCalled();
+    expect(client.getQueryData(['session'])).toEqual(replacement);
+    expect(client.getQueryData(['account', replacement.account_id, 'profile'])).toEqual({
+      profile: saved,
+      photo: null,
+    });
+    backend.expectNone((request) => request.method === 'PUT');
+    backend.expectNone('/api/v1/me/profile');
+  });
 });

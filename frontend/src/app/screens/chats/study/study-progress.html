@@ -4,7 +4,7 @@
   </section>
 }
 <ng-template #feedbackDialog>
-  <ng-container [ngTemplateOutlet]="studyContent" />
+  <ng-container #feedbackContent [ngTemplateOutlet]="studyContent" />
 </ng-template>
 <ng-template #studyContent>
   @if (view() !== 'hidden') {
