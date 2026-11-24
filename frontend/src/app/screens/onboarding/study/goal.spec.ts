@@ -67,6 +67,15 @@ describe('actual study goal editor and catalogue selection', () => {
     request.flush(value, { status, statusText: status === 200 ? 'OK' : 'Failure' });
     await shown(fixture, status === 200 ? 'Save goal' : 'We couldn’t load your goal');
   }
+  async function editorReady(): Promise<void> {
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      const region = host(fixture).querySelector('section[aria-label="Your study goal"]');
+      expect(region).not.toBeNull();
+      expect(region?.querySelector('#goal-subject')).toBeInstanceOf(HTMLInputElement);
+      expect(region?.querySelector('form')).toBeInstanceOf(HTMLFormElement);
+    });
+  }
   function edit(name: string, value: unknown): void {
     control(fixture, `#goal-${name}`).setValue(value);
     control(fixture, `#goal-${name}`).markAsDirty();
@@ -96,7 +105,7 @@ describe('actual study goal editor and catalogue selection', () => {
       backend.expectOne(`/api/v1/subjects?query=${encodeURIComponent(query)}&limit=20`),
     );
     request.flush(value, { status, statusText: status === 200 ? 'OK' : 'Failure' });
-    await shown(fixture, 'Your study goal');
+    await editorReady();
   }
   it('loads server goal and defaulted optional subject tags into an editable form', async () => {
     await shown(fixture, 'Loading your goal');
@@ -123,7 +132,7 @@ describe('actual study goal editor and catalogue selection', () => {
     if (option === undefined) throw new Error('Missing catalogue option');
     option.click();
     await searched('SQL');
-    await shown(fixture, 'Your study goal');
+    await editorReady();
     expect(control(fixture, '#goal-subject').value).toMatchObject({
       kind: 'canonical',
       id: catalogue.items[1].id,
@@ -381,7 +390,7 @@ describe('actual study goal editor and catalogue selection', () => {
     await load({ goal: { ...goal, topic: 'Replacement' } });
     edit('topic', 'New draft');
     save.flush({ ...goal, topic: 'Old draft' });
-    await shown(fixture, 'Your study goal');
+    await editorReady();
     expect(control(fixture, '#goal-topic').value).toBe('New draft');
     backend.expectNone({ url: '/api/v1/me/goal', method: 'GET' });
   });

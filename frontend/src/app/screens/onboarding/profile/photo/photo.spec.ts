@@ -119,7 +119,7 @@ describe('real photo recovery query boundary', () => {
   async function open(
     value: Readonly<Api['schemas']['PhotoUploadResponse']> = upload,
   ): Promise<void> {
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     request.flush(value);
     await shown(
@@ -387,7 +387,7 @@ describe('real photo recovery query boundary', () => {
   ] as const) {
     it(`projects actual ${scenario.state} without a fabricated progress estimate`, async () => {
       await load();
-      click(fixture, 'Check upload');
+      click(fixture, 'Check upload 1');
       const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
       request.flush({ ...upload, state: scenario.state });
       await shown(fixture, scenario.text);
@@ -398,7 +398,7 @@ describe('real photo recovery query boundary', () => {
   for (const failure of ['storage_unavailable', 'processing_unavailable'] as const) {
     it(`distinguishes ${failure} from a bad photo without retrying automatically`, async () => {
       await load();
-      click(fixture, 'Check upload');
+      click(fixture, 'Check upload 1');
       const request = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
       request.flush({ ...upload, state: 'rejected', failure });
       await shown(fixture, 'This upload wasn’t saved.');
@@ -1132,7 +1132,7 @@ describe('real photo recovery query boundary', () => {
   }
   it('can explicitly retry a failed status read after intent recovery without restarting creation', async () => {
     await load();
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const failed = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     failed.flush({ code: 'unavailable' }, { status: 503, statusText: 'Failure' });
     await shown(fixture, 'We couldn’t check the photo upload.');
@@ -1423,7 +1423,7 @@ describe('real photo recovery query boundary', () => {
   });
   it('waits for an initially unknown selected upload before accepting a local file', async () => {
     await load();
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const pending = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     fixture.detectChanges();
     const chooser = Array.from(host(fixture).querySelectorAll('button')).find(
@@ -1452,7 +1452,7 @@ describe('real photo recovery query boundary', () => {
     expect(host(fixture).querySelector('img')?.getAttribute('src')).toBe(
       projection.photo.display_url,
     );
-    click(fixture, 'Check upload');
+    click(fixture, 'Check upload 1');
     const status = await vi.waitFor(() => backend.expectOne(`/api/v1/media/${upload.id}`));
     status.flush(ready);
     await load(projection);
