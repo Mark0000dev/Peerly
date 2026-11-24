@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -41,7 +42,15 @@ from studymate.application.identity.login import (
     LoginCancelledError,
     LoginRateLimitedError,
 )
+from studymate.application.identity.native_login import (
+    CompleteLoginForClient,
+    NativeCallbackFinished,
+)
 from studymate.application.identity.sessions import Logout, UnauthenticatedError
+from studymate.application.student_notifications.subscriptions import (
+    LogoutInstallation,
+    RetirementDisposition,
+)
 from studymate.domain.identity import StudentEmail
 from studymate.domain.membership import ChallengeState
 from studymate.presentation.browser import (
@@ -58,6 +67,7 @@ from studymate.presentation.problems import ProblemResponse, problem
 from studymate.presentation.registration_models import RegistrationReceiptResponse, receipt_response
 
 LOGIN_COOKIE = "__Host-studymate_login"
+NATIVE_LOGIN_COOKIE = "__Host-peerly_native"
 COOKIE_LIFETIME = 604800
 LOGIN_COOKIE_LIFETIME = 300
 STATE_LENGTH = 43
@@ -75,6 +85,15 @@ class AuthenticationServices:
     start_email: StartEmailChallenge
     verify_email: VerifyStudentEmail
     read_email: ReadEmailChallenge
+    logout_installation: LogoutInstallation | None = None
+    native_complete: CompleteLoginForClient | None = None
+
+
+class LogoutWriteHeaders(BrowserWriteHeaders):
+    x_notification_installation: UUID | None = Field(
+        default=None,
+        description="Optional session-enrolled installation; no provider recall.",
+    )
 
 
 class CapabilitiesResponse(BaseModel):
@@ -172,7 +191,10 @@ def _google_start_router(services: AuthenticationServices) -> APIRouter:
     return router
 
 
-def _google_router(services: AuthenticationServices) -> APIRouter:
+def _google_router(
+    services: AuthenticationServices,
+    finish_native: Callable[[], Response] | None = None,
+) -> APIRouter:
     router = APIRouter()
     router.include_router(_google_start_router(services))
 
@@ -216,7 +238,13 @@ def _google_router(services: AuthenticationServices) -> APIRouter:
                 _clear_cookie(response, LOGIN_COOKIE)
                 return response
             try:
-                completed = await services.complete(
+                complete = (
+                    services.native_complete
+                    if request.cookies.get(NATIVE_LOGIN_COOKIE) == "1"
+                    and services.native_complete is not None
+                    else services.complete
+                )
+                completed = await complete(
                     GoogleCallbackCommand(
                         source_digest=source,
                         state=state,
@@ -238,6 +266,10 @@ def _google_router(services: AuthenticationServices) -> APIRouter:
             except GoogleUnavailableError:
                 response = problem(HTTPStatus.SERVICE_UNAVAILABLE, "login_provider_unavailable")
             else:
+                if isinstance(completed, NativeCallbackFinished):
+                    if finish_native is None:
+                        raise RuntimeError("Native callback response factory was not composed")
+                    return finish_native()
                 response = RedirectResponse(
                     services.browser.public_origin + completed.return_to,
                     status_code=HTTPStatus.SEE_OTHER,
@@ -290,27 +322,57 @@ def _session_router(services: AuthenticationServices) -> APIRouter:
             csrf_token=await services.signer.csrf_token(credential),
         )
 
-    @router.post("/auth/logout", status_code=HTTPStatus.NO_CONTENT, response_class=Response)
+    @router.post(
+        "/auth/logout",
+        status_code=HTTPStatus.NO_CONTENT,
+        response_class=Response,
+        responses={
+            204: {
+                "headers": {
+                    "X-Notification-Retirement": {
+                        "description": (
+                            "Present only with X-Notification-Installation. "
+                            "Retired confirms atomic same-session retirement, not provider recall."
+                        ),
+                        "schema": {
+                            "type": "string",
+                            "enum": [item.value for item in RetirementDisposition],
+                        },
+                    }
+                }
+            }
+        },
+    )
     async def logout(
-        request: Request, headers: Annotated[BrowserWriteHeaders, Header()]
+        request: Request,
+        headers: Annotated[LogoutWriteHeaders, Header()],
     ) -> Response:
+        installation_id = headers.x_notification_installation
         credential = read_cookie(request, SESSION_COOKIE)
         if headers.origin not in services.browser.trusted_origins:
             return problem(HTTPStatus.FORBIDDEN, "origin_denied")
+        disposition = RetirementDisposition.UNCONFIRMED
         if credential is not None:
             if not await services.signer.valid_csrf(credential, headers.x_csrf_token or ""):
                 return problem(HTTPStatus.FORBIDDEN, "csrf_denied")
-            await services.logout(credential)
+            if services.logout_installation is not None:
+                disposition = await services.logout_installation(credential, installation_id)
+            else:
+                await services.logout(credential)
         response = Response(
             status_code=HTTPStatus.NO_CONTENT, headers={"Cache-Control": "no-store"}
         )
+        if installation_id is not None:
+            response.headers["X-Notification-Retirement"] = disposition.value
         clear_session_cookie(response)
         return response
 
     return router
 
 
-def identity_router(services: AuthenticationServices) -> APIRouter:
+def identity_router(
+    services: AuthenticationServices, finish_native: Callable[[], Response] | None = None
+) -> APIRouter:
     router = APIRouter(
         tags=["identity"],
         responses={
@@ -330,7 +392,7 @@ def identity_router(services: AuthenticationServices) -> APIRouter:
             )
         },
     )
-    router.include_router(_google_router(services))
+    router.include_router(_google_router(services, finish_native))
     router.include_router(_session_router(services))
     router.include_router(_email_router(services))
     return router

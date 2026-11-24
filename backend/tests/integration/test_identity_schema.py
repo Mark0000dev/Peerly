@@ -33,6 +33,12 @@ async def test_revision_upgrade_matches_models_and_can_be_reversed(engine: Async
         assert compare_metadata(MigrationContext.configure(connection), metadata) == []
         assert_check_constraints_match_metadata(connection, metadata)
         assert set(inspect(connection).get_table_names()) == {
+            "native_login_attempts",
+            "student_notification_subscriptions",
+            "student_notification_subscription_intents",
+            "student_notification_device_attempts",
+            "student_notification_consumers",
+            "student_notification_deliveries",
             "client_observation_batches",
             "client_observations",
             "client_observation_frames",

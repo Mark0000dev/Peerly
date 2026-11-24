@@ -30,6 +30,7 @@ from studymate.infrastructure.persistence.identity_models import (
     InstitutionalBindingRecord,
     SessionRecord,
 )
+from tests.ai_saturation_diagnostics import failure_counts, stored_counts
 from tests.integration.ai.test_queue import Services, goal, services, submission
 from tests.integration.http_identity import BrowserHarness, verified
 from tests.integration.student_actor import Actor, actor
@@ -126,14 +127,6 @@ class LoadObservation:
     connections: int
 
     def verify(self, record: Callable[[str, object], None]) -> None:
-        # Under a simultaneous burst the bounded request deadline can reject all
-        # arrivals. Positive admission/recovery are mandatory separate controls.
-        assert 0 <= self.accepted <= INTERACTIVE_QUEUE_CAPACITY
-        assert self.rejected > 0
-        assert self.peak < MAX_PEAK_BYTES
-        assert self.core_max < CORE_LATENCY_LIMIT_SECONDS
-        assert self.connections <= AI_CONNECTIONS
-        assert self.admission_max < ADMISSION_OBSERVED_LIMIT_SECONDS
         record("accounts", SIMULATED_ACCOUNTS)
         record("queued", self.accepted)
         record("rejected", self.rejected)
@@ -144,6 +137,14 @@ class LoadObservation:
         record("observed_ai_checkouts", self.connections)
         record("admission_max_seconds", self.admission_max)
         record("admission_p95_seconds", self.admission_p95)
+        # Under a simultaneous burst the bounded request deadline can reject all
+        # arrivals. Positive admission/recovery are mandatory separate controls.
+        assert 0 <= self.accepted <= INTERACTIVE_QUEUE_CAPACITY
+        assert self.rejected > 0
+        assert self.peak < MAX_PEAK_BYTES
+        assert self.core_max < CORE_LATENCY_LIMIT_SECONDS
+        assert self.connections <= AI_CONNECTIONS
+        assert self.admission_max < ADMISSION_OBSERVED_LIMIT_SECONDS
 
 
 async def core_reads(
@@ -215,6 +216,21 @@ async def burst(
         tracemalloc.stop()
 
 
+async def observed_burst(
+    accounts: tuple[tuple[Actor, Source], ...],
+    api: Services,
+    browser: BrowserHarness,
+    pools: tuple[AsyncAdaptedQueuePool, ...],
+    diagnostics: tuple[pytest.LogCaptureFixture, Callable[[str, object], None]],
+) -> LoadObservation:
+    caplog, record = diagnostics
+    log_start = len(caplog.records)
+    observation = await burst(accounts, api, browser, pools)
+    for key, value in failure_counts(caplog.records[log_start:]).items():
+        record(key, value)
+    return observation
+
+
 async def verify_post_burst_recovery(
     api: Services,
     account: tuple[Actor, Source],
@@ -235,6 +251,8 @@ async def verify_post_burst_recovery(
     # retained, and capacity recovers with the original short SQL budgets.
     async with api.sessions() as session:
         stored = tuple(await session.scalars(select(AiJobRecord)))
+    for key, value in stored_counts((job.state for job in stored), observation.accepted).items():
+        record_property(key, value)
     assert len(stored) == observation.accepted + 3
     queued = tuple(job for job in stored if job.state == JobState.QUEUED.value)
     assert len(queued) == observation.accepted + 1
@@ -260,6 +278,7 @@ async def test_500_accounts_slow_executor_preserves_core_http_and_bounded_resour
     database_url: str,
     browser: BrowserHarness,
     record_property: Callable[[str, object], None],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     await verified(browser, ai_engine)
     accounts = await synthetic_accounts(ai_engine)
@@ -299,7 +318,7 @@ async def test_500_accounts_slow_executor_preserves_core_http_and_bounded_resour
             IntentKey(str(uuid4())),
         )
         assert queued_control.state == JobState.QUEUED
-        observation = await burst(accounts, api, browser, pools)
+        observation = await observed_burst(accounts, api, browser, pools, (caplog, record_property))
         observation.verify(record_property)
         await verify_post_burst_recovery(
             api, accounts[0], queued_control, observation, record_property

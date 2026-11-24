@@ -30,8 +30,10 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
         with:
           version: '0.13.7'
           enable-cache: true
@@ -40,7 +42,7 @@ jobs:
       - run: uv run alembic upgrade head
         env:
           DATABASE_URL: postgresql+asyncpg://studymate:studymate@localhost:5432/studymate_test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: backend-coverage
@@ -76,7 +78,7 @@ jobs:
           docker run --rm --network none --read-only \
             --cap-drop ALL --security-opt no-new-privileges \
             --entrypoint python "$REGISTRY_IMAGE:staging-$GITHUB_SHA" \
-            -c 'import os, importlib.util; import studymate.server, studymate.email_worker, studymate.media_worker, studymate.requests_worker, studymate.changes_worker; assert os.getuid() != 0; assert importlib.util.find_spec("pytest") is None'
+            -c 'import os, importlib.util; import studymate.server, studymate.email_worker, studymate.media_worker, studymate.requests_worker, studymate.changes_worker, studymate.student_notifications_worker, studymate.external_delivery_worker; assert os.getuid() != 0; assert importlib.util.find_spec("pytest") is None'
       - name: Authenticate with repository-scoped token
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -76,26 +76,23 @@ def _retained_lineage(seed: Select[UUID]) -> CTE:
     )
 
 
+def identity_lineage_ban_statement(account_id: UUID) -> Select[bool]:
+    """Same retained credential predicate, embeddable in a factual identity read."""
+    lineage = _retained_lineage(
+        select(AccountRecord.id.label("account_id")).where(AccountRecord.id == account_id)
+    )
+    return select(
+        select(AccountRecord.id)
+        .join(lineage, lineage.c.account_id == AccountRecord.id)
+        .where(AccountRecord.banned_at.is_not(None))
+        .correlate(None)
+        .exists()
+    )
+
+
 async def identity_lineage_banned(session: AsyncSession, account_id: UUID) -> bool:
     """A later ban of retained credentials cannot be evaded by their new actor."""
-    lineage = _retained_lineage(
-        select(AccountRecord.id.label("account_id")).where(
-            AccountRecord.id == account_id,
-        )
-    )
-    return bool(
-        await session.scalar(
-            select(
-                select(AccountRecord.id)
-                .join(
-                    lineage,
-                    lineage.c.account_id == AccountRecord.id,
-                )
-                .where(AccountRecord.banned_at.is_not(None))
-                .exists()
-            )
-        )
-    )
+    return bool(await session.scalar(identity_lineage_ban_statement(account_id)))
 
 
 async def email_lineage_banned(session: AsyncSession, email: str) -> bool:
