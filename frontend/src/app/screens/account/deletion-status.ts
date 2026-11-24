@@ -1,5 +1,15 @@
+import { DOCUMENT } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { ChangeDetectorRef, Component, DestroyRef, inject } from '@angular/core';
+import {
+  afterEveryRender,
+  ChangeDetectorRef,
+  Component,
+  DestroyRef,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
+import type { ElementRef } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   CancelledError,
@@ -24,6 +34,10 @@ import { isConfirmedDeletion, isDeletionStatus } from './deletion-contract';
   styleUrl: './deletion.less',
 })
 export class DeletionStatus {
+  private readonly document = inject(DOCUMENT);
+  private readonly recheck = viewChild<ElementRef<HTMLButtonElement>>('recheck');
+  private readonly confirmedHeading = viewChild<ElementRef<HTMLHeadingElement>>('confirmedHeading');
+  private readonly focusConfirmed = signal(false);
   private readonly http = inject(HttpClient);
   private readonly client = inject(QueryClient);
   private readonly change = inject(ChangeDetectorRef);
@@ -59,9 +73,19 @@ export class DeletionStatus {
     return this.status.error instanceof ApiFailure ? this.status.error.requestId : null;
   }
   public constructor() {
+    afterEveryRender(() => {
+      if (!this.focusConfirmed()) return;
+      this.focusConfirmed.set(false);
+      if (
+        this.document.activeElement === this.document.body ||
+        this.document.activeElement === this.recheck()?.nativeElement
+      )
+        this.confirmedHeading()?.nativeElement.focus();
+    });
     const unsubscribe = this.query.subscribe(
       (result: Readonly<ReturnType<typeof this.query.getCurrentResult>>) => {
         if (result.isSuccess && !result.isFetching && isConfirmedDeletion(result.data)) {
+          this.focusConfirmed.set(this.document.activeElement === this.recheck()?.nativeElement);
           // The destructive response may have been lost. Recheck ordinary session
           // authority without making proof recovery depend on a live session, and
           // without clearing a newer live account because an older proof remains.
@@ -79,6 +103,7 @@ export class DeletionStatus {
     });
   }
   protected check(): void {
+    if (this.status.isFetching) return;
     void this.query.refetch();
   }
 }
