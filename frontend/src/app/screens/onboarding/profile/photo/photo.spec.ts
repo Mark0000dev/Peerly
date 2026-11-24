@@ -1555,4 +1555,191 @@ describe('real photo recovery query boundary', () => {
       backend.expectNone('/api/v1/media/uploads');
     });
   }
+  it('keeps a cancellation receipt owned during a same-account sign-in pause without refetching private data', async () => {
+    await load();
+    await open();
+    click(fixture, 'Cancel upload');
+    const command = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/media/uploads/${upload.id}/cancel`),
+    );
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    const cancelled = { ...upload, version: 2, state: 'cancelled' } as const;
+    command.flush(cancelled);
+    await shown(fixture, 'This upload was cancelled.');
+    backend.expectNone((request) => request.url.startsWith('/api/v1/media'));
+    fixture.componentRef.setInput('checking', false);
+    fixture.detectChanges();
+    await settle(cancelled, 'a'.repeat(64));
+    await shown(fixture, 'This upload was cancelled.');
+    backend.expectNone((request) => request.method === 'POST');
+  });
+  it('keeps an owned finalization receipt during sign-in checking without transferring or reading again', async () => {
+    const file = await photoFile();
+    const hash = await sourceHash(file);
+    const matching = { ...upload, size_bytes: file.size };
+    await load({ photo: null, uploads: [{ upload: matching, source_sha256: hash }] });
+    await open(matching);
+    await choosePhoto(file);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetcher);
+    click(fixture, 'Use the original without cropping');
+    (await vi.waitFor(() => backend.expectOne(`/api/v1/media/uploads/${upload.id}/access`))).flush({
+      url: 'https://storage.invalid/fixture',
+      fields: {},
+    });
+    const finalization = await vi.waitFor(() =>
+      backend.expectOne(`/api/v1/media/uploads/${upload.id}/finalize`),
+    );
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    const queued = { ...matching, version: 2, state: 'queued' } as const;
+    finalization.flush(queued);
+    await shown(fixture, 'Your photo is waiting for processing.');
+    backend.expectNone((request) => request.url.startsWith('/api/v1/media'));
+    fixture.componentRef.setInput('checking', false);
+    fixture.detectChanges();
+    await settle(queued, hash);
+    await shown(fixture, 'Your photo is waiting for processing.');
+    expect(fetcher).toHaveBeenCalledOnce();
+    backend.expectNone((request) => request.method === 'POST');
+  });
+  it('does not apply an old account photo-conflict reload to the replacement account', async () => {
+    const refreshed = vi.fn();
+    fixture.componentInstance.refreshed.subscribe(refreshed);
+    await load({ photo: null, uploads: [] });
+    await choosePhoto();
+    click(fixture, 'Use the original without cropping');
+    (
+      await vi.waitFor(() => backend.expectOne({ url: '/api/v1/media/uploads', method: 'POST' }))
+    ).flush({ code: 'photo_version_conflict' }, { status: 409, statusText: 'Conflict' });
+    await shown(fixture, 'Your photo changed elsewhere.');
+    click(fixture, 'Reload current photo');
+    const old = await vi.waitFor(() => backend.expectOne('/api/v1/media/uploads'));
+    old.flush({
+      photo: {
+        upload_id: upload.id,
+        version: 7,
+        display_url: `/api/v1/media/${upload.id}/display`,
+      },
+      uploads: [],
+    });
+    const replacement = { ...verifiedActor, account_id: 'replacement' };
+    client.setQueryData(['session'], replacement);
+    fixture.componentRef.setInput('actor', replacement);
+    fixture.detectChanges();
+    await load({ photo: null, uploads: [] });
+    await fixture.whenStable();
+    expect(refreshed).not.toHaveBeenCalled();
+    expect(host(fixture).querySelector('img')).toBeNull();
+    expect(workflow().hasLocalDraft).toBe(false);
+    backend.expectNone((request) => request.method === 'POST');
+    expect(client.getQueryData(['account', replacement.account_id, 'photo-uploads'])).toEqual({
+      photo: null,
+      uploads: [],
+    });
+  });
+  it('requires a fresh explicit choice when sign-in checking begins while crop encoding finishes', async () => {
+    await load({ photo: null, uploads: [] });
+    const file = await choosePhoto();
+    let resolve: (value: Blob) => void = () => {
+      throw new Error('Missing encoding gate');
+    };
+    const pending = new Promise<Blob>((done) => {
+      resolve = done;
+    });
+    const encoder = vi.spyOn(OffscreenCanvas.prototype, 'convertToBlob').mockReturnValue(pending);
+    click(fixture, 'Use photo');
+    await vi.waitFor(() => {
+      expect(encoder).toHaveBeenCalledOnce();
+    });
+    fixture.componentRef.setInput('checking', true);
+    fixture.detectChanges();
+    resolve(file);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host(fixture).querySelector('canvas')).toBeNull();
+    });
+    expect(workflow().hasLocalDraft).toBe(true);
+    backend.expectNone((request) => request.method === 'POST');
+    fixture.componentRef.setInput('checking', false);
+    fixture.detectChanges();
+    await load({ photo: null, uploads: [] });
+    await fixture.whenStable();
+    backend.expectNone((request) => request.method === 'POST');
+    click(fixture, 'Edit selected photo');
+    await shown(fixture, 'Use the original without cropping');
+    click(fixture, 'Use the original without cropping');
+    const start = await vi.waitFor(() =>
+      backend.expectOne({ url: '/api/v1/media/uploads', method: 'POST' }),
+    );
+    expect(start.request.headers.get('x-csrf-token')).toBe(verifiedActor.csrf_token);
+    start.flush({ code: 'unavailable' }, { status: 503, statusText: 'Failure' });
+    await shown(fixture, 'We couldn’t confirm the photo request.');
+  });
+  it('does not publish a malformed header result after its file owner has retired', async () => {
+    await load({ photo: null, uploads: [] });
+    let resolve: (value: ArrayBuffer) => void = () => {
+      throw new Error('Missing header gate');
+    };
+    const pending = new Promise<ArrayBuffer>((done) => {
+      resolve = done;
+    });
+    const read = vi.spyOn(Blob.prototype, 'arrayBuffer').mockReturnValueOnce(pending);
+    pickFile(new File(['not a photo'], 'private.png', { type: 'image/png' }));
+    await vi.waitFor(() => {
+      expect(read).toHaveBeenCalledOnce();
+    });
+    const replacement = { ...verifiedActor, account_id: 'replacement' };
+    client.setQueryData(['session'], replacement);
+    fixture.componentRef.setInput('actor', replacement);
+    fixture.detectChanges();
+    await load({ photo: null, uploads: [] });
+    resolve(new ArrayBuffer(8));
+    await pending;
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(host(fixture).textContent).not.toContain('Choose a JPEG or PNG photo, up to 10 MB.');
+    expect(workflow().hasLocalDraft).toBe(false);
+    backend.expectNone((request) => request.method === 'POST');
+  });
+  it('never finalizes bytes accepted by storage after the account has been replaced', async () => {
+    const file = await photoFile();
+    const hash = await sourceHash(file);
+    const matching = { ...upload, size_bytes: file.size };
+    await load({ photo: null, uploads: [{ upload: matching, source_sha256: hash }] });
+    await open(matching);
+    await choosePhoto(file);
+    let resolve: (value: Response) => void = () => {
+      throw new Error('Missing storage gate');
+    };
+    const pending = new Promise<Response>((done) => {
+      resolve = done;
+    });
+    const fetcher = vi.fn<typeof fetch>().mockReturnValue(pending);
+    vi.stubGlobal('fetch', fetcher);
+    click(fixture, 'Use the original without cropping');
+    (await vi.waitFor(() => backend.expectOne(`/api/v1/media/uploads/${upload.id}/access`))).flush({
+      url: 'https://storage.invalid/fixture',
+      fields: {},
+    });
+    await vi.waitFor(() => {
+      expect(fetcher).toHaveBeenCalledOnce();
+    });
+    const replacement = { ...verifiedActor, account_id: 'replacement' };
+    client.setQueryData(['session'], replacement);
+    fixture.componentRef.setInput('actor', replacement);
+    fixture.detectChanges();
+    await load({ photo: null, uploads: [] });
+    expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    resolve(new Response(null, { status: 204 }));
+    await pending;
+    await fixture.whenStable();
+    expect(workflow().hasLocalDraft).toBe(false);
+    expect(client.getQueryData(['account', replacement.account_id, 'photo-uploads'])).toEqual({
+      photo: null,
+      uploads: [],
+    });
+    backend.expectNone((request) => request.method === 'POST');
+  });
 });
