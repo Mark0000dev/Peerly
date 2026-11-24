@@ -93,7 +93,9 @@ async def test_three_reads_are_private_and_preserve_exact_stored_content() -> No
 
 
 @pytest.mark.parametrize(
-    "path", ["/accounts", f"/accounts/{TARGET}", f"/conversations/{uuid4()}/messages"]
+    "path",
+    ["/accounts", f"/accounts/{TARGET}", f"/conversations/{uuid4()}/messages"],
+    ids=("account-list", "account-detail", "conversation-messages"),
 )
 async def test_no_cookie_or_explicit_role_means_no_private_queries(path: str) -> None:
     store = Store()
