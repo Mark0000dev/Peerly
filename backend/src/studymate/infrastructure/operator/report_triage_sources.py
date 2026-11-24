@@ -1,8 +1,9 @@
 """Narrow retained-source reconstruction for authorized reads and same-transaction worker checks."""
 
+from dataclasses import dataclass, field
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import Nullable, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from studymate.application.operator.report_triage_evidence import (
@@ -40,23 +41,78 @@ async def report_review_version(session: AsyncSession, report_id: UUID) -> int |
 async def selected_report_preview(
     session: AsyncSession, source: ReviewReportSource
 ) -> ReportTriageSourcePreview:
-    report = await session.get(ProfileReportRecord, source.id)
-    if report is None:
+    row = (
+        await session.execute(
+            select(
+                ProfileReportRecord,
+                Nullable(ProfileAccessRecord),
+                Nullable(MessageReportContextRecord),
+                Nullable(MessageRecord),
+                Nullable(ProfileRevisionRecord.account_id),
+                Nullable(ProfileRevisionRecord.version),
+                Nullable(ProfileRevisionRecord.display_name),
+                Nullable(ProfileRevisionRecord.about),
+            )
+            .select_from(ProfileReportRecord)
+            .outerjoin(
+                ProfileAccessRecord, ProfileAccessRecord.id == ProfileReportRecord.context_id
+            )
+            .outerjoin(
+                MessageReportContextRecord,
+                MessageReportContextRecord.id == ProfileReportRecord.message_context_id,
+            )
+            .outerjoin(MessageRecord, MessageRecord.id == MessageReportContextRecord.message_id)
+            .outerjoin(
+                ProfileRevisionRecord,
+                and_(
+                    ProfileRevisionRecord.account_id == ProfileAccessRecord.target_id,
+                    ProfileRevisionRecord.version == ProfileAccessRecord.profile_version,
+                ),
+            )
+            .where(ProfileReportRecord.id == source.id)
+        )
+    ).one_or_none()
+    if row is None:
         raise RuntimeError("Locked triage report source disappeared")
-    profile_context = (
-        await session.get(ProfileAccessRecord, report.context_id)
-        if report.context_id is not None
-        else None
+    report, profile_context, message_context, message, account_id, version, name, about = row
+    evidence = selected_report_evidence(
+        source,
+        SelectedReportRows(
+            report,
+            profile_context,
+            message_context,
+            message,
+            ReportedProfileText(account_id, version, name, about)
+            if account_id is not None and version is not None
+            else None,
+        ),
     )
-    message_context = (
-        await session.get(MessageReportContextRecord, report.message_context_id)
-        if report.message_context_id is not None
-        else None
+    if evidence is None:
+        return ReportTriageSourcePreview(source, None)
+    # Retain the separate, final mutable freshness read, including advisory checks.
+    return ReportTriageSourcePreview(
+        source,
+        ReportTriageEvidenceContext(
+            source, await report_review_version(session, source.id), evidence
+        ),
     )
-    message = (
-        await session.get(MessageRecord, message_context.message_id)
-        if message_context is not None
-        else None
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedReportRows:
+    report: ProfileReportRecord = field(repr=False)
+    profile_context: ProfileAccessRecord | None = field(repr=False)
+    message_context: MessageReportContextRecord | None = field(repr=False)
+    message: MessageRecord | None = field(repr=False)
+    profile: ReportedProfileText | None = field(repr=False)
+
+
+def selected_report_evidence(source: ReviewReportSource, rows: SelectedReportRows) -> str | None:
+    report, profile_context, message_context, message = (
+        rows.report,
+        rows.profile_context,
+        rows.message_context,
+        rows.message,
     )
     # Only selected evidence is consumed below. Canonical submission provenance is
     # not part of this projection; this helper never returns a report-detail DTO.
@@ -77,22 +133,7 @@ async def selected_report_preview(
     profile = None
     confirmed = None
     if isinstance(detail, OperatorProfileReportDetail):
-        refs = detail.context.snapshot
-        row = (
-            await session.execute(
-                select(
-                    ProfileRevisionRecord.account_id,
-                    ProfileRevisionRecord.version,
-                    ProfileRevisionRecord.display_name,
-                    ProfileRevisionRecord.about,
-                ).where(
-                    ProfileRevisionRecord.account_id == refs.account_id,
-                    ProfileRevisionRecord.version == refs.profile_version,
-                )
-            )
-        ).one_or_none()
-        if row is not None:
-            profile = ReportedProfileText(*row)
+        profile = rows.profile
     elif message is not None:
         image = detail.context.source.image
         if image is None or (message.image_id, message.image_version, message.image_attempt_id) != (
@@ -113,12 +154,6 @@ async def selected_report_preview(
             message.sent_at,
         )
     try:
-        evidence = report_triage_evidence(detail, profile=profile, message=confirmed)
+        return report_triage_evidence(detail, profile=profile, message=confirmed)
     except ReportTriageEvidenceUnavailableError:
-        return ReportTriageSourcePreview(source, None)
-    return ReportTriageSourcePreview(
-        source,
-        ReportTriageEvidenceContext(
-            source, await report_review_version(session, source.id), evidence
-        ),
-    )
+        return None
