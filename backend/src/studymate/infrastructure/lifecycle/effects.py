@@ -29,6 +29,7 @@ from studymate.infrastructure.persistence.product_events import (
     record_request_outcome,
 )
 from studymate.infrastructure.requests.lifecycle import close_actor_requests
+from studymate.infrastructure.student_notifications.subscriptions import retire_actor_notifications
 
 
 async def _stop_verification(session: AsyncSession, account_id: UUID, at: datetime) -> None:
@@ -61,6 +62,7 @@ async def apply_lifecycle_effects(session: AsyncSession, transition: LifecycleRe
     if isinstance(transition, DeletionTransition):
         at = transition.revision.deleted_at
         await retire_deleted_claims(session, account_id)
+        await retire_actor_notifications(session, account_id, at)
         await session.execute(
             update(SessionRecord)
             .where(SessionRecord.account_id == account_id, SessionRecord.revoked_at.is_(None))
@@ -70,6 +72,7 @@ async def apply_lifecycle_effects(session: AsyncSession, transition: LifecycleRe
         await cancel_actor_jobs(session, account_id)
         await close_actor_requests(session, account_id, account_id, record_request_outcome)
     elif transition.revision is not None and transition.revision.banned:
+        await retire_actor_notifications(session, account_id, transition.revision.changed_at)
         await _stop_verification(session, account_id, transition.revision.changed_at)
         await cancel_actor_jobs(session, account_id)
         await close_actor_requests(session, account_id, None, record_request_outcome)

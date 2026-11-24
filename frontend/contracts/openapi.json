@@ -926,6 +926,77 @@
         "title": "DeletionReceiptResponse",
         "type": "object"
       },
+      "DeliveryCapabilityResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": { "format": "uuid", "title": "Account Id", "type": "string" },
+          "android": { "title": "Android", "type": "boolean" },
+          "device": {
+            "anyOf": [{ "$ref": "#/components/schemas/DeliveryDeviceResponse" }, { "type": "null" }]
+          },
+          "ios": { "title": "Ios", "type": "boolean" },
+          "vapid_public_key": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Vapid Public Key"
+          },
+          "web": { "title": "Web", "type": "boolean" }
+        },
+        "required": ["account_id", "web", "ios", "android", "vapid_public_key", "device"],
+        "title": "DeliveryCapabilityResponse",
+        "type": "object"
+      },
+      "DeliveryDeviceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "title": "Enabled", "type": "boolean" },
+          "installation_id": { "format": "uuid", "title": "Installation Id", "type": "string" },
+          "material_fingerprint": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Material Fingerprint"
+          },
+          "platform": { "$ref": "#/components/schemas/Platform" },
+          "timezone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Timezone" },
+          "version": { "title": "Version", "type": "integer" }
+        },
+        "required": [
+          "installation_id",
+          "platform",
+          "version",
+          "enabled",
+          "timezone",
+          "material_fingerprint"
+        ],
+        "title": "DeliveryDeviceResponse",
+        "type": "object"
+      },
+      "DeliveryRegistrationBody": {
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "anyOf": [{ "maxLength": 100, "type": "string" }, { "type": "null" }],
+            "title": "Auth"
+          },
+          "enabled": { "title": "Enabled", "type": "boolean" },
+          "endpoint": {
+            "anyOf": [{ "maxLength": 4096, "type": "string" }, { "type": "null" }],
+            "title": "Endpoint"
+          },
+          "expected_version": { "minimum": 0, "title": "Expected Version", "type": "integer" },
+          "installation_id": { "format": "uuid", "title": "Installation Id", "type": "string" },
+          "p256dh": {
+            "anyOf": [{ "maxLength": 100, "type": "string" }, { "type": "null" }],
+            "title": "P256Dh"
+          },
+          "platform": { "$ref": "#/components/schemas/Platform" },
+          "timezone": {
+            "anyOf": [{ "maxLength": 100, "type": "string" }, { "type": "null" }],
+            "title": "Timezone"
+          }
+        },
+        "required": ["installation_id", "platform", "enabled", "timezone", "expected_version"],
+        "title": "DeliveryRegistrationBody",
+        "type": "object"
+      },
       "DeliveryState": {
         "enum": ["pending", "leased", "retry", "succeeded", "dead"],
         "title": "DeliveryState",
@@ -2050,6 +2121,16 @@
         "enum": ["route_ready", "lcp", "inp", "fcp", "ttfb", "cls"],
         "title": "Metric",
         "type": "string"
+      },
+      "NativeExchangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_id": { "format": "uuid", "title": "Attempt Id", "type": "string" },
+          "verifier": { "maxLength": 128, "minLength": 43, "title": "Verifier", "type": "string" }
+        },
+        "required": ["attempt_id", "verifier"],
+        "title": "NativeExchangeRequest",
+        "type": "object"
       },
       "NoStudyPromptResponse": {
         "additionalProperties": false,
@@ -5585,6 +5666,7 @@
         "title": "PhotoUploadState",
         "type": "string"
       },
+      "Platform": { "enum": ["web", "ios", "android"], "title": "Platform", "type": "string" },
       "PolicyHistoryItemResponse": {
         "additionalProperties": false,
         "properties": {
@@ -8340,10 +8422,29 @@
               "description": "Required for cookie-authenticated writes; obtain csrf_token from GET /me.",
               "title": "X Csrf Token"
             }
+          },
+          {
+            "description": "Optional session-enrolled installation; no provider recall.",
+            "in": "header",
+            "name": "x-notification-installation",
+            "required": false,
+            "schema": {
+              "anyOf": [{ "format": "uuid", "type": "string" }, { "type": "null" }],
+              "description": "Optional session-enrolled installation; no provider recall.",
+              "title": "X Notification Installation"
+            }
           }
         ],
         "responses": {
-          "204": { "description": "Successful Response" },
+          "204": {
+            "description": "Successful Response",
+            "headers": {
+              "X-Notification-Retirement": {
+                "description": "Present only with X-Notification-Installation. Retired confirms atomic same-session retirement, not provider recall.",
+                "schema": { "enum": ["retired", "unconfirmed"], "type": "string" }
+              }
+            }
+          },
           "400": {
             "content": {
               "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
@@ -8419,6 +8520,217 @@
         },
         "security": [{ "SessionCookie": [] }],
         "summary": "Logout",
+        "tags": ["identity"]
+      }
+    },
+    "/api/v1/auth/native/exchange": {
+      "post": {
+        "operationId": "exchange_api_v1_auth_native_exchange_post",
+        "parameters": [
+          {
+            "description": "Browser supplies a trusted Origin; missing/foreign Origin is rejected.",
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [{ "type": "string" }, { "type": "null" }],
+              "description": "Browser supplies a trusted Origin; missing/foreign Origin is rejected.",
+              "title": "Origin"
+            }
+          },
+          {
+            "description": "Required for cookie-authenticated writes; obtain csrf_token from GET /me.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": false,
+            "schema": {
+              "anyOf": [{ "type": "string" }, { "type": "null" }],
+              "description": "Required for cookie-authenticated writes; obtain csrf_token from GET /me.",
+              "title": "X Csrf Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NativeExchangeRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": {} } },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Exchange",
+        "tags": ["identity"]
+      }
+    },
+    "/api/v1/auth/native/return": {
+      "get": {
+        "operationId": "return_page_api_v1_auth_native_return_get",
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": {} } },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Return Page",
+        "tags": ["identity"]
+      }
+    },
+    "/api/v1/auth/native/start": {
+      "get": {
+        "operationId": "start_api_v1_auth_native_start_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "attempt_id",
+            "required": true,
+            "schema": { "format": "uuid", "title": "Attempt Id", "type": "string" }
+          },
+          {
+            "in": "query",
+            "name": "challenge",
+            "required": true,
+            "schema": { "title": "Challenge", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": {} } },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Start",
         "tags": ["identity"]
       }
     },
@@ -12035,6 +12347,164 @@
         "security": [{ "SessionCookie": [] }],
         "summary": "Save Help",
         "tags": ["study-context"]
+      }
+    },
+    "/api/v1/me/notification-delivery": {
+      "put": {
+        "operationId": "register_api_v1_me_notification_delivery_put",
+        "parameters": [
+          {
+            "description": "Browser supplies a trusted Origin; missing/foreign Origin is rejected.",
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [{ "type": "string" }, { "type": "null" }],
+              "description": "Browser supplies a trusted Origin; missing/foreign Origin is rejected.",
+              "title": "Origin"
+            }
+          },
+          {
+            "description": "Required for cookie-authenticated writes; obtain csrf_token from GET /me.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": false,
+            "schema": {
+              "anyOf": [{ "type": "string" }, { "type": "null" }],
+              "description": "Required for cookie-authenticated writes; obtain csrf_token from GET /me.",
+              "title": "X Csrf Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{8,128}$",
+              "title": "Idempotency Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DeliveryRegistrationBody" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DeliveryDeviceResponse" }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [{ "SessionCookie": [] }],
+        "summary": "Register",
+        "tags": ["student-notifications"]
+      }
+    },
+    "/api/v1/me/notification-delivery/{installation_id}": {
+      "get": {
+        "operationId": "read_api_v1_me_notification_delivery__installation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "installation_id",
+            "required": true,
+            "schema": { "format": "uuid", "title": "Installation Id", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DeliveryCapabilityResponse" }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ProblemResponse" } }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [{ "SessionCookie": [] }],
+        "summary": "Read",
+        "tags": ["student-notifications"]
       }
     },
     "/api/v1/me/notification-preference": {

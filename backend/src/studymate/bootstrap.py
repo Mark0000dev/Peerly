@@ -1,13 +1,15 @@
 import asyncio
+import base64
 import ssl
 from collections.abc import AsyncIterator, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import httpx2 as httpx
 from aiobotocore.config import AioConfig
 from aiobotocore.session import AioSession
+from cryptography.fernet import Fernet
 from fastapi import APIRouter, FastAPI
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import (
@@ -66,6 +68,15 @@ from studymate.application.identity.login import (
     BeginGoogleLogin,
     CompleteGoogleLogin,
     HandleGoogleCallback,
+)
+from studymate.application.identity.native_login import (
+    BeginNativeLogin,
+    BindNativeCallback,
+    CancelNativeAttempt,
+    CompleteLoginForClient,
+    ExchangeNativeAttempt,
+    IdentifyNativeCallback,
+    RegisterNativeAttempt,
 )
 from studymate.application.identity.registration import (
     BeginRegistration,
@@ -180,6 +191,16 @@ from studymate.application.safety.message_reports import (
     SubmitMessageImageReport,
 )
 from studymate.application.safety.profile_reports import SubmitProfileReport
+from studymate.application.student_notifications.capabilities import ReadOwnDelivery
+from studymate.application.student_notifications.subscriptions import (
+    LogoutInstallation,
+    RegisterOwnDelivery,
+)
+from studymate.application.student_notifications.worker import (
+    ConsumeStudentEvents,
+    DeliverNextStudentNotification,
+    PushDelivery,
+)
 from studymate.application.support.cases import (
     CreateSupportCase,
     PrepareSupport,
@@ -211,6 +232,7 @@ from studymate.config import (
 )
 from studymate.domain.external_delivery.delivery import DestinationRef
 from studymate.domain.external_delivery.sources import Sink
+from studymate.domain.student_notifications.capabilities import Capabilities
 from studymate.infrastructure.ai.persistence import SqlAiUnitOfWork
 from studymate.infrastructure.changes.loop import ChangeMaintenance, run_change_loop
 from studymate.infrastructure.changes.publication import SqlChangePublicationUnitOfWork
@@ -282,6 +304,13 @@ from studymate.infrastructure.observability.runtime import (
     build_telemetry,
 )
 from studymate.infrastructure.observability.streams import StreamSignals
+from studymate.infrastructure.observability.student_notification_delivery import (
+    ObservedStudentNotificationDelivery,
+)
+from studymate.infrastructure.observability.student_notifications import (
+    SqlStudentNotificationReader,
+    StudentNotificationSignals,
+)
 from studymate.infrastructure.observability.tracing import OtelHttpTracing
 from studymate.infrastructure.operator.ai_cursors import FernetOperatorAiCursorCodec
 from studymate.infrastructure.operator.ai_transactions import SqlOperatorAiUnitOfWork
@@ -393,6 +422,7 @@ from studymate.infrastructure.persistence.media_resume import SqlPhotoResumeUnit
 from studymate.infrastructure.persistence.media_uploads import SqlMediaUnitOfWork
 from studymate.infrastructure.persistence.message_reads import SqlReadPositionUnitOfWork
 from studymate.infrastructure.persistence.messaging import SqlMessageUnitOfWork
+from studymate.infrastructure.persistence.native_login import SqlNativeUnitOfWork
 from studymate.infrastructure.persistence.onboarding import SqlProfileSetupUnitOfWork
 from studymate.infrastructure.persistence.photo_worker import SqlPhotoWorkerUnitOfWork
 from studymate.infrastructure.persistence.product_events import (
@@ -434,6 +464,22 @@ from studymate.infrastructure.security.email_vault import AeadEmailVault
 from studymate.infrastructure.security.intent_fingerprint import HmacIntentFingerprinter
 from studymate.infrastructure.security.login_vault import AeadLoginVault
 from studymate.infrastructure.security.session_digest import Sha256SessionHasher
+from studymate.infrastructure.student_notifications.capabilities import SubscribedPushDelivery
+from studymate.infrastructure.student_notifications.providers import (
+    ProviderSelection,
+    http2_available,
+    selection_from_keys,
+)
+from studymate.infrastructure.student_notifications.queue import SqlStudentNotifications
+from studymate.infrastructure.student_notifications.settings import (
+    StudentNotificationDeliverySettings,
+    StudentNotificationProviderSettings,
+    StudentNotificationWorkerSettings,
+)
+from studymate.infrastructure.student_notifications.subscriptions import (
+    SqlInstallationLogoutUnitOfWork,
+    SqlSubscriptionUnitOfWork,
+)
 from studymate.infrastructure.support.operator import SqlOperatorSupportUnitOfWork
 from studymate.infrastructure.support.operator_inbox_cursors import (
     FernetOperatorSupportInboxCursorCodec,
@@ -477,6 +523,7 @@ from studymate.presentation.lifecycle.recovery import (
 from studymate.presentation.media import MediaServices, media_router
 from studymate.presentation.messaging.goal_shares import GoalSharingHttpServices, goal_shares_router
 from studymate.presentation.messaging.router import MessagingHttpServices, messaging_router
+from studymate.presentation.native_login import NativeServices, native_router
 from studymate.presentation.notification_preferences.router import (
     PreferenceHttpServices,
     notification_preferences_router,
@@ -586,6 +633,14 @@ from studymate.presentation.request_correlation import RequestCorrelation
 from studymate.presentation.request_errors import validation_problem
 from studymate.presentation.requests.router import RequestHttpServices, requests_router
 from studymate.presentation.storage_errors import storage_problem
+from studymate.presentation.student_notifications.router import (
+    DeliveryHttpServices,
+    student_delivery_router,
+)
+from studymate.presentation.student_notifications.worker import (
+    RunStudentNotifications,
+    StudentWorkerObservation,
+)
 from studymate.presentation.study_context import StudyServices, study_router
 from studymate.presentation.support.operator_inbox_router import (
     OperatorSupportInboxHttpServices,
@@ -621,7 +676,9 @@ def _install_problem_handlers(app: FastAPI) -> None:
     app.add_exception_handler(Exception, unexpected_problem)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, *, student_delivery: ProviderSelection | None = None
+) -> FastAPI:
     configuration = settings if settings is not None else Settings()
     telemetry = _telemetry(configuration.observability)
     engine = create_async_engine(
@@ -704,7 +761,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         and change_engine is not None
     ):
         auth_services = _authentication_services(configuration.authentication, sessions, http)
-        app.include_router(identity_router(auth_services))
+        auth_services = _mount_native_identity(app, auth_services, sessions)
+        app.include_router(
+            _student_delivery_router(
+                sessions, auth_services, configuration.authentication, student_delivery
+            )
+        )
         app.include_router(_observation_router(configuration, sessions, auth_services))
         app.include_router(
             changes_router(
@@ -869,6 +931,38 @@ def _telemetry(
     )
 
 
+def _mount_native_identity(
+    app: FastAPI, auth_services: AuthenticationServices, sessions: async_sessionmaker[AsyncSession]
+) -> AuthenticationServices:
+    native_uow = SqlNativeUnitOfWork(sessions)
+    native_hasher = Sha256SessionHasher()
+    native_services = NativeServices(
+        signer=auth_services.signer,
+        start=BeginNativeLogin(
+            auth_services.begin, RegisterNativeAttempt(native_uow, native_hasher)
+        ),
+        exchange=ExchangeNativeAttempt(native_uow, native_hasher, auth_services.begin.vault),
+        browser=auth_services.browser,
+        wake_url=(
+            "dev.alekseiorlov.peerly.staging://auth/complete"
+            if auth_services.browser.public_origin == "https://peerly-staging.aleksei-orlov.dev"
+            else "dev.alekseiorlov.peerly://auth/complete"
+        ),
+    )
+    auth_services = replace(
+        auth_services,
+        native_complete=CompleteLoginForClient(
+            IdentifyNativeCallback(native_uow, native_hasher),
+            auth_services.complete,
+            BindNativeCallback(native_uow, native_hasher),
+            CancelNativeAttempt(native_uow, native_hasher),
+        ),
+    )
+    app.include_router(identity_router(auth_services, native_services.finish))
+    app.include_router(native_router(native_services))
+    return auth_services
+
+
 def _authentication_services(
     configuration: AuthenticationConfiguration,
     sessions: async_sessionmaker[AsyncSession],
@@ -912,6 +1006,9 @@ def _authentication_services(
             )
         ),
         logout=Logout(SqlIdentityUnitOfWork(sessions), Sha256SessionHasher()),
+        logout_installation=LogoutInstallation(
+            SqlInstallationLogoutUnitOfWork(sessions), Sha256SessionHasher()
+        ),
         signer=HmacBrowserTokenSigner(
             bytes.fromhex(configuration.browser_signing_key.get_secret_value())
         ),
@@ -2081,3 +2178,180 @@ def _report_triage_router(
             auth_services.browser,
         )
     )
+
+
+def student_notifications_worker(
+    sessions: async_sessionmaker[AsyncSession],
+    transport: PushDelivery,
+    observation: StudentWorkerObservation | None = None,
+) -> RunStudentNotifications:
+    """Provider injection; caller owns sessions, activation is a distinct release action."""
+    queue = SqlStudentNotifications(sessions)
+    return RunStudentNotifications(
+        ConsumeStudentEvents(queue), DeliverNextStudentNotification(queue, transport), observation
+    )
+
+
+async def run_student_notifications_worker(
+    configuration: StudentNotificationWorkerSettings, transport: PushDelivery, stop: asyncio.Event
+) -> None:
+    if stop.is_set():
+        return
+    # Own pool; provider IO never runs while holding this transaction or core locks.
+    engine = _student_notification_engine(configuration)
+    try:
+        sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+        await student_notifications_worker(sessions, transport)(stop)
+    finally:
+        await engine.dispose()
+
+
+def _student_delivery_router(
+    sessions: async_sessionmaker[AsyncSession],
+    auth: AuthenticationServices,
+    configuration: AuthenticationConfiguration,
+    selected: ProviderSelection | None,
+) -> APIRouter:
+    value = (
+        selected
+        if selected is not None
+        else selection_from_keys(StudentNotificationProviderSettings().key_material())
+    )
+    cap = Capabilities(
+        web=value.web is not None,
+        android=value.fcm is not None,
+        ios=value.apns is not None and http2_available(),
+        vapid_public_key=None if value.web is None else value.web.public_key,
+    )
+    sealer = Fernet(
+        base64.urlsafe_b64encode(bytes.fromhex(configuration.envelope_key.get_secret_value()))
+    )
+    unit = SqlSubscriptionUnitOfWork(sessions, sealer, () if value.web is None else value.web.hosts)
+    hasher = Sha256SessionHasher()
+    return student_delivery_router(
+        DeliveryHttpServices(
+            ReadOwnDelivery(
+                SqlSubscriptionUnitOfWork(
+                    sessions,
+                    sealer,
+                    () if value.web is None else value.web.hosts,
+                    shared_identity_locks=True,
+                ),
+                hasher,
+                cap,
+            ),
+            RegisterOwnDelivery(
+                unit,
+                hasher,
+                HmacIntentFingerprinter(bytes.fromhex(configuration.code_key.get_secret_value())),
+                cap,
+            ),
+            auth.signer,
+            auth.browser,
+        )
+    )
+
+
+async def run_student_delivery_worker(
+    configuration: StudentNotificationWorkerSettings,
+    selected: ProviderSelection,
+    envelope_key: bytes,
+    stop: asyncio.Event,
+    *,
+    observability: ObservabilityConfiguration | None = None,
+) -> None:
+    """Real selected adapters and durable per-device fanout, own pool/client lifecycle."""
+    if stop.is_set():
+        return
+    if selected.web is None and selected.apns is None and selected.fcm is None:
+        raise ValueError("No student delivery provider selected")
+    if len(envelope_key) != STUDENT_ENVELOPE_KEY_BYTES:
+        raise ValueError("Student delivery envelope key must be32bytes")
+    telemetry = _telemetry(observability, "peerly-student-notifications-worker")
+    async with AsyncExitStack() as resources:
+        if telemetry is not None:
+            resources.push_async_callback(telemetry.shutdown)
+        engine = _student_notification_engine(configuration)
+        resources.push_async_callback(engine.dispose)
+        database = _database_telemetry(telemetry)
+        if database is not None:
+            resources.callback(database.close)
+            database.attach(engine, DatabasePool.STUDENT_NOTIFICATIONS)
+        sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+        signals = (
+            StudentNotificationSignals(
+                telemetry.meter_provider.get_meter("studymate.student_notifications"),
+                expected=False,
+                activation_pending=True,
+            )
+            if telemetry is not None
+            else None
+        )
+        if signals is not None:
+            resources.callback(signals.close)
+        sealer = Fernet(base64.urlsafe_b64encode(envelope_key))
+        async with selected.client() as client:
+            transport = SubscribedPushDelivery(sessions, sealer, selected.adapters(client))
+            sampler_stop = asyncio.Event()
+            sampler = (
+                asyncio.create_task(
+                    signals.run(SqlStudentNotificationReader(sessions), sampler_stop)
+                )
+                if signals is not None
+                else None
+            )
+            try:
+                worker = student_notifications_worker(sessions, transport, signals)
+                if telemetry is not None:
+                    worker = replace(
+                        worker,
+                        deliver=ObservedStudentNotificationDelivery(
+                            worker.deliver,
+                            telemetry.tracer_provider.get_tracer("studymate.student_notifications"),
+                        ),
+                    )
+                await worker(stop)
+            finally:
+                sampler_stop.set()
+                if sampler is not None:
+                    await sampler
+
+
+def _student_notification_engine(configuration: StudentNotificationWorkerSettings) -> AsyncEngine:
+    return create_async_engine(
+        configuration.database_url.get_secret_value(),
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=2,
+        pool_pre_ping=True,
+        connect_args={
+            "timeout": 5,
+            "server_settings": {"lock_timeout": "1000", "statement_timeout": "1500"},
+        },
+    )
+
+
+async def run_configured_student_notifications(
+    configuration: StudentNotificationDeliverySettings, stop: asyncio.Event
+) -> None:
+    selected = selection_from_keys(configuration.key_material())
+    await run_student_delivery_worker(
+        configuration,
+        selected,
+        bytes.fromhex(configuration.envelope_key.get_secret_value()),
+        stop,
+        observability=configuration.observability,
+    )
+
+
+async def activate_student_notifications(configuration: StudentNotificationWorkerSettings) -> None:
+    """Separate release action, idempotent cutoff; never reset it or backfill history."""
+    engine = _student_notification_engine(configuration)
+    try:
+        sessions = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+        await SqlStudentNotifications(sessions).activate()
+    finally:
+        await engine.dispose()
+
+
+STUDENT_ENVELOPE_KEY_BYTES = 32

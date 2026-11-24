@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import nullcontext
 from time import perf_counter, time_ns
 
 from opentelemetry.context import Context
@@ -11,6 +12,7 @@ from opentelemetry.trace import SpanKind, StatusCode, Tracer
 
 from studymate.application.errors import StorageUnavailableError
 from studymate.infrastructure.changes.loop import ChangeMaintenance
+from studymate.infrastructure.observability.idle_publication import defer_empty_publication
 from studymate.infrastructure.observability.logging import LogEvent
 
 
@@ -34,32 +36,40 @@ class ObservedChangeStep:
         )
 
     async def __call__(self) -> int:
-        started, started_ns = perf_counter(), time_ns()
-        outcome = "unexpected_error"
-        changed = 0
-        try:
-            changed = await self.step()
-            if isinstance(changed, bool) or changed < 0:
-                raise RuntimeError("Observed transport maintenance requires nonnegative counts")
-            outcome = "changed" if changed else "idle"
-            return changed
-        except asyncio.CancelledError:
-            outcome = "cancelled"
-            raise
-        except StorageUnavailableError:
-            outcome = "storage_unavailable"
-            raise
-        finally:
-            seconds = max(0, perf_counter() - started)
-            dimensions = {"maintenance": self.kind.value, "outcome": outcome}
-            if self.steps is not None:
-                self.steps.add(1, dimensions)
-            if self.duration is not None:
-                self.duration.record(seconds, dimensions)
-            if self.changed is not None and outcome == "changed":
-                self.changed.add(changed, {"maintenance": self.kind.value})
-            if outcome != "idle":
-                self.completed(outcome, started_ns, seconds)
+        scope = (
+            defer_empty_publication()
+            if self.kind == ChangeMaintenance.PUBLICATION
+            else nullcontext(None)
+        )
+        with scope as queries:
+            started, started_ns = perf_counter(), time_ns()
+            outcome = "unexpected_error"
+            changed = 0
+            try:
+                changed = await self.step()
+                if isinstance(changed, bool) or changed < 0:
+                    raise RuntimeError("Observed transport maintenance requires nonnegative counts")
+                outcome = "changed" if changed else "idle"
+                if queries is not None:
+                    queries.empty = outcome == "idle"
+                return changed
+            except asyncio.CancelledError:
+                outcome = "cancelled"
+                raise
+            except StorageUnavailableError:
+                outcome = "storage_unavailable"
+                raise
+            finally:
+                seconds = max(0, perf_counter() - started)
+                dimensions = {"maintenance": self.kind.value, "outcome": outcome}
+                if self.steps is not None:
+                    self.steps.add(1, dimensions)
+                if self.duration is not None:
+                    self.duration.record(seconds, dimensions)
+                if self.changed is not None and outcome == "changed":
+                    self.changed.add(changed, {"maintenance": self.kind.value})
+                if outcome != "idle":
+                    self.completed(outcome, started_ns, seconds)
 
     def completed(self, outcome: str, started_ns: int, seconds: float) -> None:
         span = (

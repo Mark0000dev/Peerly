@@ -323,6 +323,32 @@ export interface Api {
       readonly source_version: number;
       readonly workflow_id: string;
     };
+    readonly DeliveryCapabilityResponse: {
+      readonly account_id: string;
+      readonly android: boolean;
+      readonly device: Api['schemas']['DeliveryDeviceResponse'] | null;
+      readonly ios: boolean;
+      readonly vapid_public_key: string | null;
+      readonly web: boolean;
+    };
+    readonly DeliveryDeviceResponse: {
+      readonly enabled: boolean;
+      readonly installation_id: string;
+      readonly material_fingerprint: string | null;
+      readonly platform: Api['schemas']['Platform'];
+      readonly timezone: string | null;
+      readonly version: number;
+    };
+    readonly DeliveryRegistrationBody: {
+      readonly auth?: string | null;
+      readonly enabled: boolean;
+      readonly endpoint?: string | null;
+      readonly expected_version: number;
+      readonly installation_id: string;
+      readonly p256dh?: string | null;
+      readonly platform: Api['schemas']['Platform'];
+      readonly timezone: string | null;
+    };
     readonly DeliveryState: 'pending' | 'leased' | 'retry' | 'succeeded' | 'dead';
     readonly DeliverySummary: {
       readonly attempts: readonly Api['schemas']['AttemptSummary'][];
@@ -679,6 +705,7 @@ export interface Api {
       readonly text: string | null;
     };
     readonly Metric: 'route_ready' | 'lcp' | 'inp' | 'fcp' | 'ttfb' | 'cls';
+    readonly NativeExchangeRequest: { readonly attempt_id: string; readonly verifier: string };
     readonly NoStudyPromptResponse: { readonly outcome?: 'no_offer' };
     readonly NotificationMode: 'messages_and_requests' | 'all_updates';
     readonly ObservationBatchBody: {
@@ -1769,6 +1796,7 @@ export interface Api {
     };
     readonly PhotoUploadState:
       'uploading' | 'queued' | 'processing' | 'ready' | 'rejected' | 'cancelled' | 'expired';
+    readonly Platform: 'web' | 'ios' | 'android';
     readonly PolicyHistoryItemResponse: {
       readonly reference: Api['schemas']['PolicyReferenceResponse'];
       readonly title: string;
@@ -2581,6 +2609,7 @@ export interface Api {
         readonly parameters: {
           readonly 'header:origin'?: string | null;
           readonly 'header:x-csrf-token'?: string | null;
+          readonly 'header:x-notification-installation'?: string | null;
         };
         readonly body: undefined;
         readonly responses: {
@@ -2593,6 +2622,60 @@ export interface Api {
           readonly '409': Api['schemas']['ProblemResponse'];
           readonly '413': Api['schemas']['ProblemResponse'];
           readonly '415': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '429': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/auth/native/exchange': {
+      readonly post: {
+        readonly parameters: {
+          readonly 'header:origin'?: string | null;
+          readonly 'header:x-csrf-token'?: string | null;
+        };
+        readonly body: Api['schemas']['NativeExchangeRequest'];
+        readonly responses: {
+          readonly '200': unknown;
+          readonly '400': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '409': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '429': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/auth/native/return': {
+      readonly get: {
+        readonly parameters: Readonly<Record<string, never>>;
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': unknown;
+          readonly '400': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '409': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '429': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/auth/native/start': {
+      readonly get: {
+        readonly parameters: {
+          readonly 'query:attempt_id': string;
+          readonly 'query:challenge': string;
+        };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': unknown;
+          readonly '400': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '409': Api['schemas']['ProblemResponse'];
           readonly '422': Api['schemas']['ProblemResponse'];
           readonly '429': Api['schemas']['ProblemResponse'];
           readonly '500': Api['schemas']['ProblemResponse'];
@@ -3371,6 +3454,40 @@ export interface Api {
           readonly '409': Api['schemas']['ProblemResponse'];
           readonly '413': Api['schemas']['ProblemResponse'];
           readonly '415': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/me/notification-delivery': {
+      readonly put: {
+        readonly parameters: {
+          readonly 'header:origin'?: string | null;
+          readonly 'header:x-csrf-token'?: string | null;
+          readonly 'header:idempotency-key': string;
+        };
+        readonly body: Api['schemas']['DeliveryRegistrationBody'];
+        readonly responses: {
+          readonly '200': Api['schemas']['DeliveryDeviceResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '409': Api['schemas']['ProblemResponse'];
+          readonly '422': Api['schemas']['ProblemResponse'];
+          readonly '500': Api['schemas']['ProblemResponse'];
+          readonly '503': Api['schemas']['ProblemResponse'];
+        };
+      };
+    };
+    readonly '/api/v1/me/notification-delivery/{installation_id}': {
+      readonly get: {
+        readonly parameters: { readonly 'path:installation_id': string };
+        readonly body: undefined;
+        readonly responses: {
+          readonly '200': Api['schemas']['DeliveryCapabilityResponse'];
+          readonly '401': Api['schemas']['ProblemResponse'];
+          readonly '403': Api['schemas']['ProblemResponse'];
+          readonly '409': Api['schemas']['ProblemResponse'];
           readonly '422': Api['schemas']['ProblemResponse'];
           readonly '500': Api['schemas']['ProblemResponse'];
           readonly '503': Api['schemas']['ProblemResponse'];

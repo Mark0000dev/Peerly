@@ -122,6 +122,7 @@ from studymate.infrastructure.persistence.message_read_models import (
     ConversationReadRevisionRecord,
 )
 from studymate.infrastructure.persistence.message_report_models import MessageReportContextRecord
+from studymate.infrastructure.persistence.native_login_models import NativeAttemptRecord
 from studymate.infrastructure.persistence.onboarding_models import (
     ProfileActivationRecord,
     VisibilityIntentRecord,
@@ -155,6 +156,15 @@ from studymate.infrastructure.requests.view_models import (
     RequestDisclosureRecord,
     RequestViewAcknowledgementRecord,
 )
+from studymate.infrastructure.student_notifications.capabilities import DeviceAttemptRecord
+from studymate.infrastructure.student_notifications.models import (
+    ConsumerRecord,
+    DeliveryRecord,
+)
+from studymate.infrastructure.student_notifications.subscriptions import (
+    SubscriptionIntentRecord,
+    SubscriptionRecord,
+)
 from studymate.infrastructure.support.models import (
     SupportCaseRecord,
     SupportIntentRecord,
@@ -165,6 +175,11 @@ from studymate.infrastructure.support.models import (
 )
 
 MODELS: tuple[type[Base], ...] = (
+    SubscriptionRecord,
+    SubscriptionIntentRecord,
+    DeviceAttemptRecord,
+    ConsumerRecord,
+    DeliveryRecord,
     ObservationBatchRecord,
     ClientObservationRecord,
     ObservationFrameRecord,
@@ -238,6 +253,7 @@ MODELS: tuple[type[Base], ...] = (
     AccountRecord,
     ExternalIdentityRecord,
     SessionRecord,
+    NativeAttemptRecord,
     InstitutionalBindingRecord,
     LoginFlowRecord,
     CallbackAttemptRecord,

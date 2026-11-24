@@ -25,6 +25,16 @@ from studymate.infrastructure.ai.runtime.diagnostics import (
     AiRuntimeDiagnostic,
     AiRuntimePhase,
 )
+from studymate.infrastructure.ai.transaction_diagnostics import (
+    AiTransactionDiagnostic,
+    TransactionCause,
+    TransactionOperation,
+    TransactionPhase,
+    TransactionStage,
+)
+from studymate.infrastructure.student_notifications.transaction_diagnostics import (
+    metadata as notification_transaction_metadata,
+)
 
 MAX_STACK_FRAMES = 20
 MAX_APPLICATION_FRAMES = 10
@@ -45,6 +55,8 @@ class LogEvent(StrEnum):
     WORKER_STOPPED = "worker_stopped"
     WORKER_STORAGE_UNAVAILABLE = "worker_storage_unavailable"
     AI_RUNTIME_FAILURE = "ai_runtime_failure"
+    AI_TRANSACTION_FAILURE = "ai_transaction_failure"
+    STUDENT_NOTIFICATION_TRANSACTION_FAILURE = "student_notification_transaction_failure"
     RUNTIME_ERROR = "runtime_error"
     RUNTIME_LOG = "runtime_log"
 
@@ -144,6 +156,37 @@ def _ai_runtime_metadata(record: logging.LogRecord) -> dict[str, str]:
     }
 
 
+def _ai_transaction_metadata(record: logging.LogRecord) -> dict[str, str | bool]:
+    diagnostic: object = getattr(record, "ai_transaction_diagnostic", None)
+    if type(diagnostic) is not AiTransactionDiagnostic:
+        return {}
+    phase: object = diagnostic.phase
+    operation: object = diagnostic.operation
+    cause: object = diagnostic.cause
+    stage: object = diagnostic.stage
+    expired: object = diagnostic.deadline_expired
+    if (
+        not isinstance(phase, TransactionPhase)
+        or not any(phase is member for member in TransactionPhase)
+        or not isinstance(operation, TransactionOperation)
+        or not any(operation is member for member in TransactionOperation)
+        or not isinstance(cause, TransactionCause)
+        or not any(cause is member for member in TransactionCause)
+        or not isinstance(stage, TransactionStage)
+        or not any(stage is member for member in TransactionStage)
+        or type(expired) is not bool
+    ):
+        return {}
+    return {
+        "ai_transaction_phase": phase.value,
+        "ai_transaction_operation": operation.value,
+        "ai_transaction_cause": cause.value,
+        "ai_transaction_stage": stage.value,
+        "ai_transaction_deadline_expired": expired,
+        "ai_transaction_stage_semantics": "last_entered",
+    }
+
+
 def validated_service_release(value: object) -> str | None:
     if (
         isinstance(value, str)
@@ -181,6 +224,12 @@ class SafeJsonFormatter(logging.Formatter):
         if self._service_release is not None:
             content["service_release"] = self._service_release
         content.update(_ai_runtime_metadata(record))
+        content.update(_ai_transaction_metadata(record))
+        content.update(
+            notification_transaction_metadata(
+                getattr(record, "student_notification_diagnostic", None)
+            )
+        )
         if record.name.startswith("opentelemetry."):
             content["component"] = "telemetry"
         observation: object = getattr(record, "observation", None)
@@ -234,6 +283,7 @@ class SafeJsonFormatter(logging.Formatter):
             "request_expiry",
             "change_publication",
             "change_retention",
+            "student_notifications",
         ):
             content["worker"] = worker
         duration: object = getattr(record, "duration_seconds", None)

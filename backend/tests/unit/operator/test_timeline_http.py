@@ -74,7 +74,11 @@ async def test_audited_timeline_returns_actual_metadata_without_private_content(
     assert len(store.audit) == len((listing, detail, inspection))
 
 
-@pytest.mark.parametrize("path", ["/events", f"/events/{uuid4()}", f"/audits/{uuid4()}"])
+@pytest.mark.parametrize(
+    "path",
+    ["/events", f"/events/{uuid4()}", f"/audits/{uuid4()}"],
+    ids=("event-list", "event-detail", "audit-detail"),
+)
 async def test_read_cookie_and_explicit_role_not_header_claims(path: str) -> None:
     store = TimelineStore()
     async with client(store) as http:
@@ -120,7 +124,11 @@ async def test_unknown_or_unbounded_query_is_sanitized_before_private_reads(quer
     assert store.private_queries == 0
 
 
-@pytest.mark.parametrize("path", ["/events", f"/events/{uuid4()}", f"/audits/{uuid4()}"])
+@pytest.mark.parametrize(
+    "path",
+    ["/events", f"/events/{uuid4()}", f"/audits/{uuid4()}"],
+    ids=("event-list", "event-detail", "audit-detail"),
+)
 async def test_failed_audit_never_becomes_data_response(path: str) -> None:
     store = TimelineStore()
     store.assign_explicit_operator()
