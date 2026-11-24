@@ -1,4 +1,5 @@
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import type { DebugElement } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -9,12 +10,16 @@ import { App } from './app';
 import { ObservationRelease } from './observability/observation-release';
 import { appConfig } from './app.config';
 import { Onboarding } from './screens/onboarding/onboarding';
+import { SupportContact } from './screens/help/contact/support-contact';
 import { verifiedActor } from './screens/onboarding/onboarding.fixtures';
 import { ownHelp } from './screens/onboarding/study/help.fixtures';
 
 describe('application routing and query ownership', () => {
   let fixture: ComponentFixture<App> | null = null;
+  let http: HttpTestingController | null = null;
   beforeEach(() => {
+    fixture = null;
+    http = null;
     TestBed.configureTestingModule({
       providers: [
         ...appConfig.providers,
@@ -25,32 +30,70 @@ describe('application routing and query ownership', () => {
         },
       ],
     });
+    http = TestBed.inject(HttpTestingController);
   });
   afterEach(() => {
-    if (fixture !== null) {
-      for (const element of fixture.debugElement.queryAll(By.directive(Onboarding)))
-        element.injector.get(QueryClient).clear();
-      fixture.destroy();
+    const rendered = fixture;
+    const requests = http;
+    fixture = null;
+    http = null;
+    try {
+      if (rendered !== null) {
+        const clients = [
+          ...rendered.debugElement.queryAll(By.directive(Onboarding)),
+          ...rendered.debugElement.queryAll(By.directive(SupportContact)),
+        ].map((element: Readonly<DebugElement>) => element.injector.get(QueryClient));
+        rendered.destroy();
+        for (const client of clients) client.clear();
+      }
+      if (requests !== null) requests.verify();
+    } finally {
+      TestBed.resetTestingModule();
     }
-    TestBed.inject(HttpTestingController).verify();
   });
-  for (const path of ['/', '/unknown-route']) {
-    it(`renders public landing without private requests for ${path}`, async () => {
+  for (const { path, heading, next } of [
+    { path: '/', heading: /Find someone\s+to study with\./u, next: '/onboarding' },
+    { path: '/unknown-route', heading: /^Page not found$/u, next: '/' },
+  ]) {
+    it(`renders the public page without private requests for ${path}`, async () => {
       fixture = TestBed.createComponent(App);
       await TestBed.inject(Router).navigateByUrl(path);
       await fixture.whenStable();
-      expect(TestBed.inject(Router).url).toBe('/');
-      expect(fixture.debugElement.queryAll(By.css('h1'))).toHaveLength(1);
+      expect(TestBed.inject(Router).url).toBe(path);
+      const root: unknown = fixture.nativeElement;
+      if (!(root instanceof HTMLElement)) throw new Error('Missing application root');
+      expect(root.querySelectorAll('h1')).toHaveLength(1);
+      expect(root.querySelector('h1')?.textContent).toMatch(heading);
+      expect(root.querySelector(`main a[href="${next}"]`)).not.toBeNull();
       TestBed.inject(HttpTestingController).expectNone('/api/v1/me');
     });
   }
-  it('provides honest public help without a fake support form', async () => {
+  it('renders real anonymous support on the public help route without sending a request', async () => {
     fixture = TestBed.createComponent(App);
     await TestBed.inject(Router).navigateByUrl('/help');
-    await fixture.whenStable();
-    expect(fixture.debugElement.queryAll(By.css('h1'))).toHaveLength(1);
-    expect(fixture.debugElement.queryAll(By.css('form'))).toHaveLength(0);
-    TestBed.inject(HttpTestingController).expectNone('/api/v1/me');
+    const request = await vi.waitFor(() =>
+      TestBed.inject(HttpTestingController).expectOne('/api/v1/me'),
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush({ code: 'unauthenticated' }, { status: 401, statusText: 'Unauthorized' });
+    const rendered = fixture;
+    await vi.waitFor(() => {
+      rendered.detectChanges();
+      const root: unknown = rendered.nativeElement;
+      if (!(root instanceof HTMLElement)) throw new Error('Missing application root');
+      expect(TestBed.inject(Router).url).toBe('/help');
+      expect(root.querySelectorAll('h1')).toHaveLength(1);
+      expect(root.querySelector('h1')?.textContent).toBe('Help and contact');
+      expect(rendered.debugElement.queryAll(By.directive(SupportContact))).toHaveLength(1);
+      expect(root.querySelectorAll('form')).toHaveLength(1);
+      expect(root.querySelector('fieldset')?.disabled).toBe(false);
+      expect(root.querySelector('#support-reply')).toBeInstanceOf(HTMLInputElement);
+      expect(root.querySelector('#support-message')).toBeInstanceOf(HTMLTextAreaElement);
+      expect(root.textContent).toContain('Send to the team');
+    });
+    TestBed.inject(HttpTestingController).expectNone('/api/v1/support-context');
+    TestBed.inject(HttpTestingController).expectNone('/api/v1/support-cases');
+    TestBed.inject(HttpTestingController).expectNone('/api/v1/me/support-cases');
   });
   for (const code of ['login_cancelled', 'login_provider_unavailable', 'untrusted-provider-text']) {
     it(`strips callback metadata without trusting it as identity: ${code}`, async () => {
@@ -145,14 +188,31 @@ describe('application routing and query ownership', () => {
       expect(fields.length).toBeGreaterThan(0);
       const client = fixture.debugElement.query(By.directive(Onboarding)).injector.get(QueryClient);
       await TestBed.inject(Router).navigateByUrl('/help');
-      await fixture.whenStable();
+      const session = await vi.waitFor(() =>
+        TestBed.inject(HttpTestingController).expectOne('/api/v1/me'),
+      );
+      expect(session.request.method).toBe('GET');
+      session.flush(verifiedActor);
+      await vi.waitFor(() => {
+        rendered.detectChanges();
+        expect(TestBed.inject(Router).url).toBe('/help');
+        expect(root.querySelectorAll('h1')).toHaveLength(1);
+        expect(root.querySelector('h1')?.textContent).toBe('Help and contact');
+        expect(rendered.debugElement.queryAll(By.directive(SupportContact))).toHaveLength(1);
+        expect(root.querySelectorAll('form')).toHaveLength(1);
+        expect(root.querySelector('fieldset')?.disabled).toBe(false);
+        expect(root.querySelector('#support-reply')).toBeInstanceOf(HTMLInputElement);
+        expect(root.querySelector('#support-message')).toBeInstanceOf(HTMLTextAreaElement);
+      });
+      TestBed.inject(HttpTestingController).expectNone((request) => request.method === 'POST');
       for (const field of fields) expect(disconnecting.mock.contexts).toContain(field.observer);
       expect(disconnecting.mock.contexts).not.toContain(font.observer);
       expect(iframe.isConnected).toBe(true);
-      client.clear();
       const removing = vi.spyOn(iframe, 'remove');
       fixture.destroy();
       fixture = null;
+      client.clear();
+      TestBed.inject(HttpTestingController).expectNone((request) => request.method === 'POST');
       expect(iframe.isConnected).toBe(false);
       const index = disconnecting.mock.contexts.findIndex((observer) => observer === font.observer);
       const disconnectedAt = disconnecting.mock.invocationCallOrder[index];
